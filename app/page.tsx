@@ -1,8 +1,27 @@
 import { auth, signIn, signOut } from "@/auth";
+import { isDatabaseConfigured } from "@/lib/db";
+import { findGmailConnection } from "@/lib/gmail/credentials";
 
-export default async function Home() {
+const GMAIL_ERRORS: Record<string, string> = {
+  missing_refresh_token:
+    "Google did not grant offline access. Gmail was not connected.",
+  mailbox_mismatch:
+    "That Gmail inbox does not match the signed-in Google account.",
+  reauth: "Please sign in again before connecting Gmail.",
+  denied: "Gmail access was not granted.",
+  failed: "Could not connect Gmail. Try again.",
+};
+
+export default async function Home({ searchParams }: PageProps<"/">) {
   const session = await auth();
   const user = session?.user;
+  const params = await searchParams;
+  const gmailError =
+    typeof params.gmail === "string" ? GMAIL_ERRORS[params.gmail] : undefined;
+  const connection =
+    user?.googleSub && isDatabaseConfigured()
+      ? await findGmailConnection(user.googleSub)
+      : null;
 
   return (
     <div className="flex min-h-full flex-col bg-background font-sans text-foreground">
@@ -62,15 +81,38 @@ export default async function Home() {
             actionable dashboard.
           </p>
           <div className="mt-8">
-            <button
-              type="button"
-              className="appearance-none rounded-md bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
-            >
-              Connect Gmail
-            </button>
+            {connection ? (
+              <div>
+                <p className="text-sm font-medium">Gmail connected</p>
+                <p className="mt-1 text-sm text-zinc-500">
+                  {connection.gmailEmail}
+                </p>
+              </div>
+            ) : user ? (
+              <form action="/api/gmail/connect" method="post">
+                <button
+                  type="submit"
+                  className="appearance-none rounded-md bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
+                >
+                  Connect Gmail
+                </button>
+              </form>
+            ) : (
+              <button
+                type="button"
+                className="appearance-none rounded-md bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
+              >
+                Connect Gmail
+              </button>
+            )}
             <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-500">
               Read-only access. You stay in control of your inbox.
             </p>
+            {gmailError ? (
+              <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+                {gmailError}
+              </p>
+            ) : null}
           </div>
         </div>
       </main>
