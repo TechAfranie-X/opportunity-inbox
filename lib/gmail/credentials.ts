@@ -1,7 +1,9 @@
+import "server-only";
+
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { gmailConnections } from "@/lib/db/schema";
-import { encryptSecret } from "@/lib/gmail/crypto";
+import { decryptSecret, encryptSecret } from "@/lib/gmail/crypto";
 
 export async function findGmailConnection(userGoogleSub: string) {
   const [connection] = await getDb()
@@ -14,6 +16,22 @@ export async function findGmailConnection(userGoogleSub: string) {
     .limit(1);
 
   return connection ?? null;
+}
+
+export async function getGmailRefreshToken(userGoogleSub: string) {
+  const [connection] = await getDb()
+    .select({
+      refreshTokenEnc: gmailConnections.refreshTokenEnc,
+    })
+    .from(gmailConnections)
+    .where(eq(gmailConnections.userGoogleSub, userGoogleSub))
+    .limit(1);
+
+  if (!connection) {
+    return null;
+  }
+
+  return decryptSecret(connection.refreshTokenEnc);
 }
 
 export async function saveGmailConnection(options: {

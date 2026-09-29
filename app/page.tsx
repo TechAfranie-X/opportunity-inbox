@@ -1,6 +1,8 @@
 import { auth, signIn, signOut } from "@/auth";
+import { InboxMessages } from "@/app/components/inbox-messages";
 import { isDatabaseConfigured } from "@/lib/db";
 import { findGmailConnection } from "@/lib/gmail/credentials";
+import { listRecentInboxMessages } from "@/lib/gmail/messages";
 
 const GMAIL_ERRORS: Record<string, string> = {
   missing_refresh_token:
@@ -12,6 +14,19 @@ const GMAIL_ERRORS: Record<string, string> = {
   failed: "Could not connect Gmail. Try again.",
 };
 
+function ConnectGmailButton() {
+  return (
+    <form action="/api/gmail/connect" method="post">
+      <button
+        type="submit"
+        className="appearance-none rounded-md bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
+      >
+        Connect Gmail
+      </button>
+    </form>
+  );
+}
+
 export default async function Home({ searchParams }: PageProps<"/">) {
   const session = await auth();
   const user = session?.user;
@@ -22,6 +37,11 @@ export default async function Home({ searchParams }: PageProps<"/">) {
     user?.googleSub && isDatabaseConfigured()
       ? await findGmailConnection(user.googleSub)
       : null;
+  const inbox =
+    connection && user?.googleSub
+      ? await listRecentInboxMessages(user.googleSub)
+      : null;
+  const needsReconnect = inbox?.ok === false && inbox.reason === "reconnect_required";
 
   return (
     <div className="flex min-h-full flex-col bg-background font-sans text-foreground">
@@ -70,8 +90,12 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         )}
       </header>
 
-      <main className="flex flex-1 flex-col items-center justify-center px-6 pb-24">
-        <div className="max-w-xl text-center">
+      <main
+        className={`flex flex-1 flex-col items-center px-6 pb-24 ${
+          connection && !needsReconnect ? "pt-8" : "justify-center"
+        }`}
+      >
+        <div className="w-full max-w-xl text-center">
           <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
             Your career opportunities are already in your inbox.
           </h1>
@@ -81,7 +105,16 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             actionable dashboard.
           </p>
           <div className="mt-8">
-            {connection ? (
+            {needsReconnect ? (
+              <div>
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                  Gmail access expired. Reconnect Gmail.
+                </p>
+                <div className="mt-4">
+                  <ConnectGmailButton />
+                </div>
+              </div>
+            ) : connection ? (
               <div>
                 <p className="text-sm font-medium">Gmail connected</p>
                 <p className="mt-1 text-sm text-zinc-500">
@@ -89,14 +122,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
                 </p>
               </div>
             ) : user ? (
-              <form action="/api/gmail/connect" method="post">
-                <button
-                  type="submit"
-                  className="appearance-none rounded-md bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
-                >
-                  Connect Gmail
-                </button>
-              </form>
+              <ConnectGmailButton />
             ) : (
               <button
                 type="button"
@@ -113,7 +139,13 @@ export default async function Home({ searchParams }: PageProps<"/">) {
                 {gmailError}
               </p>
             ) : null}
+            {inbox?.ok === false && inbox.reason === "temporary_error" ? (
+              <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
+                Inbox could not be loaded. Try again shortly.
+              </p>
+            ) : null}
           </div>
+          {inbox?.ok ? <InboxMessages messages={inbox.messages} /> : null}
         </div>
       </main>
     </div>

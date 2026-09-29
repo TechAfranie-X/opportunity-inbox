@@ -1,3 +1,5 @@
+import "server-only";
+
 import { createHash, randomBytes } from "node:crypto";
 
 export const GMAIL_READONLY_SCOPE =
@@ -177,4 +179,68 @@ export async function getGmailProfile(accessToken: string) {
 
 export function emailsMatch(left: string, right: string) {
   return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
+export type GmailAccessFailure = "reconnect_required" | "temporary_error";
+
+export class GmailAccessError extends Error {
+  readonly reason: GmailAccessFailure;
+
+  constructor(reason: GmailAccessFailure) {
+    super(reason);
+    this.name = "GmailAccessError";
+    this.reason = reason;
+  }
+}
+
+async function oauthErrorCode(response: Response) {
+  try {
+    const payload = (await response.json()) as { error?: unknown };
+    return typeof payload.error === "string" ? payload.error : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function refreshGmailAccessToken(refreshToken: string) {
+  let response: Response;
+  try {
+    const { clientId, clientSecret } = getGoogleOAuthConfig();
+    response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }),
+    });
+  } catch {
+    throw new GmailAccessError("temporary_error");
+  }
+
+  if (!response.ok) {
+    const errorCode = await oauthErrorCode(response);
+    if (errorCode === "invalid_grant") {
+      throw new GmailAccessError("reconnect_required");
+    }
+    throw new GmailAccessError("temporary_error");
+  }
+
+  const tokens = (await response.json()) as GoogleTokenResponse;
+  if (!tokens.access_token) {
+    throw new GmailAccessError("temporary_error");
+  }
+
+  return tokens.access_token;
+}
+
+export function classifyGmailApiFailure(status: number): GmailAccessFailure {
+  if (status === 401) {
+    return "reconnect_required";
+  }
+  return "temporary_error";
 }
