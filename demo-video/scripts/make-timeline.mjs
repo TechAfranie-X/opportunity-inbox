@@ -97,7 +97,7 @@ function chunk(text) {
 const captions = [];
 for (const line of narration.lines) {
   const { start, end } = L[line.id];
-  const chunks = chunk(line.text);
+  const chunks = line.phrases ?? chunk(line.text);
   const weight = chunks.map((c) => c.length + (/[,.]$/.test(c) ? 5 : 0));
   const total = weight.reduce((a, b) => a + b, 0);
   let cursor = start;
@@ -126,7 +126,7 @@ const timeline = {
   voice: { provider: clips.provider, provisional: clips.provisional },
   lines,
   film: {
-    chaos: { in: 0, outStart: r(todayMount - 0.35), outEnd: r(todayMount + 0.55) },
+    chaos: { in: 0, outStart: r(todayMount - 1.0), outEnd: r(todayMount - 0.05) },
     todayMount, inspectorOpen, pipelineStart, historyStart, closingStart, historyEnd,
   },
   product,

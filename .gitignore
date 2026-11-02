@@ -56,3 +56,4 @@ demo-video/voice/clips/
 demo-video/.sfx/
 
 demo-video/.rec/
+.venv-kokoro/

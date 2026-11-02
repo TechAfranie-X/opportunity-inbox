@@ -1,14 +1,55 @@
 {
   "title": "Opportunity Inbox: 30-second product film",
-  "note": "Edit text here. The text is the user's script, lightly punctuated for delivery. `id`s are stable: human recordings must be named after them (voice/human/<id>.wav|mp3|m4a|aiff).",
+  "note": "Edit text here. The text is the user's script, lightly punctuated for delivery. `id`s are stable: human recordings must be named after them (voice/human/<id>.wav|mp3|m4a|aiff). Optional `phrases` split a line into spoken caption phrases (one line each, timed by length).",
   "lines": [
-    { "id": "l1", "text": "Recruiting gets messy fast." },
-    { "id": "l2", "text": "Applications, assessments, recruiter emails, and interviews disappear into different threads." },
-    { "id": "l3", "text": "Opportunity Inbox turns those emails into one live recruiting workspace." },
-    { "id": "l4", "text": "See what needs you today," },
-    { "id": "l5", "text": "follow every opportunity from application to interview to offer," },
-    { "id": "l6", "text": "and rebuild each company into one clean history." },
-    { "id": "l7", "text": "No spreadsheets. No digging through Gmail." },
-    { "id": "l8", "text": "Your recruiting life, organized automatically." }
+    {
+      "id": "l1",
+      "text": "Recruiting gets messy fast."
+    },
+    {
+      "id": "l2",
+      "text": "Applications, assessments, recruiter emails, and interviews disappear into different threads.",
+      "phrases": [
+        "Applications, assessments,",
+        "recruiter emails, and interviews",
+        "disappear into different threads."
+      ]
+    },
+    {
+      "id": "l3",
+      "text": "Opportunity Inbox turns those emails into one live recruiting workspace.",
+      "phrases": [
+        "Opportunity Inbox turns those emails",
+        "into one live recruiting workspace."
+      ]
+    },
+    {
+      "id": "l4",
+      "text": "See what needs you today,"
+    },
+    {
+      "id": "l5",
+      "text": "follow every opportunity from application to interview to offer,",
+      "phrases": [
+        "follow every opportunity",
+        "from application to interview to offer,"
+      ]
+    },
+    {
+      "id": "l6",
+      "text": "and rebuild each company into one clean history."
+    },
+    {
+      "id": "l7",
+      "text": "No spreadsheets. No digging through Gmail.",
+      "phrases": [
+        "No spreadsheets.",
+        "No digging through Gmail."
+      ]
+    },
+    {
+      "id": "l8",
+      "text": "Your recruiting life, organized automatically."
+    }
   ]
 }

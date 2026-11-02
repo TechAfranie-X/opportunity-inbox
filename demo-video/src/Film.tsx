@@ -12,7 +12,7 @@ import { C, FONT } from "./tokens";
  * screen recording cannot give you: an intro, camera emphasis, captions, a closing frame and sound.
  * All timing comes from timeline.json, which is derived from the voice clips.
  */
-const FOOTAGE_H = 1104;
+const FOOTAGE_H = 1032;
 
 export function Film() {
   const { fps } = useVideoConfig();
@@ -28,7 +28,7 @@ export function Film() {
   const footageFrames = Math.round(timeline.film.historyEnd * fps);
   return (
     <AbsoluteFill style={{ background: C.paper, fontFamily: FONT }}>
-      {/* the product occupies the top 1104px; the bottom band is reserved for captions, so they can never cover UI */}
+      {/* the product occupies the top 1032px; the bottom band is reserved for captions, so they can never cover UI */}
       <div style={{ position: "absolute", left: 0, top: 0, width: 1920, height: FOOTAGE_H, overflow: "hidden" }}>
         <Camera>
           <Sequence durationInFrames={footageFrames}>
@@ -39,11 +39,6 @@ export function Film() {
       <Chaos />
       <Closing />
       <Captions />
-      {timeline.voice.provisional ? (
-        <div style={{ position: "absolute", left: 26, bottom: 18, fontSize: 15, color: C.ink3, opacity: 0.8, fontFamily: FONT, letterSpacing: "-0.005em" }}>
-          Provisional narration (system voice)
-        </div>
-      ) : null}
       <Audio src={staticFile("audio/soundtrack.wav")} />
     </AbsoluteFill>
   );

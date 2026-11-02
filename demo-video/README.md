@@ -41,7 +41,8 @@ Everything re-times itself from the clip lengths.
 2. **ElevenLabs (PAID)**: set `providers.elevenlabs.voiceId`, export `ELEVENLABS_API_KEY`, and run
    `node scripts/generate-voice.mjs --provider=elevenlabs --i-authorize-paid-api`. It refuses without both.
    (Implemented from the public API docs; not yet exercised.)
-3. **System voice**: `local-say` (the default). It is **provisional**: the film shows a small
+3. **Kokoro (current, final)**: `provider: "kokoro"` runs mlx-community/Kokoro-82M-bf16, voice af_heart, speed 0.96, locally via `../.venv-kokoro`. Free, offline.
+4. **System voice**: `local-say` is provisional (it shows a small
    "Provisional narration" mark until a real voice is used.
 
 ## Sound

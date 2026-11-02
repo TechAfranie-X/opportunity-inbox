@@ -1,46 +1,46 @@
 {
-  "provider": "local-say",
-  "provisional": true,
-  "generatedAt": "2026-11-02T17:53:40.437Z",
+  "provider": "kokoro",
+  "provisional": false,
+  "generatedAt": "2026-11-02T19:54:56.080Z",
   "clips": {
     "l1": {
       "file": "voice/clips/l1.wav",
-      "duration": 1.791,
+      "duration": 1.713,
       "text": "Recruiting gets messy fast."
     },
     "l2": {
       "file": "voice/clips/l2.wav",
-      "duration": 5.948,
+      "duration": 5.424,
       "text": "Applications, assessments, recruiter emails, and interviews disappear into different threads."
     },
     "l3": {
       "file": "voice/clips/l3.wav",
-      "duration": 4.356,
+      "duration": 4.683,
       "text": "Opportunity Inbox turns those emails into one live recruiting workspace."
     },
     "l4": {
       "file": "voice/clips/l4.wav",
-      "duration": 1.45,
+      "duration": 1.36,
       "text": "See what needs you today,"
     },
     "l5": {
       "file": "voice/clips/l5.wav",
-      "duration": 3.759,
+      "duration": 3.9,
       "text": "follow every opportunity from application to interview to offer,"
     },
     "l6": {
       "file": "voice/clips/l6.wav",
-      "duration": 2.569,
+      "duration": 2.826,
       "text": "and rebuild each company into one clean history."
     },
     "l7": {
       "file": "voice/clips/l7.wav",
-      "duration": 2.777,
+      "duration": 2.657,
       "text": "No spreadsheets. No digging through Gmail."
     },
     "l8": {
       "file": "voice/clips/l8.wav",
-      "duration": 2.879,
+      "duration": 2.756,
       "text": "Your recruiting life, organized automatically."
     }
   }

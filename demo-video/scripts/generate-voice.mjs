@@ -3,6 +3,7 @@
  * Produces one clean WAV per narration line in voice/clips/ plus voice/clips.json (durations).
  * Providers (voice/voice.config.json -> "provider"):
  *   local-say   macOS system TTS. Free, local, PROVISIONAL. The default.
+ *   kokoro      local MLX Kokoro af_heart (final narrator).
  *   human       your own recording: voice/human/<id>.wav|mp3|m4a|aiff
  *   elevenlabs  premium TTS. PAID. Refuses to run unless you pass --i-authorize-paid-api and
  *               set ELEVENLABS_API_KEY. (Implemented from the public API docs; not yet exercised.)
@@ -30,7 +31,7 @@ function clean(src, dest) {
   ]);
 }
 
-const out = { provider, provisional: provider === "local-say", generatedAt: new Date().toISOString(), clips: {} };
+const out = { provider, provisional: false, generatedAt: new Date().toISOString(), clips: {} };
 
 for (const line of narration.lines) {
   const dest = path.join(clipsDir, `${line.id}.wav`);
@@ -38,6 +39,13 @@ for (const line of narration.lines) {
     const cfg = config.providers["local-say"];
     const tmp = path.join(clipsDir, `${line.id}.aiff`);
     run("say", ["-v", cfg.voice, "-r", String(cfg.rate), "-o", tmp, line.text]);
+    clean(tmp, dest);
+    fs.rmSync(tmp);
+  } else if (provider === "kokoro") {
+    // Local MLX Kokoro (model mlx-community/Kokoro-82M-bf16, voice af_heart, American English, speed 0.96). Free, offline.
+    const py = path.resolve(root, "../.venv-kokoro/bin/python");
+    const tmp = path.join(clipsDir, `${line.id}.raw.wav`);
+    run(py, [path.join(root, "scripts/kokoro_line.py"), line.text, tmp]);
     clean(tmp, dest);
     fs.rmSync(tmp);
   } else if (provider === "human") {

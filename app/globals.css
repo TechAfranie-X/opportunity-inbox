@@ -1169,20 +1169,20 @@ html[data-presentation] .inspector ol > li:nth-child(8) {
   position: fixed;
   z-index: 60;
   left: 50%;
-  bottom: 1.6rem;
+  bottom: 9vh;
   transform: translateX(-50%);
-  max-width: min(46rem, calc(100vw - 3rem));
-  padding: 0.5rem 1.1rem;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--paper) 92%, transparent);
-  box-shadow: 0 0 0 1px var(--line);
+  max-width: min(58vw, 44rem);
+  padding: 0.2rem 0.7rem;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--paper) 78%, transparent);
   text-align: center;
-  font-size: 1.0625rem;
+  font-size: 0.95rem;
+  font-weight: 500;
   line-height: 1.35;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.008em;
   color: var(--ink);
   pointer-events: none;
-  animation: reveal 0.3s var(--ease) both;
+  animation: reveal 0.2s var(--ease) both;
 }
 
 /* ---- idle screen: the only thing on the page until "Play" is clicked */

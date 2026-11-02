@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Records the real product tour (the /demo/presentation route in film mode) as clean raw footage:
- * 1920x1104, no browser chrome, no cursor, no overlays. Time zero is the route's own script clock
+ * 1920x1032, no browser chrome, no cursor, no overlays. Time zero is the route's own script clock
  * (performance mark "presentation-start"), and the clip ends at timeline.product.endMs, so it lines up
  * with the narration timeline exactly.
  *
@@ -17,7 +17,7 @@ const root = path.resolve(import.meta.dirname, "..");
 const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.split("=")[1] ?? d;
 const base = arg("url", "http://localhost:3100");
 const out = path.resolve(root, arg("out", "public/raw/product.mp4"));
-const W = 1920, H = 1104, FPS = 60; // the film canvas is 1920x1200; the bottom 96px is a caption band
+const W = 1920, H = 1032, FPS = 60; // the film canvas is 1920x1200; the bottom 168px is the caption band
 const timeline = JSON.parse(fs.readFileSync(path.join(root, "timeline.json"), "utf8"));
 const endS = timeline.product.endMs / 1000;
 
