@@ -18,9 +18,11 @@ fs.mkdirSync(path.join(root, "public/audio"), { recursive: true });
 const timeline = JSON.parse(fs.readFileSync(path.join(root, "timeline.json"), "utf8"));
 const total = timeline.duration;
 
-// Gains in dB, relative to the voice. SFX are felt, not heard; the bed is a floor.
-const GAIN = { open: -17, settle: -25, stage: -21, slide: -27, resolve: -15 };
-const BED_DB = -33;
+// Gains in dB, relative to the voice. The licensed track (audio/clean-product-confidence-1.mp3) is the only music.
+// Against that track the periodic UI ticks (settle/stage/slide) fought its 105 bpm groove and made the mix busy, and
+// "resolve" is replaced by the track's own ending, so only the inspector "open" remains, on the track's drop.
+const GAIN = { open: -22 };
+const KEEP = new Set(Object.keys(GAIN));
 
 const ff = (args) => execFileSync("ffmpeg", ["-y", "-v", "error", ...args], { stdio: ["ignore", "pipe", "pipe"] });
 const sfxFile = (c) => path.join(sfxDir, c.id === "settle" ? `settle${(c.n ?? 0) % 6}.wav` : `${c.id}.wav`);
@@ -46,17 +48,18 @@ const voiceItems = Object.entries(timeline.lines).map(([id, l]) => ({
 build("voice", voiceItems);
 
 // sfx
-build("sfx", timeline.sfx.map((c) => ({ file: sfxFile(c), t: c.t, db: GAIN[c.id] })));
+build("sfx", timeline.sfx.filter((c) => KEEP.has(c.id)).map((c) => ({ file: sfxFile(c), t: c.t, db: GAIN[c.id] })));
 
-// bed (a single long file, held low)
-ff(["-i", path.join(sfxDir, "bed.wav"), "-af", `volume=${BED_DB}dB,apad=whole_dur=${total},atrim=0:${total}`, "-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le", path.join(stems, "bed.wav")]);
+// music: the track, edited to fit and ducked under the voice (scripts/make-music.py prints its measurements)
+const py = path.resolve(root, "../.venv-kokoro/bin/python");
+const mk = spawnSync(py, [path.join(root, "scripts/make-music.py")], { encoding: "utf8" });
+if (mk.status !== 0) throw new Error(mk.stderr);
+process.stdout.write(mk.stdout);
 
-// combine: bed ducked under the voice (side-chain), then loudness-normalised
-const combine = [
-  "[2:a][0:a]sidechaincompress=threshold=0.015:ratio=10:attack=25:release=450:makeup=1[bedduck]",
-  "[0:a][1:a][bedduck]amix=inputs=3:normalize=0:dropout_transition=0,alimiter=limit=0.89[pre]",
-].join(";");
-const inputs = ["-i", path.join(stems, "voice.wav"), "-i", path.join(stems, "sfx.wav"), "-i", path.join(stems, "bed.wav")];
+// combine; a voice+music preview is written first so the speech/music balance can be checked on its own
+const combine = "[0:a][1:a][2:a]amix=inputs=3:normalize=0:dropout_transition=0,alimiter=limit=0.89[pre]";
+const inputs = ["-i", path.join(stems, "voice.wav"), "-i", path.join(stems, "sfx.wav"), "-i", path.join(stems, "music.wav")];
+ff(["-i", path.join(stems, "voice.wav"), "-i", path.join(stems, "music.wav"), "-filter_complex", "[0:a][1:a]amix=inputs=2:normalize=0:dropout_transition=0,alimiter=limit=0.89[o]", "-map", "[o]", "-ar", "48000", "-c:a", "pcm_s16le", path.join(sfxDir, "preview-voice-music.wav")]);
 
 // two-pass loudnorm to -16 LUFS integrated, -1.5 dBTP
 const probe = spawnSync("ffmpeg", ["-y", "-v", "info", ...inputs, "-filter_complex", `${combine};[pre]loudnorm=I=-16:TP=-1.5:LRA=7:print_format=json[o]`, "-map", "[o]", "-f", "null", "-"], { encoding: "utf8" });

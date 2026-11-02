@@ -46,10 +46,14 @@ Everything re-times itself from the clip lengths.
    "Provisional narration" mark until a real voice is used.
 
 ## Sound
-Synthesised locally (sine waves and filtered noise), so it is original and unencumbered. Levels are relative to
-the voice: SFX about −17…−27 dB, a bed at −33 dB that is ducked a further ~8 dB under speech. Final mix is
-normalised to −16 LUFS / −1.5 dBTP. To use a licensed track instead, replace `.sfx/bed.wav` with your file
-(it must be at least `duration + 1.5` s) and re-run `npm run mix`.
+- **Music**: `audio/clean-product-confidence-1.mp3` (supplied by the project owner; not committed, drop it back into `audio/` to rebuild).
+  `scripts/make-music.py` fits it to the film by beat-aligned cuts and crossfades only, never time-stretching: it enters at 0.46 s,
+  repeats one intro beat so the track's drop lands on the inspector opening, removes 18 beats from the body, and lets the
+  track's own ending ring under the closing frame. It is sidechain-ducked from the voice stem (about 16 dB below the voice at
+  rest, 3.5-4.5 dB further under speech, recovering in pauses), lifted 5 dB after the last word, and the script prints the
+  measurements. `scripts/check-mix.py` prints the voice-to-music margin per line, in full band and in the 300-4000 Hz speech band.
+- **SFX**: only the inspector "open" remains, on the drop. The periodic ticks were removed because they fought the track's groove.
+- Final mix is normalised to -16 LUFS / -1.5 dBTP; `.sfx/preview-voice-music.wav` is the voice+music preview without SFX.
 
 ## Live narrated route
 `/demo/presentation` shows a **Play 30-second demo** button. Clicking it starts `public/demo/soundtrack.mp3`

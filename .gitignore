@@ -57,3 +57,4 @@ demo-video/.sfx/
 
 demo-video/.rec/
 .venv-kokoro/
+demo-video/audio/clean-product-confidence-1.mp3
