@@ -13,6 +13,7 @@ export type EventType =
   | "interview_invite" // asked to schedule an interview (needs a reply)
   | "interview_scheduled" // interview confirmed with a date/time
   | "follow_up" // nudge from either side / status check
+  | "status_update" // generic "an update on your application": we could not tell what it means
   | "offer"
   | "rejection"
   | "withdrawn" // user withdrew
@@ -26,6 +27,7 @@ export const EVENT_TYPES: EventType[] = [
   "interview_invite",
   "interview_scheduled",
   "follow_up",
+  "status_update",
   "offer",
   "rejection",
   "withdrawn",

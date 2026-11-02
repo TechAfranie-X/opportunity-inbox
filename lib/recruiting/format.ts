@@ -17,6 +17,7 @@ export const EVENT_LABEL: Record<EventType, string> = {
   interview_invite: "Asked to schedule interview",
   interview_scheduled: "Interview scheduled",
   follow_up: "Follow-up",
+  status_update: "Application update (check the email)",
   offer: "Offer",
   rejection: "Rejection",
   withdrawn: "You withdrew",
