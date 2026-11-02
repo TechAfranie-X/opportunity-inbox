@@ -210,7 +210,16 @@ export function companyKey(company: string) {
   return company.toLowerCase().replace(/\b(?:inc|llc|ltd|corp|corporation|co|company)\b\.?/g, "").replace(/[^a-z0-9]/g, "");
 }
 
-const ROLE_NOISE = new Set(["intern", "internship", "summer", "fall", "spring", "winter", "new", "grad", "the", "a", "an", "of", "and", "co", "op"]);
+const ROLE_NOISE = new Set([
+  "intern", "internship", "internships", "summer", "fall", "spring", "winter", "new", "grad", "graduate",
+  "undergraduate", "undergrad", "the", "a", "an", "of", "and", "co", "op", "job", "number", "position",
+  "role", "program", "programme", "student", "students",
+]);
+
+/** Crude stemmer: enough to equate "Engineer" / "Engineering" / "Engineers". */
+function stem(token: string) {
+  return token.replace(/(?:ing|ers|s)$/, "").replace(/(.{4,})er$/, "$1er");
+}
 
 export function roleTokens(role: string | null): string[] {
   if (!role) return [];
@@ -218,13 +227,26 @@ export function roleTokens(role: string | null): string[] {
     .toLowerCase()
     .replace(/\(.*?\)/g, " ")
     .split(/[^a-z0-9+#]+/)
-    .filter((t) => t && !ROLE_NOISE.has(t) && !/^20\d\d$/.test(t));
+    .filter((t) => t && !ROLE_NOISE.has(t) && !/^20\d\d$/.test(t) && !/^[a-z]{0,3}\d{4,}$/.test(t))
+    .map(stem);
+}
+
+export type RoleRelation = "match" | "generic" | "conflict";
+
+/**
+ * How two roles at the same company relate:
+ *  - match:    clearly the same role
+ *  - generic:  one side says nothing specific ("Intern", "2027 Internship", unknown) so it could be either
+ *  - conflict: both specific and different ("Software Engineer" vs "Data Analyst")
+ */
+export function roleRelation(a: string | null, b: string | null): RoleRelation {
+  const ta = roleTokens(a);
+  const tb = roleTokens(b);
+  if (ta.length === 0 || tb.length === 0) return "generic";
+  const shared = ta.filter((t) => tb.includes(t)).length;
+  return shared / Math.min(ta.length, tb.length) >= 0.6 ? "match" : "conflict";
 }
 
 export function rolesMatch(a: string | null, b: string | null) {
-  const ta = roleTokens(a);
-  const tb = roleTokens(b);
-  if (ta.length === 0 || tb.length === 0) return false;
-  const shared = ta.filter((t) => tb.includes(t)).length;
-  return shared / Math.min(ta.length, tb.length) >= 0.6;
+  return roleRelation(a, b) === "match";
 }

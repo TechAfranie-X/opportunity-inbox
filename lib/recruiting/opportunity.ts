@@ -1,4 +1,4 @@
-import { companyKey, roleTokens, rolesMatch } from "./company.ts";
+import { companyKey, roleRelation, roleTokens } from "./company.ts";
 import type {
   EffectiveEvent,
   EventType,
@@ -67,13 +67,25 @@ function lastActivity(group: Group) {
   return group.events[group.events.length - 1].occurredAt.getTime();
 }
 
+/** A generic-role event only joins an opportunity that was active within this window. */
+const GENERIC_ROLE_WINDOW_MS = 90 * 86_400_000;
+/** After a rejection/withdrawal only these (neutral) events can still belong to the same opportunity. */
+const NEUTRAL_AFTER_CLOSE = new Set<EventType>(["status_update", "follow_up", "user_reply"]);
+
+function endedByUser(group: Group) {
+  const last = [...group.events].reverse().find((e) => stageOfEvent(e.type) !== null);
+  return last?.type === "rejection" || last?.type === "withdrawn";
+}
+
 /**
  * Group chronological events into opportunities.
  *
  * Linking rules, strongest first:
  *  1. Same Gmail thread -> same opportunity.
  *  2. Same company + matching role -> same opportunity.
- *  3. Same company, event has no role -> most recently active opportunity at that company.
+ *  3. Same company + generic role ("Intern", unknown) -> the most recently active
+ *     opportunity at that company within 90 days. Both-specific-and-different roles
+ *     are never merged ("Software Engineer" vs "Data Analyst").
  *  4. Otherwise start a new opportunity.
  */
 export function groupEvents(events: EffectiveEvent[]): Group[] {
@@ -89,10 +101,16 @@ export function groupEvents(events: EffectiveEvent[]): Group[] {
         const ck = companyKey(event.company);
         const candidates = groups.filter((g) => g.company && companyKey(g.company) === ck);
         target =
-          candidates.find((g) => rolesMatch(g.role, event.role)) ??
-          (event.role === null
-            ? candidates.sort((a, b) => lastActivity(b) - lastActivity(a))[0]
-            : candidates.find((g) => g.role === null));
+          candidates.find((g) => roleRelation(g.role, event.role) === "match" && g.role !== null && event.role !== null) ??
+          candidates
+            .filter(
+              (g) =>
+                roleRelation(g.role, event.role) === "generic" &&
+                event.occurredAt.getTime() - lastActivity(g) <= GENERIC_ROLE_WINDOW_MS &&
+                // A new application/assessment/interview after a rejection is a new application.
+                (!endedByUser(g) || NEUTRAL_AFTER_CLOSE.has(event.type)),
+            )
+            .sort((a, b) => lastActivity(b) - lastActivity(a))[0];
       } else if (event.senderDomain) {
         target = groups.find((g) => !g.company && g.events.some((e) => e.senderDomain === event.senderDomain));
       }
