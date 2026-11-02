@@ -58,3 +58,14 @@ Serving reads `OPPORTUNITY_POLICY` (JSON, e.g. `{"fields":{"company":{"reviewBel
 The defaults are **not tuned**. They flag only clear doubt (the employer where independent evidence disagrees or is missing) and withhold nothing. Stricter values are chosen from the DEV-RANDOM risk-coverage table (`npm run eval -- run --dataset dev-random-1`) and then frozen before the BLIND run.
 
 Company confidence today is a second opinion: the existing rules still choose the value, and the evidence-based resolver (`lib/recruiting/entity/`) says how far to trust it. The resolver replaces the rules only after `eval run --shadow` shows, on DEV-RANDOM, no more confident-wrong answers and no loss of exact match.
+
+## Corrections as labels
+
+Saving an edit, "Not recruiting", "Looks right" or "Undo my edits" in the product appends label rows (source `user_correction`) against the prediction that was on screen (`labels.prediction_id`). The serving overlay (`recruiting_events.correction`) is unchanged.
+
+- Only fields the person changed, reverted or explicitly confirmed are labeled. An untouched field is unlabeled, not "correct".
+- A repeated identical statement adds nothing; a changed mind adds a new row.
+- Nothing learns from these rows yet. They exist so corrections can later be evaluated and used for improvement.
+- They are not fresh human ground truth (the person saw the prediction), so they never count toward DEV-RANDOM or BLIND headline metrics.
+
+`npm run eval -- migrate-legacy-corrections [--dataset <dev-challenge>]` converts corrections made before this existed into `legacy_reconstructed` labels (idempotent). Their original prediction cannot be proven, so they are regression and DEV-CHALLENGE material only.

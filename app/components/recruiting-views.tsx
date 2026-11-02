@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   dismissActionAction,
+  confirmEventAction,
   editEventAction,
   ignoreEventAction,
   resetEventAction,
@@ -441,6 +442,9 @@ function EventEditor({ event }: { event: EffectiveEvent }) {
       <div className="flex flex-wrap items-center gap-4 sm:col-span-2">
         <button type="submit" className="btn-primary">
           Save
+        </button>
+        <button type="submit" formAction={confirmEventAction} formNoValidate className="link-quiet">
+          Looks right
         </button>
         <button type="submit" formAction={ignoreEventAction} className="link-quiet">
           Not recruiting, hide it

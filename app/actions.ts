@@ -9,10 +9,11 @@ import {
   disconnectGmail,
   deleteRecruitingData,
   dismissAction,
+  confirmEvent,
   editEvent,
   ignoreEvent,
+  resetEvent,
   recordUsage,
-  setEventCorrection,
   setOpportunityStatus,
 } from "@/lib/recruiting/store";
 import { syncRecruitingMail } from "@/lib/recruiting/sync";
@@ -66,7 +67,15 @@ export async function ignoreEventAction(form: FormData) {
 
 export async function resetEventAction(form: FormData) {
   const sub = await requireUserSub();
-  await setEventCorrection(sub, text(form, "eventId", 64), null);
+  await resetEvent(sub, text(form, "eventId", 64));
+  revalidatePath("/", "layout");
+}
+
+/** "Looks right": an explicit confirmation, kept as a label. An untouched prediction is never assumed correct. */
+export async function confirmEventAction(form: FormData) {
+  const sub = await requireUserSub();
+  await confirmEvent(sub, text(form, "eventId", 64));
+  await recordUsage(sub, "confirmation");
   revalidatePath("/", "layout");
 }
 

@@ -1,17 +1,18 @@
 // Evaluation CLI. Run via the npm scripts (they load .env.local and the module hook):
 //   npm run eval -- <command> [options]
-// Commands: status | snapshot-random | snapshot-challenge | freeze | export-tasks | import-labels | export-labels | run | purge
+// Commands: status | snapshot-random | snapshot-challenge | freeze | export-tasks | import-labels | export-labels | run | migrate-legacy-corrections | purge
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { getDb } from "../lib/db/index.ts";
-import { evalDatasetItems, evalDatasets, evalRuns, gmailConnections, labels as labelsTable } from "../lib/db/schema.ts";
+import { evalDatasetItems, evalDatasets, evalRuns, gmailConnections, labels as labelsTable, recruitingEvents } from "../lib/db/schema.ts";
 import { fetchEmailsById, fetchThreadMessages, listMessageIds } from "../lib/gmail/recruiting-source.ts";
 import { getGmailRefreshToken } from "../lib/gmail/credentials.ts";
 import { refreshGmailAccessToken } from "../lib/gmail/oauth.ts";
 import { evalDir, listDatasets, modeOf, purgeLocal, writePrivateFile } from "../lib/eval-store/private-fs.ts";
 import { freezeLocal, manifestHash, readSnapshot, sampleIds, verifyFrozen, writeSnapshot, type Manifest } from "../lib/eval-store/snapshot.ts";
 import { parseLabelsJsonl, toJsonl } from "../lib/eval-store/labels-io.ts";
+import { draftsFromLegacyCorrection, parseCorrection } from "../lib/recruiting/corrections.ts";
 import { evaluate, formatReport, type LabelRow } from "../lib/recruiting/evaluator.ts";
 import { extractAll } from "../lib/recruiting/extract.ts";
 import { DATASET_KINDS, HEADLINE_SOURCES, type DatasetKind } from "../lib/recruiting/ground-truth.ts";
@@ -242,6 +243,38 @@ async function main() {
           metrics: report as never, results: predictions.filter((p) => manifest.memberIds.includes(p.gmailMessageId)) as never, official, itemCount: manifest.memberIds.length,
         });
         console.log(`\nrun recorded (extractor ${EXTRACTOR_VERSION}${commit ? `, commit ${commit}` : ""}${kind === "blind" ? official ? ", OFFICIAL" : ", CONTAMINATED" : ""})`);
+      }
+      break;
+    }
+
+    case "migrate-legacy-corrections": {
+      // Corrections made before label logging existed live in a mutable column. Their original prediction cannot be proven
+      // (the extractor has been re-run since), so they become `legacy_reconstructed` labels: regression material and
+      // DEV-CHALLENGE examples, never headline metrics. Idempotent: a message already migrated is skipped.
+      const db = getDb();
+      const rows = await db.select().from(recruitingEvents).where(isNotNull(recruitingEvents.correction));
+      let migrated = 0, skipped = 0;
+      for (const row of rows) {
+        const correction = parseCorrection(row.correction);
+        const drafts = correction ? draftsFromLegacyCorrection(correction) : [];
+        if (drafts.length === 0) continue;
+        const have = await db.select({ id: labelsTable.id }).from(labelsTable).where(and(eq(labelsTable.userGoogleSub, row.userGoogleSub), eq(labelsTable.gmailMessageId, row.gmailMessageId), eq(labelsTable.source, "legacy_reconstructed"))).limit(1);
+        if (have.length > 0) { skipped += 1; continue; }
+        await db.insert(labelsTable).values(drafts.map((d) => ({ userGoogleSub: row.userGoogleSub, gmailMessageId: row.gmailMessageId, field: d.field, value: d.value as never, source: "legacy_reconstructed" as const, labeler: "legacy", predictionId: null })));
+        migrated += 1;
+      }
+      console.log(`legacy corrections: ${migrated} message(s) migrated, ${skipped} already done. Source: legacy_reconstructed (excluded from DEV-RANDOM and BLIND headline metrics).`);
+      const into = flag("dataset");
+      if (into) {
+        // Optional: copy them into a DEV-CHALLENGE dataset as regression examples, for the messages that are members.
+        const row = await datasetRow(into) ?? fail(`dataset "${into}" is not registered`);
+        if (row.kind !== "dev_challenge") fail("legacy labels may only be copied into a dev_challenge dataset");
+        const members = new Set((await db.select({ id: evalDatasetItems.gmailMessageId }).from(evalDatasetItems).where(eq(evalDatasetItems.datasetId, row.id))).map((i) => i.id));
+        const legacy = (await db.select().from(labelsTable).where(eq(labelsTable.source, "legacy_reconstructed"))).filter((l) => l.datasetId === null && members.has(l.gmailMessageId));
+        const already = new Set((await db.select().from(labelsTable).where(and(eq(labelsTable.datasetId, row.id), eq(labelsTable.source, "legacy_reconstructed")))).map((l) => `${l.gmailMessageId}|${l.field}`));
+        const fresh = legacy.filter((l) => !already.has(`${l.gmailMessageId}|${l.field}`));
+        if (fresh.length > 0) await db.insert(labelsTable).values(fresh.map((l) => ({ datasetId: row.id, gmailMessageId: l.gmailMessageId, field: l.field, value: l.value as never, source: "legacy_reconstructed" as const, labeler: "legacy" })));
+        console.log(`copied ${fresh.length} legacy label row(s) into ${into}`);
       }
       break;
     }

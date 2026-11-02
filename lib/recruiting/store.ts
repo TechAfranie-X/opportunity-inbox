@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   actionDismissals,
@@ -13,7 +13,17 @@ import {
   usageEvents,
 } from "@/lib/db/schema";
 import { buildActions, toFloating } from "@/lib/recruiting/actions";
-import { parseCorrection, serializeCorrection } from "@/lib/recruiting/corrections";
+import {
+  draftsFromConfirmation,
+  draftsFromEdit,
+  draftsFromIgnore,
+  draftsFromReset,
+  parseCorrection,
+  serializeCorrection,
+  type FieldValues,
+  type LabelDraft,
+} from "@/lib/recruiting/corrections";
+import { resolveLabels } from "@/lib/recruiting/evaluator";
 import { parsePolicy } from "@/lib/recruiting/policy";
 import {
   applyCorrection,
@@ -255,27 +265,95 @@ export type EventEdit = {
   eventDate: Date | null;
 };
 
-/** Record only the fields that differ from what we extracted; matching fields stay un-overridden. */
-export async function editEvent(userGoogleSub: string, eventId: string, edit: EventEdit) {
-  const db = getDb();
-  const [row] = await db
-    .select()
-    .from(recruitingEvents)
-    .where(and(eq(recruitingEvents.id, eventId), eq(recruitingEvents.userGoogleSub, userGoogleSub)))
+type Db = ReturnType<typeof getDb>;
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+const predictedValues = (row: EventRow): FieldValues => ({ type: row.type as EventType, company: row.company, role: row.role, eventDate: row.eventDate });
+
+/**
+ * Append the person's explicit statements as labels, against the prediction they were looking at.
+ * Never edits an earlier label or prediction: a changed mind is a new row.
+ */
+async function appendUserLabels(tx: Tx, userGoogleSub: string, row: EventRow, drafts: LabelDraft[]) {
+  if (drafts.length === 0) return;
+  const [shown] = await tx
+    .select({ id: eventPredictions.id })
+    .from(eventPredictions)
+    .where(and(eq(eventPredictions.userGoogleSub, userGoogleSub), eq(eventPredictions.gmailMessageId, row.gmailMessageId)))
+    .orderBy(desc(eventPredictions.predictedAt))
     .limit(1);
-  if (!row) return;
+  await tx.insert(labels).values(
+    drafts.map((d) => ({ userGoogleSub, gmailMessageId: row.gmailMessageId, field: d.field, value: d.value as never, source: "user_correction" as const, labeler: "user", predictionId: shown?.id ?? null })),
+  );
+}
 
-  const correction: EventCorrection = {};
-  if (edit.type !== row.type) correction.type = edit.type;
-  if (edit.company && edit.company !== row.company) correction.company = edit.company;
-  if (edit.role !== row.role) correction.role = edit.role;
-  const before = row.eventDate?.getTime() ?? null;
-  const after = edit.eventDate?.getTime() ?? null;
-  if (before !== after) correction.eventDate = edit.eventDate;
+/** The person's own latest label per field for this message, so the next statement can be compared with it. */
+async function priorUserLabels(tx: Tx, userGoogleSub: string, gmailMessageId: string) {
+  const rows = await tx
+    .select()
+    .from(labels)
+    .where(and(eq(labels.userGoogleSub, userGoogleSub), eq(labels.gmailMessageId, gmailMessageId), eq(labels.source, "user_correction")))
+    .orderBy(asc(labels.createdAt));
+  const resolved = resolveLabels(rows.map((r) => ({ gmailMessageId: r.gmailMessageId, field: r.field as never, value: r.value, source: "user_correction" as const, createdAt: r.createdAt })), ["user_correction"]);
+  return resolved.get(gmailMessageId) ?? {};
+}
 
-  await setEventCorrection(userGoogleSub, eventId, Object.keys(correction).length > 0 ? correction : null);
+async function loadRow(tx: Tx | Db, userGoogleSub: string, eventId: string) {
+  const [row] = await tx.select().from(recruitingEvents).where(and(eq(recruitingEvents.id, eventId), eq(recruitingEvents.userGoogleSub, userGoogleSub))).limit(1);
+  return row;
+}
+
+/** Record only the fields that differ from what we extracted; matching fields stay un-overridden. The same statements are logged as labels. */
+export async function editEvent(userGoogleSub: string, eventId: string, edit: EventEdit) {
+  await getDb().transaction(async (tx) => {
+    const row = await loadRow(tx, userGoogleSub, eventId);
+    if (!row) return;
+    const correction: EventCorrection = {};
+    if (edit.type !== row.type) correction.type = edit.type;
+    if (edit.company && edit.company !== row.company) correction.company = edit.company;
+    if (edit.role !== row.role) correction.role = edit.role;
+    const before = row.eventDate?.getTime() ?? null;
+    const after = edit.eventDate?.getTime() ?? null;
+    if (before !== after) correction.eventDate = edit.eventDate;
+
+    const prior = await priorUserLabels(tx, userGoogleSub, row.gmailMessageId);
+    const effective: FieldValues = { type: edit.type, company: edit.company || row.company, role: edit.role, eventDate: edit.eventDate };
+    await appendUserLabels(tx, userGoogleSub, row, draftsFromEdit(predictedValues(row), effective, prior));
+    await tx.update(recruitingEvents).set({ correction: Object.keys(correction).length > 0 ? serializeCorrection(correction) : null }).where(eq(recruitingEvents.id, eventId));
+  });
 }
 
 export async function ignoreEvent(userGoogleSub: string, eventId: string) {
-  await setEventCorrection(userGoogleSub, eventId, { ignored: true });
+  await getDb().transaction(async (tx) => {
+    const row = await loadRow(tx, userGoogleSub, eventId);
+    if (!row) return;
+    await appendUserLabels(tx, userGoogleSub, row, draftsFromIgnore(await priorUserLabels(tx, userGoogleSub, row.gmailMessageId)));
+    await tx.update(recruitingEvents).set({ correction: serializeCorrection({ ignored: true }) }).where(eq(recruitingEvents.id, eventId));
+  });
+}
+
+/** "Looks right": an explicit confirmation of what is shown. Changes nothing the person sees. */
+export async function confirmEvent(userGoogleSub: string, eventId: string) {
+  await getDb().transaction(async (tx) => {
+    const row = await loadRow(tx, userGoogleSub, eventId);
+    if (!row) return;
+    const correction = parseCorrection(row.correction);
+    const shown: FieldValues = {
+      type: correction?.type ?? (row.type as EventType),
+      company: correction?.company ?? row.company,
+      role: correction?.role !== undefined ? correction.role : row.role,
+      eventDate: correction?.eventDate !== undefined ? correction.eventDate : row.eventDate,
+    };
+    await appendUserLabels(tx, userGoogleSub, row, draftsFromConfirmation(shown, await priorUserLabels(tx, userGoogleSub, row.gmailMessageId)));
+  });
+}
+
+/** "Undo my edits": back to the prediction, recorded as such. */
+export async function resetEvent(userGoogleSub: string, eventId: string) {
+  await getDb().transaction(async (tx) => {
+    const row = await loadRow(tx, userGoogleSub, eventId);
+    if (!row) return;
+    await appendUserLabels(tx, userGoogleSub, row, draftsFromReset(predictedValues(row), await priorUserLabels(tx, userGoogleSub, row.gmailMessageId)));
+    await tx.update(recruitingEvents).set({ correction: null }).where(eq(recruitingEvents.id, eventId));
+  });
 }
