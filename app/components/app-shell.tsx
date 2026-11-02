@@ -2,6 +2,7 @@ import Link from "next/link";
 import { type ReactNode } from "react";
 import { signOut } from "@/auth";
 import { deleteMyDataAction, disconnectGmailAction } from "@/app/actions";
+import { Mark } from "@/app/components/brand";
 import { ConfirmForm } from "@/app/components/confirm-form";
 import { Menu } from "@/app/components/menu";
 import { SearchButton } from "@/app/components/search-button";
@@ -22,18 +23,6 @@ export function firstName(name?: string | null, email?: string | null) {
   const source = name?.trim() || email?.split("@")[0] || "";
   const first = source.split(/\s+/)[0] ?? "";
   return first ? first.charAt(0).toUpperCase() + first.slice(1) : "";
-}
-
-/** The mark is the journey line in miniature: three dots on a hairline, the last one lit. */
-function Mark() {
-  return (
-    <svg width="22" height="10" viewBox="0 0 22 10" fill="none" aria-hidden>
-      <path d="M2 5h18" stroke="currentColor" strokeOpacity="0.35" />
-      <circle cx="2.5" cy="5" r="2.2" fill="currentColor" />
-      <circle cx="11" cy="5" r="2.2" fill="currentColor" />
-      <circle cx="19.5" cy="5" r="2.6" style={{ fill: "var(--accent)" }} />
-    </svg>
-  );
 }
 
 /**

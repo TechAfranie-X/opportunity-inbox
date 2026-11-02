@@ -6,6 +6,7 @@ import { useWorkspace } from "@/app/components/workspace";
 import { annotateTimeline, nextMoment, peopleFor, stageSince } from "@/lib/recruiting/history";
 import {
   STAGE_LABEL,
+  daysBetween,
   formatFloating,
   formatWhen,
   gmailThreadUrl,
@@ -94,7 +95,7 @@ export function Inspector() {
                   <li key={item.event.gmailMessageId} className="relative pb-4 pl-5 last:pb-0">
                     <span
                       className="absolute -left-px top-[0.5rem] h-[6px] w-[6px] -translate-x-1/2 rounded-full"
-                      style={{ background: item.major ? (item.current ? "var(--accent)" : "var(--ink)") : "var(--line-strong)" }}
+                      style={{ background: item.major ? (item.current && item.event.eventDate && daysBetween(now, item.event.eventDate) >= 0 ? "var(--accent)" : "var(--ink)") : "var(--line-strong)" }}
                       aria-hidden
                     />
                     <div className="flex items-baseline justify-between gap-3">
@@ -107,7 +108,7 @@ export function Inspector() {
                       <p className={`t-meta tnum ${item.superseded ? "text-ink-3 line-through decoration-line-strong" : "text-ink-2"}`}>
                         {item.event.dateKind === "deadline" ? "Due " : ""}
                         {formatFloating(item.event.eventDate, item.event.eventDateHasTime)}
-                        {item.current && item.label !== "Interview scheduled" ? " · now" : ""}
+                        {item.current && item.label !== "Interview scheduled" && daysBetween(now, item.event.eventDate) >= 0 ? " · now" : ""}
                       </p>
                     ) : null}
                   </li>

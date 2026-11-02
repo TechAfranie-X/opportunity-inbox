@@ -870,3 +870,246 @@ kbd {
     border-left: 1px solid var(--line);
   }
 }
+
+
+/* ------------------------------------------------------ presentation route */
+/* Everything here is scoped to /demo/presentation and has no effect on the product. */
+html[data-presentation] {
+  cursor: none;
+}
+html[data-presentation-done] {
+  cursor: auto;
+}
+.presentation-root {
+  pointer-events: none;
+  min-height: 100vh;
+}
+
+/* Scenes crossfade in place: the incoming one settles while the outgoing one lets go. */
+.scene-stack {
+  display: grid;
+}
+.scene-stack > .scene {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+.scene-in {
+  animation: scene-in 0.55s var(--ease) both;
+}
+.scene-out {
+  animation: scene-out 0.26s ease-in both;
+  pointer-events: none;
+}
+/* Fade through, never cross-fade: the incoming scene waits for the outgoing one to clear. */
+.scene-out ~ .scene-in {
+  animation-delay: calc(0.24s / var(--speed, 1));
+}
+@keyframes scene-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes scene-out {
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A quiet cue before the inspector opens: the "View history" link firms up. */
+html[data-demo-cue="hero-history"] .hero .link-quiet {
+  color: var(--ink);
+  text-decoration-color: var(--ink);
+}
+
+/* Timeline entries settle in one by one: each is an email being read into the story. */
+html[data-presentation] .inspector ol > li:nth-child(1) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(1.00s / var(--speed, 1));
+}
+html[data-presentation] .inspector ol > li:nth-child(2) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(1.55s / var(--speed, 1));
+}
+html[data-presentation] .inspector ol > li:nth-child(3) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(2.10s / var(--speed, 1));
+}
+html[data-presentation] .inspector ol > li:nth-child(4) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(2.65s / var(--speed, 1));
+}
+html[data-presentation] .inspector ol > li:nth-child(5) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(3.20s / var(--speed, 1));
+}
+html[data-presentation] .inspector ol > li:nth-child(6) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(3.75s / var(--speed, 1));
+}
+html[data-presentation] .inspector ol > li:nth-child(7) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(4.30s / var(--speed, 1));
+}
+html[data-presentation] .inspector ol > li:nth-child(8) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(4.85s / var(--speed, 1));
+}
+
+.history-stage ol[aria-label="History"] > li:nth-child(1) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(0.5s / var(--speed, 1));
+}
+.history-stage ol[aria-label="History"] > li:nth-child(2) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(0.9s / var(--speed, 1));
+}
+.history-stage ol[aria-label="History"] > li:nth-child(3) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(1.3s / var(--speed, 1));
+}
+.history-stage ol[aria-label="History"] > li:nth-child(4) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(1.7s / var(--speed, 1));
+}
+.history-stage ol[aria-label="History"] > li:nth-child(5) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(2.1s / var(--speed, 1));
+}
+.history-stage ol[aria-label="History"] > li:nth-child(6) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(2.5s / var(--speed, 1));
+}
+.history-stage ol[aria-label="History"] > li:nth-child(7) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(2.9s / var(--speed, 1));
+}
+.history-stage ol[aria-label="History"] > li:nth-child(8) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(3.3s / var(--speed, 1));
+}
+.history-stage ol[aria-label="History"] > li:nth-child(9) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(3.7s / var(--speed, 1));
+}
+.history-stage ol[aria-label="History"] > li:nth-child(10) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(4.1s / var(--speed, 1));
+}
+.history-stage ol[aria-label="History"] > li:nth-child(11) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(4.5s / var(--speed, 1));
+}
+.history-stage ol[aria-label="History"] > li:nth-child(12) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(4.9s / var(--speed, 1));
+}
+.history-stage ol[aria-label="History"] > li:nth-child(13) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(5.3s / var(--speed, 1));
+}
+.history-stage ol[aria-label="History"] > li:nth-child(14) {
+  animation: reveal 0.55s var(--ease) both;
+  animation-delay: calc(5.7s / var(--speed, 1));
+}
+
+/* Closing frame: the journey line draws itself, then the name. */
+.closing {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0;
+  padding: 2rem;
+  text-align: center;
+  background: var(--paper);
+  animation: scene-in 0.7s var(--ease) both;
+}
+.closing-line {
+  position: relative;
+  width: min(30rem, 78vw);
+  height: 3.2rem;
+  margin-bottom: 2.75rem;
+}
+.closing-track {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--ink);
+  transform-origin: left;
+  animation: grow 1.5s var(--ease) 0.25s both;
+}
+.closing-stop {
+  position: absolute;
+  top: 0;
+  width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.closing-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink);
+  animation: reveal 0.4s var(--ease) both;
+  animation-delay: calc(0.3s + var(--i) * 0.34s);
+}
+.closing-dot[data-last="true"] {
+  background: var(--accent);
+  box-shadow: 0 0 0 5px var(--accent-wash);
+}
+.closing-label {
+  margin-top: 0.7rem;
+  white-space: nowrap;
+  color: var(--ink-3);
+  animation: reveal 0.5s var(--ease) both;
+  animation-delay: calc(0.45s + var(--i) * 0.34s);
+}
+.closing-title {
+  animation: reveal 0.8s var(--ease) 1.5s both;
+}
+.closing-tag {
+  margin-top: 0.75rem;
+  color: var(--ink-2);
+  animation: reveal 0.8s var(--ease) 1.85s both;
+}
+
+.replay {
+  position: fixed;
+  z-index: 90;
+  left: 50%;
+  bottom: 2rem;
+  transform: translateX(-50%);
+  padding: 0.5rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+.replay[data-visible="true"] {
+  opacity: 1;
+  pointer-events: auto;
+}

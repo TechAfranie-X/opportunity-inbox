@@ -455,14 +455,15 @@ function EventEditor({ event }: { event: EffectiveEvent }) {
   );
 }
 
-function TimelineEntry({ item, editable }: { item: ReturnType<typeof annotateTimeline>[number]; editable: boolean }) {
+function TimelineEntry({ item, now, editable }: { item: ReturnType<typeof annotateTimeline>[number]; now: Date; editable: boolean }) {
   const { event, label, major, superseded, current } = item;
+  const upcoming = event.eventDate ? daysBetween(now, event.eventDate) >= 0 : false;
   const struck = superseded ? "text-ink-3 line-through decoration-[var(--line-strong)]" : "";
   return (
     <li className="group relative grid grid-cols-[4.5rem_1fr] gap-x-6 pb-8 last:pb-0">
       <span
         className="absolute -left-px top-[0.62rem] h-[7px] w-[7px] -translate-x-1/2 rounded-full"
-        style={{ background: !major ? "var(--line-strong)" : current ? "var(--accent)" : "var(--ink)", boxShadow: current ? "0 0 0 4px var(--accent-wash)" : "none" }}
+        style={{ background: !major ? "var(--line-strong)" : current && upcoming ? "var(--accent)" : "var(--ink)", boxShadow: current && upcoming ? "0 0 0 4px var(--accent-wash)" : "none" }}
         aria-hidden
       />
       <p className="t-meta tnum whitespace-nowrap pl-6 pt-[0.3rem] text-ink-3">{shortDay(event.occurredAt)}</p>
@@ -476,7 +477,7 @@ function TimelineEntry({ item, editable }: { item: ReturnType<typeof annotateTim
           <p className={`mt-0.5 tnum ${struck}`}>
             {event.dateKind === "deadline" ? "Due " : ""}
             {formatFloating(event.eventDate, event.eventDateHasTime)}
-            {current ? <span className="t-label ml-3 text-accent no-underline">Now</span> : null}
+            {current && upcoming ? <span className="t-label ml-3 text-accent no-underline">Now</span> : null}
           </p>
         ) : null}
         <p className="t-meta mt-0.5 truncate text-ink-3">
@@ -534,7 +535,7 @@ export function OpportunityHistory({ opportunity, now, editable }: { opportunity
       <div className="mt-12 grid gap-x-20 gap-y-12 lg:grid-cols-[minmax(0,1fr)_19rem]">
         <ol className="relative ml-1 border-l border-line" aria-label="History">
           {items.map((item) => (
-            <TimelineEntry key={item.event.gmailMessageId} item={item} editable={editable} />
+            <TimelineEntry key={item.event.gmailMessageId} item={item} now={now} editable={editable} />
           ))}
         </ol>
 

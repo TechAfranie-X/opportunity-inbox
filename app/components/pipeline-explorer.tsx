@@ -13,7 +13,7 @@ const TABS: Tab[] = ["applied", "recruiter", "assessment", "interview", "offer",
  * Pipeline as a journey, not a board. The stages sit on one hairline; the accent marker travels to
  * the selected stage and the list beneath eases in. Selecting a row opens the inspector in place.
  */
-export function PipelineExplorer({ initialStage }: { initialStage?: string }) {
+export function PipelineExplorer({ initialStage, controlledStage }: { initialStage?: string; controlledStage?: string }) {
   const { opportunities, now, selectedKey, open } = useWorkspace();
 
   const grouped = (tab: Tab) =>
@@ -22,7 +22,9 @@ export function PipelineExplorer({ initialStage }: { initialStage?: string }) {
 
   // Default to the most advanced stage that has anything in it.
   const fallback = ([...TABS].reverse().find((t) => t !== "closed" && counts[t] > 0) ?? "applied") as Tab;
-  const [tab, setTab] = useState<Tab>(TABS.includes(initialStage as Tab) ? (initialStage as Tab) : fallback);
+  const [tabState, setTab] = useState<Tab>(TABS.includes(initialStage as Tab) ? (initialStage as Tab) : fallback);
+  // The presentation director can drive the selected stage; normal use leaves this undefined.
+  const tab: Tab = TABS.includes(controlledStage as Tab) ? (controlledStage as Tab) : tabState;
 
   const refs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
   const [bar, setBar] = useState<{ left: number; width: number } | null>(null);
@@ -39,6 +41,7 @@ export function PipelineExplorer({ initialStage }: { initialStage?: string }) {
   }, [measure]);
 
   const choose = (next: Tab) => {
+    if (controlledStage) return;
     setTab(next);
     const url = new URL(window.location.href);
     url.searchParams.set("stage", next);

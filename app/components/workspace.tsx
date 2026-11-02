@@ -70,20 +70,25 @@ export function WorkspaceProvider({
   now,
   basePath,
   editable,
+  persistSelection = true,
   children,
 }: {
   opportunities: Opportunity[];
   now: Date;
   basePath: string;
   editable: boolean;
+  /** Mirror the open opportunity in `?o=`. The scripted presentation turns this off so a refresh always starts clean. */
+  persistSelection?: boolean;
   children: ReactNode;
 }) {
   const param = useSyncExternalStore(subscribeUrl, readSelection, noSelection);
-  const selectedKey = param && opportunities.some((o) => o.key === param) ? param : null;
+  const [local, setLocal] = useState<string | null>(null);
+  const raw = persistSelection ? param : local;
+  const selectedKey = raw && opportunities.some((o) => o.key === raw) ? raw : null;
   const [paletteOpen, setPaletteOpen] = useState(false);
 
-  const open = useCallback((key: string) => writeSelection(key), []);
-  const close = useCallback(() => writeSelection(null), []);
+  const open = useCallback((key: string) => (persistSelection ? writeSelection(key) : setLocal(key)), [persistSelection]);
+  const close = useCallback(() => (persistSelection ? writeSelection(null) : setLocal(null)), [persistSelection]);
 
   useEffect(() => {
     document.documentElement.dataset.inspector = selectedKey ? "open" : "closed";
