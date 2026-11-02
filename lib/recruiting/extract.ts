@@ -36,13 +36,13 @@ export const RULES: Rule[] = [
   { type: "status_update", signal: "platform confirmation",
     pattern: /\b(?:interview )?availability (?:was )?submitted\b|\byou(?:'|’)?re moving forward\b/i },
   { type: "assessment_completed", signal: "assessment received",
-    pattern: /\b(?:thank(?:s| you) for (?:completing|submitting your (?:assessment|solution))|we(?:'ve| have) received your (?:assessment|submission|solution)|assessment (?:complete|completed|received|submitted|results|submission))\b/i },
+    pattern: /\b(?:thank(?:s| you) for (?:completing|submitting your (?:assessment|solution))|we(?:'ve| have) received your (?:assessment|submission|solution)|assessment (?:complete|completed|received|submitted|results|submission)|results? for .{0,60}(?:assessment|pre-?screen) (?:is|are) now available)\b/i },
   { type: "assessment", signal: "assessment",
     pattern: /\b(?:online assessment|coding assessment|technical assessment|coding challenge|take-?home|invited (?:you )?to (?:complete|take) (?:an? |the )?(?:online )?(?:assessment|challenge|test)|complete (?:the|your|an?) (?:\w+ ){0,2}(?:assessment|challenge)|assessment (?:invitation|link)|(?:hackerrank|codesignal|codility|coderpad) (?:assessment|test|challenge|link)|waiting for your .{0,40}assessment|(?:request|assessment|invitation) (?:from .{1,40} )?(?:has )?expired)\b/i },
   { type: "interview_scheduled", signal: "interview confirmed",
     pattern: /\b(?:interview (?:is )?(?:confirmed|scheduled)|confirm(?:ing|ation of)? your (?:upcoming )?interview|your (?:upcoming )?interview (?:on|is|will)|\b(?:upcoming|final|technical|virtual|onsite|on-site|panel) interview\b|(?:externship|internship) interview\b|invitation[^:]{0,40}:.{0,80}interview|reminder\W+(?!to schedule).{0,20}interview|interview confirmation|interview schedule|you(?:'re| are) (?:all set|scheduled) for)\b/i },
   { type: "interview_invite", signal: "interview invite",
-    pattern: /\b(?:schedule (?:your |an? |the )?(?:interview|call|conversation|time|chat)|(?:invite|like to invite) you (?:to|for) (?:an? |the )?(?:\w+ )?interview|like to interview you|interview invitation|invitation to (?:an? )?interview|reminder to schedule|select (?:a |your )?(?:time|slot)|(?:share|send) (?:me )?your availability|book (?:a )?(?:time|slot)|pick a time)\b/i },
+    pattern: /\b(?:schedule (?:your |an? |the )?(?:interview|call|conversation|time|chat)|(?:invite|like to invite) you (?:to|for) (?:an? |the )?(?:\w+ )?interview|like to interview you|interview invitation|invitation to (?:an? )?interview|invited to interview|reminder to schedule|select (?:a |your )?(?:time|slot)|(?:share|send) (?:me )?your availability|book (?:a )?(?:time|slot)|pick a time)\b/i },
   { type: "recruiter_outreach", signal: "recruiter outreach",
     pattern: /\b(?:i(?:'m| am) (?:a |the )?(?:recruiter|sourcer|talent)|reaching out (?:to you )?(?:about|regarding|because)|came across your (?:profile|resume|background|application)|your (?:background|profile) (?:caught|stood|looks)|chat about (?:an? |the )?(?:opportunity|role|position)|quick (?:call|chat)|recruiter screen|phone screen|intro call)\b/i },
   { type: "applied", signal: "application confirmation", weak: true,
@@ -114,10 +114,10 @@ const TRANSACTIONAL_SUBJECT =
 
 /** Promotions that borrow recruiting vocabulary ("applications are now open", "free offer"). */
 const MARKETING_SUBJECT =
-  /\bapplications? (?:are )?(?:now )?open\b|\bnow open\b|\bapply (?:today|now|by|before)\b|\blast call\b|\bdon'?t miss\b|\blimited[- ]time\b|\bregister (?:now|today)\b|\bwebinar\b|\bcareer fair\b|\bsave the date\b|\bfree offer\b|\d+% off\b|\bon sale\b|\bis (?:still )?open\b|\bjob matches\b|\bget ready for\b/i;
+  /\bapplications? (?:are )?(?:now )?open\b|\bnow open\b|\bapply (?:today|now|by|before)\b|\blast call\b|\bdon'?t miss\b|\blimited[- ]time\b|\bregister (?:now|today)\b|\bwebinar\b|\bcareer fair\b|\bsave the date\b|\bfree offer\b|\d+% off\b|\bon sale\b|\bis (?:still )?open\b|\bjob matches\b|\bget ready for\b|\bboost your\b|\binfo(?:rmation)? session\b|\bworkshop\b|\bthanks to\b|\bfree\b/i;
 
 /** Types a promotion can fake. Rejections, confirmed interviews and assessment receipts are never promotional. */
-const MARKETING_FAKEABLE = new Set<EventType>(["applied", "follow_up", "status_update", "recruiter_outreach", "interview_invite", "assessment", "offer"]);
+const MARKETING_FAKEABLE = new Set<EventType>(["interview_scheduled", "applied", "follow_up", "status_update", "recruiter_outreach", "interview_invite", "assessment", "offer"]);
 
 const AUTO_REPLY = /^\s*(?:automatic reply|auto-?reply|out of office|undeliverable)\b/i;
 const WITHDRAW = /\b(?:withdraw(?:ing)? (?:my|from)|please withdraw|no longer (?:interested|available))\b/i;

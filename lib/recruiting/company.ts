@@ -16,7 +16,7 @@ const PLATFORM_DOMAINS = [
   "beamery.com", "avature.net", "careerhub.com", "isolvedhire.com", "starred.com",
   "interfolio.com", "emailmeform.com", "linklings.com", "hackerrankforwork.com", "submittable.com",
   "slate.org", "technolutions.com", "formstack.com", "typeform.com", "jotform.com",
-  "yello.co", "smapply.net", "modernloop.io", "formassembly.com", "hirevue.com", "paradox.ai", "olivia.paradox.ai",
+  "yello.co", "smapply.net", "modernhire.com", "zeffy.com", "predictiveindex.com", "fillout.com", "modernloop.io", "formassembly.com", "hirevue.com", "paradox.ai", "olivia.paradox.ai",
 ];
 
 const FREE_MAIL = ["gmail.com", "outlook.com", "hotmail.com", "yahoo.com", "icloud.com", "proton.me"];
@@ -32,7 +32,7 @@ const ROLE_WORD =
   /\b(?:intern|internship|engineer|developer|analyst|scientist|designer|manager|associate|researcher|consultant|architect|specialist|co-?op|fellow|apprentice|programmer|position|role)\b/i;
 
 const WORD = "[A-Za-z0-9&'’\\-]+(?:\\.[A-Za-z0-9]+)*";
-const CAP = `([A-Z]${WORD.slice(0)}(?: (?:[A-Z0-9]${WORD}|of|and|&)){0,3})`;
+const CAP = `((?:[A-Z]|[a-z](?=[A-Z]))${WORD}(?: (?:[A-Z0-9]${WORD}|of|and|&)){0,3})`;
 
 /** Case-insensitive keyword inside an otherwise case-sensitive pattern (company names need capitals). */
 const K = (word: string) => word.replace(/[a-z]/gi, (c) => `[${c.toLowerCase()}${c.toUpperCase()}]`);
@@ -45,6 +45,9 @@ const COMPANY_PATTERNS: RegExp[] = [
   new RegExp(`\\b(?:${K("request")}|${K("invitation")}|${K("assessment")})\\s+${K("from")}\\s+${CAP}\\b`),
   new RegExp(`\\b${CAP}\\s+${K("is")}\\s+${K("waiting")}\\s+${K("for")}\\s+${K("your")}\\b`),
   new RegExp(`${K("next")}\\s+${K("step")}:\\s*${CAP}\\b`),
+  new RegExp(`\\b(?:${K("complete")}|${K("take")}|${K("finish")})\\s+(?:${K("your")}|${K("the")})\\s+${CAP}\\s+(?:${K("pre-screen")}|${K("prescreen")}|${K("coding")}|${K("test")})`),
+  new RegExp(`${K("reminder")}:\\s*${CAP}\\s+(?:${K("test")}|${K("assessment")}|${K("coding")}|${K("interview")}|${K("application")})`),
+  new RegExp(`${K("result")}\\s+${K("for")}\\s+${CAP}\\b`),
   new RegExp(`^${CAP}:\\s`), // "Stripe: Online Assessment …"
   new RegExp(`^${CAP}\\s+\\|\\s`), // "BlackRock | Application update"
   new RegExp(`^${CAP}\\s+(?:${K("event")}\\s+|${K("program")}\\s+)?${K("application")}\\s+(?:${K("update")}|${K("status")}|${K("received")})`), // "Morgan Stanley Event Application Update"
@@ -65,11 +68,23 @@ function titleCase(label: string) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+const LABEL_NOISE = ["recruiting", "recruitment", "careers", "career", "jobs", "talent", "hiring", "mailer", "email", "mail", "apply"];
+
+/** "drwrecruiting" -> "drw", "talent-citadel" -> "citadel". Keeps the original if nothing is left. */
+function stripLabelNoise(label: string) {
+  let value = label;
+  for (const noise of LABEL_NOISE) {
+    value = value.split("-").filter((part) => part !== noise).join("-");
+    if (value.endsWith(noise) && value.length > noise.length + 2) value = value.slice(0, -noise.length);
+  }
+  return value || label;
+}
+
 function registrableLabel(domain: string) {
   const parts = domain.split(".").filter(Boolean);
   if (parts.length < 2) return "";
   const twoPartTld = ["co", "com", "org", "ac"].includes(parts[parts.length - 2]) && parts.length >= 3;
-  return parts[parts.length - (twoPartTld ? 3 : 2)];
+  return stripLabelNoise(parts[parts.length - (twoPartTld ? 3 : 2)]);
 }
 
 export function isPlatformDomain(domain: string) {
@@ -84,12 +99,13 @@ export function isFreeMailDomain(domain: string) {
 const GENERIC_LEAD =
   /^(?:action(?: needed| required)?|reminder|urgent|important|final|apply|new|thank|thanks|welcome|congratulations?|last|update|your|application|re|fwd?|next step|follow[- ]?up|notice|alert|invitation|interview|assessment|offer|security)\b/i;
 
+const TRAILING_GENERIC =
+  /\s+(?:application|update|assessment|interview|offer|status|confirmation|invitation|reminder|notification|account|coding|online|technical|event|pre-screen|prescreen|pre-screening|screen|challenge|test)$/i;
+
 function cleanCandidate(raw: string): string | null {
-  const value = raw
-    .replace(/\s+(?:of|and|&)$/i, "")
-    .replace(/\s+(?:application|update|assessment|interview|offer|status|confirmation|invitation|reminder|notification|account|coding|online|technical|event|pre-screen|pre-screening|screen|challenge)$/i, "")
-    .replace(/[.,!]+$/, "")
-    .trim();
+  let value = raw;
+  for (let i = 0; i < 3; i += 1) value = value.replace(TRAILING_GENERIC, "");
+  value = value.replace(/\s+(?:of|and|&)$/i, "").replace(/[.,!]+$/, "").trim();
   if (GENERIC_LEAD.test(value)) return null;
   if (value.length < 2) return null;
   const lower = value.toLowerCase();
@@ -125,7 +141,7 @@ const SENDER_NOISE = new Set([
  * generic senders and anything that reduces to noise words ("Workday System").
  */
 function companyFromDisplayName(rawFrom: string): string | null {
-  const display = rawFrom.replace(/<[^>]+>/g, "").replace(/["']/g, "").trim();
+  const display = rawFrom.replace(/<[^>]+>/g, "").replace(/["']/g, "").split(/\s[-|–]\s/)[0].trim();
   if (!display || display.includes("@")) return null;
   const tokens = display
     .replace(/[._]/g, " ")
@@ -172,6 +188,22 @@ function recoverBrandName(label: string, text: string) {
   return best ?? titleCase(label);
 }
 
+const ORG_WORDS = new Set([
+  "ai", "labs", "lab", "capital", "trading", "group", "systems", "space", "bank", "health", "tech", "technologies",
+  "software", "partners", "financial", "securities", "investments", "research", "energy", "media", "cloud", "data",
+  "network", "networks", "robotics", "games", "foods", "airlines", "motors", "industries", "analytics", "security",
+  "institute", "university", "college", "foundation", "fund", "fellowship", "program", "academy", "school",
+  "relations", "services", "solutions", "global", "international", "company", "holdings", "studios",
+  "entertainment", "pharma", "therapeutics", "brands", "stores", "logistics", "careers", "recruiting",
+]);
+
+/** "Julia Ngo" is a recruiter, "Advanced Space" is a company: two capitalised words and no organisation word. */
+function looksLikePerson(name: string) {
+  const words = name.split(/\s+/);
+  if (words.length !== 2 || !words.every((w) => /^[A-Z][a-z]+$/.test(w))) return false;
+  return !words.some((w) => ORG_WORDS.has(w.toLowerCase()));
+}
+
 export function inferCompany(input: {
   from: string;
   subject: string;
@@ -190,7 +222,8 @@ export function inferCompany(input: {
     const fl = flat(label);
     // The name used in the content wins when it is consistent with the domain
     // ("Notion" in the text vs "makenotion.com"): same brand, nicer spelling.
-    if (fromText && fl && (fl.includes(flat(fromText)) || flat(fromText).includes(fl))) return fromText;
+    const initials = fromText ? fromText.split(/\s+/).map((w) => w[0]?.toLowerCase() ?? "").join("") : "";
+    if (fromText && fl && (fl.includes(flat(fromText)) || flat(fromText).includes(fl) || (fl.length <= 4 && fl === initials))) return fromText;
     if (display && fl && (flat(display).includes(fl) || fl.includes(flat(display)))) return display;
     return label ? recoverBrandName(label, text) : fromText;
   }
@@ -199,7 +232,7 @@ export function inferCompany(input: {
   const fromText = companyFromText(input.subject, body);
   if (fromText) return fromText;
   const display = companyFromDisplayName(input.from);
-  if (display) return display;
+  if (display && !looksLikePerson(display)) return display;
   // Workday tenants are addressed as <tenant>@myworkday.com.
   if (/(^|\.)myworkday\.com$/.test(domain) && sender.localPart && !SENDER_NOISE.has(sender.localPart) && !/reply/.test(sender.localPart)) {
     return titleCase(sender.localPart);

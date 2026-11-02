@@ -68,3 +68,29 @@ test("'Company Event Application Update' and 'Assessment completed: Company Pre-
   assert.equal(inferCompany({ from: "x@acme.tal.net", subject: "Acme Event Application Update", body: "" }), "Acme");
   assert.equal(inferCompany({ from: "CodeSignal <x@codesignal.com>", subject: "Assessment completed: Acme Pre-Screen", body: "" }), "Acme");
 });
+
+test("brands that start lowercase (eBay) and assessment-vendor reminders resolve to the company", () => {
+  const codesignal = "CodeSignal <noreply@codesignal.com>";
+  assert.equal(co(codesignal, "Jane Doe, don't forget to complete your eBay Pre-Screen!"), "eBay");
+  assert.equal(co(codesignal, "Reminder: Globex Test Invitation"), "Globex");
+  assert.equal(co(codesignal, "Your result for Initech Coding Assessment is now available"), "Initech");
+});
+
+test("a bare 'complete your <adjective> assessment' does not make the adjective a company", () => {
+  assert.equal(co("noreply@codesignal.com", "Take the Cognitive Assessment"), null);
+});
+
+test("a recruiter's name on platform mail is not a company; two-word organisations still are", () => {
+  assert.equal(co("Julia Ngo <x@talent.icims.com>", "Coding Assessment Follow Up"), null);
+  assert.equal(co("Advanced Space <x@us.greenhouse-mail.io>", "Thank you for your interest"), "Advanced Space");
+  assert.equal(co("Synchrony Relations <x@yello.co>", "Thank you for your application"), "Synchrony Relations");
+});
+
+test("recruiting words in a domain label are stripped (drwrecruiting, talent-citadel)", () => {
+  assert.equal(co("jobs@drwrecruiting.com", "Application update", "Thank you for your interest in DRW."), "DRW");
+  assert.equal(co("jobs@talent-citadel.com", "Your application", "Citadel Associate Program"), "Citadel");
+});
+
+test("initials domains resolve to the spelled-out name used in the subject (gs -> Goldman Sachs)", () => {
+  assert.equal(co("recruiting@careers.gs.com", "Goldman Sachs: Complete Your Technical Assessment"), "Goldman Sachs");
+});

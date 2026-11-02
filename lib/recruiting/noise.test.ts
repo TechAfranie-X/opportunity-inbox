@@ -47,3 +47,14 @@ test("brand spelling is recovered from the text for domain-only names", () => {
 test("platforms that host many companies are not the company", () => {
   assert.equal(inferCompany({ from: "noreply@interfolio.com", subject: "Reminder: your application to Johns Hopkins University is due", body: "" }), "Johns Hopkins University");
 });
+
+test("testimonials, info sessions, workshops and 'boost your' vendor promos are not events", () => {
+  for (const s of [
+    "I landed my first tech internship thanks to Acme",
+    "Next Steps After The Acme Info Session",
+    "I'd like to invite you to our Interview + Portfolio Workshop (no cost)",
+    "Boost your interview odds: add a verified skill",
+  ]) {
+    assert.equal(extractEvent(mail(s, "Join our team. Apply for the internship role. We are hiring. Interview tips.")), null, s);
+  }
+});
