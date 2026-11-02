@@ -1,0 +1,97 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { signOut } from "@/auth";
+import { fromInputValue } from "@/lib/recruiting/format";
+import { requireUserSub } from "@/lib/recruiting/session";
+import {
+  disconnectGmail,
+  deleteRecruitingData,
+  dismissAction,
+  editEvent,
+  ignoreEvent,
+  recordUsage,
+  setEventCorrection,
+  setOpportunityStatus,
+} from "@/lib/recruiting/store";
+import { syncRecruitingMail } from "@/lib/recruiting/sync";
+import { EVENT_TYPES, type EventType } from "@/lib/recruiting/types";
+
+export type SyncState = { status: "idle" } | { status: "error"; message: string };
+
+const SYNC_ERRORS = {
+  not_connected: "Connect Gmail first.",
+  reconnect_required: "Gmail access expired. Please reconnect Gmail.",
+  temporary_error: "Couldn't reach Gmail. Try again in a minute.",
+} as const;
+
+export async function syncAction(): Promise<SyncState> {
+  const sub = await requireUserSub();
+  const result = await syncRecruitingMail(sub);
+  if (!result.ok) return { status: "error", message: SYNC_ERRORS[result.reason] };
+  await recordUsage(sub, "sync");
+  revalidatePath("/", "layout");
+  return { status: "idle" };
+}
+
+function text(form: FormData, name: string, max = 160) {
+  const value = form.get(name);
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+export async function editEventAction(form: FormData) {
+  const sub = await requireUserSub();
+  const eventId = text(form, "eventId", 64);
+  const type = text(form, "type", 40);
+  if (!eventId || !(EVENT_TYPES as string[]).includes(type)) return;
+  await editEvent(sub, eventId, {
+    type: type as EventType,
+    company: text(form, "company", 120),
+    role: text(form, "role") || null,
+    eventDate: fromInputValue(text(form, "eventDate", 20)),
+  });
+  await recordUsage(sub, "correction");
+  revalidatePath("/", "layout");
+}
+
+export async function ignoreEventAction(form: FormData) {
+  const sub = await requireUserSub();
+  await ignoreEvent(sub, text(form, "eventId", 64));
+  await recordUsage(sub, "correction");
+  revalidatePath("/", "layout");
+}
+
+export async function resetEventAction(form: FormData) {
+  const sub = await requireUserSub();
+  await setEventCorrection(sub, text(form, "eventId", 64), null);
+  revalidatePath("/", "layout");
+}
+
+export async function setOpportunityStatusAction(form: FormData) {
+  const sub = await requireUserSub();
+  const status = text(form, "status", 10);
+  await setOpportunityStatus(sub, text(form, "key", 200), status === "closed" ? "closed" : status === "active" ? "active" : null);
+  await recordUsage(sub, "correction");
+  revalidatePath("/", "layout");
+}
+
+export async function dismissActionAction(form: FormData) {
+  const sub = await requireUserSub();
+  await dismissAction(sub, text(form, "actionId", 300));
+  await recordUsage(sub, "dismiss_action");
+  revalidatePath("/", "layout");
+}
+
+export async function deleteMyDataAction() {
+  const sub = await requireUserSub();
+  await deleteRecruitingData(sub);
+  revalidatePath("/", "layout");
+  redirect("/today");
+}
+
+export async function disconnectGmailAction() {
+  const sub = await requireUserSub();
+  await disconnectGmail(sub);
+  await signOut({ redirectTo: "/" });
+}
