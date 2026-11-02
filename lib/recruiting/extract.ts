@@ -115,6 +115,7 @@ const DEADLINE_TYPES: EventType[] = ["assessment", "offer", "interview_invite", 
  * recruiting activity. Outbound mail is handled by `extractAll`.
  */
 export function extractEvent(email: RecruitingEmail): ExtractedEvent | null {
+  if (AUTO_REPLY.test(email.subject)) return null; // out-of-office / bounce notices are never recruiting events
   const sender = parseSender(email.from);
   const subject = email.subject.trim();
   const normalizedSubject = stripSubjectAnnotations(subject);

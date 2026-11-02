@@ -50,7 +50,7 @@ test("'next steps' boilerplate in a confirmation email does not make it an inter
 test("an explicit scheduling ask is an interview invite", () => {
   const e = extractEvent(email({
     subject: "Next steps with Acme",
-    bodyText: "We'd like to speak with you. Please select a time that works for you using the link below.",
+    bodyText: "We'd like to move to the next steps in our hiring process. Please select a time that works for you using the link below.",
   }));
   assert.equal(e?.type, "interview_invite");
 });
@@ -63,7 +63,7 @@ test("quoted history in a reply does not create an offer", () => {
 });
 
 test("real offer language is an offer", () => {
-  const e = extractEvent(email({ subject: "Your Acme Offer is Ready", bodyText: "We are pleased to extend you an offer." }));
+  const e = extractEvent(email({ subject: "Your Acme Offer is Ready", bodyText: "We are pleased to extend you an offer for the Software Engineer Intern role." }));
   assert.equal(e?.type, "offer");
 });
 
