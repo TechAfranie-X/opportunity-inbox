@@ -1,12 +1,16 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
+  integer,
   jsonb,
   pgTable,
   real,
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -115,4 +119,129 @@ export const usageEvents = pgTable(
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("usage_events_user_idx").on(table.userGoogleSub)],
+);
+
+/**
+ * Append-only record of what the extractor said about a message, per extractor version.
+ * Unlike `recruiting_events` (the serving table, re-materialised on every sync) rows here are never updated,
+ * so a later correction can always be compared with what the system really predicted at the time.
+ * Not-recruiting decisions are stored too (ids, sender domain and signals only, no subject or body): without
+ * them recruiting recall cannot be computed.
+ */
+export const eventPredictions = pgTable(
+  "event_predictions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userGoogleSub: text("user_google_sub").notNull(),
+    gmailMessageId: text("gmail_message_id").notNull(),
+    gmailThreadId: text("gmail_thread_id").notNull(),
+    extractorVersion: text("extractor_version").notNull(),
+    predictedAt: timestamp("predicted_at", { withTimezone: true }).notNull().defaultNow(),
+    decision: text("decision").notNull(),
+    outbound: boolean("outbound").notNull().default(false),
+    senderDomain: text("sender_domain").notNull().default(""),
+    type: text("type"),
+    company: text("company"),
+    role: text("role"),
+    eventDate: timestamp("event_date", { withTimezone: true }),
+    dateKind: text("date_kind"),
+    confidence: real("confidence"),
+    fieldConfidence: jsonb("field_confidence").$type<Record<string, number>>(),
+    signals: jsonb("signals").$type<string[]>().notNull().default([]),
+    reviewReasons: jsonb("review_reasons").$type<string[]>().notNull().default([]),
+  },
+  (table) => [
+    unique("event_predictions_user_message_version_unique").on(table.userGoogleSub, table.gmailMessageId, table.extractorVersion),
+    index("event_predictions_user_idx").on(table.userGoogleSub),
+    check("event_predictions_decision_check", sql`${table.decision} in ('recruiting', 'not_recruiting')`),
+  ],
+);
+
+/** A named, fixed set of messages to evaluate on. Membership is frozen once `frozen_at` is set. */
+export const evalDatasets = pgTable(
+  "eval_datasets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull().unique(),
+    kind: text("kind").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    frozenAt: timestamp("frozen_at", { withTimezone: true }),
+    /** SHA-256 over the sorted member ids, recorded at freeze so any later drift is detectable. */
+    manifestHash: text("manifest_hash"),
+    note: text("note"),
+  },
+  (table) => [check("eval_datasets_kind_check", sql`${table.kind} in ('dev_random', 'dev_challenge', 'blind')`)],
+);
+
+export const evalDatasetItems = pgTable(
+  "eval_dataset_items",
+  {
+    datasetId: uuid("dataset_id").notNull().references(() => evalDatasets.id, { onDelete: "cascade" }),
+    gmailMessageId: text("gmail_message_id").notNull(),
+    gmailThreadId: text("gmail_thread_id").notNull(),
+    addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("eval_dataset_items_unique").on(table.datasetId, table.gmailMessageId)],
+);
+
+/**
+ * One human judgement about one field of one message. Append-only: a changed mind is a new row that
+ * `supersedes` the old one. An unlabeled field is unknown to us, never assumed correct.
+ * `source` keeps provenance distinct; only dev_human / blind_human count toward headline metrics.
+ */
+export const labels = pgTable(
+  "labels",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** Set for dataset labels; null for in-product user corrections. */
+    datasetId: uuid("dataset_id").references(() => evalDatasets.id, { onDelete: "cascade" }),
+    /** Set for user corrections (whose mailbox); null for dataset labels. */
+    userGoogleSub: text("user_google_sub"),
+    gmailMessageId: text("gmail_message_id").notNull(),
+    field: text("field").notNull(),
+    value: jsonb("value").notNull(),
+    source: text("source").notNull(),
+    /** Who labeled, as a short opaque tag ("me", "reviewer-1"). Never an email address. */
+    labeler: text("labeler").notNull().default(""),
+    /** The prediction the product showed when a correction was made. Always null for hidden-prediction dataset labels. */
+    predictionId: uuid("prediction_id").references(() => eventPredictions.id, { onDelete: "set null" }),
+    supersedesId: uuid("supersedes_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("labels_dataset_message_idx").on(table.datasetId, table.gmailMessageId),
+    index("labels_user_message_idx").on(table.userGoogleSub, table.gmailMessageId),
+    check("labels_source_check", sql`${table.source} in ('dev_human', 'blind_human', 'user_correction', 'legacy_reconstructed')`),
+    check(
+      "labels_field_check",
+      sql`${table.field} in ('is_recruiting', 'type', 'company', 'role', 'opportunity_ref', 'stage', 'event_date', 'actionable', 'urgency')`,
+    ),
+    check("labels_owner_check", sql`${table.datasetId} is not null or ${table.userGoogleSub} is not null`),
+    // A hidden-prediction label must never reference a prediction: that is how anchoring would be provable.
+    check("labels_human_hidden_check", sql`${table.source} not in ('dev_human', 'blind_human') or ${table.predictionId} is null`),
+  ],
+);
+
+/** Append-only log of evaluations. For a BLIND dataset only the first run is `official`; later runs are contaminated. */
+export const evalRuns = pgTable(
+  "eval_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    datasetId: uuid("dataset_id").notNull().references(() => evalDatasets.id, { onDelete: "cascade" }),
+    extractorVersion: text("extractor_version").notNull(),
+    gitCommit: text("git_commit"),
+    policy: jsonb("policy").$type<Record<string, number>>().notNull(),
+    /** Label sources included in this run's headline numbers. */
+    labelSources: jsonb("label_sources").$type<string[]>().notNull(),
+    metrics: jsonb("metrics").$type<Record<string, unknown>>().notNull(),
+    /** Per-message predictions (no bodies), so a run can be audited or re-scored. */
+    results: jsonb("results").$type<unknown[]>().notNull().default([]),
+    official: boolean("official").notNull().default(false),
+    ranAt: timestamp("ran_at", { withTimezone: true }).notNull().defaultNow(),
+    itemCount: integer("item_count").notNull().default(0),
+  },
+  (table) => [
+    index("eval_runs_dataset_idx").on(table.datasetId),
+    uniqueIndex("eval_runs_one_official_per_dataset").on(table.datasetId).where(sql`${table.official}`),
+  ],
 );
