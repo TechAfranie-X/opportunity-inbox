@@ -1,7 +1,7 @@
 import { parseSender } from "../opportunities/normalize.ts";
 
 /** Applicant-tracking / assessment / job-board senders: the sender is NOT the company. */
-const PLATFORM_DOMAINS = [
+export const PLATFORM_DOMAINS = [
   "greenhouse.io", "greenhouse-mail.io", "lever.co", "myworkday.com", "workday.com",
   "ashbyhq.com", "icims.com", "smartrecruiters.com", "workable.com", "jobvite.com",
   "taleo.net", "successfactors.com", "brassring.com", "bamboohr.com", "breezy.hr",
@@ -63,7 +63,7 @@ const COMPANY_PATTERNS: RegExp[] = [
   new RegExp(`\\b${K("with")}\\s+${CAP}\\s+(?:${K("was")}|${K("were")}|${K("has")}|${K("have")}|${K("is")}|${K("are")})\\b`), // "availability with Acme was submitted"
 ];
 
-function titleCase(label: string) {
+export function titleCase(label: string) {
   if (!label) return label;
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
@@ -80,7 +80,7 @@ function stripLabelNoise(label: string) {
   return value || label;
 }
 
-function registrableLabel(domain: string) {
+export function registrableLabel(domain: string) {
   const parts = domain.split(".").filter(Boolean);
   if (parts.length < 2) return "";
   const twoPartTld = ["co", "com", "org", "ac"].includes(parts[parts.length - 2]) && parts.length >= 3;
@@ -140,7 +140,7 @@ const SENDER_NOISE = new Set([
  * Company from a sender display name. Returns null for addresses, people-style
  * generic senders and anything that reduces to noise words ("Workday System").
  */
-function companyFromDisplayName(rawFrom: string): string | null {
+export function companyFromDisplayName(rawFrom: string): string | null {
   const display = rawFrom.replace(/<[^>]+>/g, "").replace(/["']/g, "").split(/\s[-|–]\s/)[0].trim();
   if (!display || display.includes("@")) return null;
   const tokens = display
@@ -158,7 +158,7 @@ function companyFromDisplayName(rawFrom: string): string | null {
  * "datadoghq" -> "Datadog", "owenscorning" -> "Owens Corning", "mongodb" -> "MongoDB".
  * The text spelling must cover most of the label, so a stub ("Last" of "lastmile-ed") never wins.
  */
-function recoverBrandName(label: string, text: string) {
+export function recoverBrandName(label: string, text: string) {
   const flat = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
   const target = flat(label);
   const words = [...text.matchAll(/\b[A-Z][A-Za-z0-9]*\b/g)].map((m) => m[0]);
@@ -198,7 +198,7 @@ const ORG_WORDS = new Set([
 ]);
 
 /** "Julia Ngo" is a recruiter, "Advanced Space" is a company: two capitalised words and no organisation word. */
-function looksLikePerson(name: string) {
+export function looksLikePerson(name: string) {
   const words = name.split(/\s+/);
   if (words.length !== 2 || !words.every((w) => /^[A-Z][a-z]+$/.test(w))) return false;
   return !words.some((w) => ORG_WORDS.has(w.toLowerCase()));

@@ -85,6 +85,7 @@ function toEmail(message: GmailMessage, includeBody: boolean): RecruitingEmail |
     id: message.id,
     threadId: message.threadId,
     from: header(headers, "From"),
+    replyTo: header(headers, "Reply-To") || undefined,
     subject: header(headers, "Subject"),
     receivedAt: Number.isFinite(received) && received > 0 ? new Date(received) : new Date(header(headers, "Date")),
     outbound: labels.includes("SENT"),

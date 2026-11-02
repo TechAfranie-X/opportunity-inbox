@@ -58,6 +58,8 @@ export type RecruitingEmail = {
   id: string;
   threadId: string;
   from: string;
+  /** Reply-To header, when present. Transient evidence for company resolution; never stored. */
+  replyTo?: string;
   subject: string;
   receivedAt: Date;
   outbound: boolean;

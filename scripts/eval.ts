@@ -16,6 +16,8 @@ import { evaluate, formatReport, type LabelRow } from "../lib/recruiting/evaluat
 import { extractAll } from "../lib/recruiting/extract.ts";
 import { DATASET_KINDS, HEADLINE_SOURCES, type DatasetKind } from "../lib/recruiting/ground-truth.ts";
 import { DEFAULT_POLICY } from "../lib/recruiting/policy.ts";
+import { resolveBatch } from "../lib/recruiting/entity/resolve.ts";
+import { applyResolutions, formatShadowComparison } from "../lib/recruiting/entity/shadow.ts";
 import { buildPredictions } from "../lib/recruiting/predictions.ts";
 import { deriveProduct } from "../lib/recruiting/product.ts";
 import { EXTRACTOR_VERSION } from "../lib/recruiting/version.ts";
@@ -190,6 +192,7 @@ async function main() {
       const name = need("dataset");
       const row = await datasetRow(name) ?? fail(`dataset "${name}" is not registered`);
       const kind = kindOf(row.kind);
+      if (flag("shadow") === "true" && kind === "blind") fail("--shadow is not allowed on BLIND: it would be a second evaluation of the blind set. Evaluate candidate changes on DEV, then freeze the extractor.");
       if (kind !== "dev_challenge") verifyFrozen(name); // DEV-RANDOM and BLIND are only ever scored once frozen and intact
       const { manifest, members, context } = readSnapshot(name);
       const db = getDb();
@@ -217,6 +220,20 @@ async function main() {
         predictedGroups: product.groups, predictedTodayThreads: product.todayThreads, sources, policy: DEFAULT_POLICY,
       });
       console.log(formatReport(report));
+      if (flag("shadow") === "true") {
+        // Company resolver in shadow mode: same labels, same predictions, only the company replaced. Never recorded.
+        const inbound = all.filter((e) => !e.outbound);
+        const known = [...new Set(events.map((e) => e.company).filter((c): c is string => !!c))];
+        const resolutions = resolveBatch(inbound.map((e) => ({ id: e.id, threadId: e.threadId, from: e.from, replyTo: e.replyTo, subject: e.subject, body: e.bodyText })), undefined, known);
+        const shadowPredictions = applyResolutions(predictions, resolutions).filter((p) => manifest.memberIds.includes(p.gmailMessageId));
+        const shadowReport = evaluate({
+          kind, datasetName: name, asOf, messageIds: manifest.memberIds, threadOf, labels: labelRows.map((l): LabelRow => ({ gmailMessageId: l.gmailMessageId, field: l.field as never, value: l.value, source: l.source as never, createdAt: l.createdAt })),
+          predictions: shadowPredictions, predictedGroups: product.groups, predictedTodayThreads: product.todayThreads, sources, policy: DEFAULT_POLICY,
+        });
+        console.log("\n" + formatShadowComparison(report, shadowReport));
+        console.log("(shadow results are not recorded)");
+        return;
+      }
       let commit: string | null = null;
       try { commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim(); } catch { /* not a git checkout */ }
       if (flag("no-record") !== "true") {
