@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // The film pipeline is isolated from the product and has its own tooling.
     "demo-video/**",
+    // Local Python environment for offline TTS; not project code.
+    ".venv-kokoro/**",
   ]),
 ]);
 

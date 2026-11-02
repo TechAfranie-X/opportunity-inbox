@@ -1,4 +1,5 @@
 import { companyKey, roleRelation, roleTokens } from "./company.ts";
+import { DEFAULT_POLICY } from "./policy.ts";
 import type {
   EffectiveEvent,
   EventType,
@@ -178,7 +179,7 @@ export function buildOpportunities(
       firstActivityAt: group.events[0].occurredAt,
       lastActivityAt: group.events[group.events.length - 1].occurredAt,
       events: group.events,
-      needsReview: !group.company || group.events.some((e) => !e.corrected && e.confidence < 0.6),
+      needsReview: !group.company || group.events.some((e) => !e.corrected && e.confidence < DEFAULT_POLICY.reviewBelow),
     };
   });
   return opportunities.sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
