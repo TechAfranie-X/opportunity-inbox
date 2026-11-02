@@ -1,0 +1,343 @@
+{
+  "fps": 30,
+  "duration": 30.729,
+  "durationFrames": 922,
+  "voice": {
+    "provider": "local-say",
+    "provisional": true
+  },
+  "lines": {
+    "l1": {
+      "start": 0.45,
+      "end": 2.241,
+      "duration": 1.791,
+      "text": "Recruiting gets messy fast."
+    },
+    "l2": {
+      "start": 2.541,
+      "end": 8.489,
+      "duration": 5.948,
+      "text": "Applications, assessments, recruiter emails, and interviews disappear into different threads."
+    },
+    "l3": {
+      "start": 9.039,
+      "end": 13.395,
+      "duration": 4.356,
+      "text": "Opportunity Inbox turns those emails into one live recruiting workspace."
+    },
+    "l4": {
+      "start": 13.795,
+      "end": 15.245,
+      "duration": 1.45,
+      "text": "See what needs you today,"
+    },
+    "l5": {
+      "start": 15.445,
+      "end": 19.204,
+      "duration": 3.759,
+      "text": "follow every opportunity from application to interview to offer,"
+    },
+    "l6": {
+      "start": 19.504,
+      "end": 22.073,
+      "duration": 2.569,
+      "text": "and rebuild each company into one clean history."
+    },
+    "l7": {
+      "start": 22.523,
+      "end": 25.3,
+      "duration": 2.777,
+      "text": "No spreadsheets. No digging through Gmail."
+    },
+    "l8": {
+      "start": 25.95,
+      "end": 28.829,
+      "duration": 2.879,
+      "text": "Your recruiting life, organized automatically."
+    }
+  },
+  "film": {
+    "chaos": {
+      "in": 0,
+      "outStart": 6.889,
+      "outEnd": 7.789
+    },
+    "todayMount": 7.239,
+    "inspectorOpen": 11.095,
+    "pipelineStart": 15.245,
+    "historyStart": 19.904,
+    "closingStart": 25.4,
+    "historyEnd": 26.1
+  },
+  "product": {
+    "todayMountMs": 7239,
+    "inspectorOpenMs": 11095,
+    "inspectorEntryFirstS": 0.8,
+    "inspectorEntryStepS": 0.4,
+    "pipelineStartMs": 15245,
+    "stagesMs": [
+      [
+        15245,
+        "applied"
+      ],
+      [
+        16895,
+        "assessment"
+      ],
+      [
+        17795,
+        "interview"
+      ],
+      [
+        18595,
+        "offer"
+      ]
+    ],
+    "historyStartMs": 19904,
+    "historyFirstS": 0.45,
+    "historyStepS": 0.24,
+    "historyScrollMs": [
+      3340,
+      2600
+    ],
+    "endMs": 26100
+  },
+  "camera": [
+    {
+      "t": 0,
+      "scale": 1,
+      "fx": 0.5,
+      "fy": 0.5
+    },
+    {
+      "t": 8.239,
+      "scale": 1,
+      "fx": 0.5,
+      "fy": 0.5
+    },
+    {
+      "t": 10.995,
+      "scale": 1.03,
+      "fx": 0.36,
+      "fy": 0.5
+    },
+    {
+      "t": 11.995,
+      "scale": 1.04,
+      "fx": 0.64,
+      "fy": 0.46
+    },
+    {
+      "t": 15.145,
+      "scale": 1.04,
+      "fx": 0.64,
+      "fy": 0.46
+    },
+    {
+      "t": 15.945,
+      "scale": 1,
+      "fx": 0.5,
+      "fy": 0.5
+    },
+    {
+      "t": 16.245,
+      "scale": 1,
+      "fx": 0.5,
+      "fy": 0.5
+    },
+    {
+      "t": 17.145,
+      "scale": 1.035,
+      "fx": 0.3,
+      "fy": 0.22
+    },
+    {
+      "t": 17.595,
+      "scale": 1.03,
+      "fx": 0.4,
+      "fy": 0.3
+    },
+    {
+      "t": 19.095,
+      "scale": 1,
+      "fx": 0.5,
+      "fy": 0.5
+    },
+    {
+      "t": 20.304,
+      "scale": 1,
+      "fx": 0.5,
+      "fy": 0.5
+    },
+    {
+      "t": 21.204,
+      "scale": 1.04,
+      "fx": 0.86,
+      "fy": 0.12
+    },
+    {
+      "t": 23.104,
+      "scale": 1.04,
+      "fx": 0.86,
+      "fy": 0.12
+    },
+    {
+      "t": 23.804,
+      "scale": 1,
+      "fx": 0.5,
+      "fy": 0.5
+    },
+    {
+      "t": 30.729,
+      "scale": 1,
+      "fx": 0.5,
+      "fy": 0.5
+    }
+  ],
+  "captions": [
+    {
+      "line": "l1",
+      "start": 0.4,
+      "end": 2.491,
+      "text": "Recruiting gets messy fast."
+    },
+    {
+      "line": "l2",
+      "start": 2.491,
+      "end": 5.398,
+      "text": "Applications, assessments, recruiter emails,"
+    },
+    {
+      "line": "l2",
+      "start": 5.348,
+      "end": 8.739,
+      "text": "and interviews disappear into different threads."
+    },
+    {
+      "line": "l3",
+      "start": 8.989,
+      "end": 13.645,
+      "text": "Opportunity Inbox turns those emails into one live recruiting workspace."
+    },
+    {
+      "line": "l4",
+      "start": 13.745,
+      "end": 15.495,
+      "text": "See what needs you today,"
+    },
+    {
+      "line": "l5",
+      "start": 15.395,
+      "end": 19.454,
+      "text": "follow every opportunity from application to interview to offer,"
+    },
+    {
+      "line": "l6",
+      "start": 19.454,
+      "end": 22.323,
+      "text": "and rebuild each company into one clean history."
+    },
+    {
+      "line": "l7",
+      "start": 22.473,
+      "end": 25.55,
+      "text": "No spreadsheets. No digging through Gmail."
+    },
+    {
+      "line": "l8",
+      "start": 25.9,
+      "end": 29.079,
+      "text": "Your recruiting life, organized automatically."
+    }
+  ],
+  "sfx": [
+    {
+      "t": 11.095,
+      "id": "open"
+    },
+    {
+      "t": 11.895,
+      "id": "settle",
+      "n": 0
+    },
+    {
+      "t": 12.295,
+      "id": "settle",
+      "n": 1
+    },
+    {
+      "t": 12.695,
+      "id": "settle",
+      "n": 2
+    },
+    {
+      "t": 13.095,
+      "id": "settle",
+      "n": 3
+    },
+    {
+      "t": 13.495,
+      "id": "settle",
+      "n": 4
+    },
+    {
+      "t": 13.895,
+      "id": "settle",
+      "n": 5
+    },
+    {
+      "t": 15.195,
+      "id": "slide"
+    },
+    {
+      "t": 16.895,
+      "id": "stage"
+    },
+    {
+      "t": 17.795,
+      "id": "stage"
+    },
+    {
+      "t": 18.595,
+      "id": "stage"
+    },
+    {
+      "t": 19.904,
+      "id": "slide"
+    },
+    {
+      "t": 20.354,
+      "id": "settle",
+      "n": 0
+    },
+    {
+      "t": 20.834,
+      "id": "settle",
+      "n": 1
+    },
+    {
+      "t": 21.314,
+      "id": "settle",
+      "n": 2
+    },
+    {
+      "t": 21.794,
+      "id": "settle",
+      "n": 3
+    },
+    {
+      "t": 22.274,
+      "id": "settle",
+      "n": 4
+    },
+    {
+      "t": 22.754,
+      "id": "settle",
+      "n": 5
+    },
+    {
+      "t": 26.95,
+      "id": "resolve"
+    }
+  ]
+}

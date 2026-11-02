@@ -1,0 +1,106 @@
+{
+  "fps": 30,
+  "duration": 30.729,
+  "voice": {
+    "provider": "local-say",
+    "provisional": true
+  },
+  "captions": [
+    {
+      "line": "l1",
+      "start": 0.4,
+      "end": 2.491,
+      "text": "Recruiting gets messy fast."
+    },
+    {
+      "line": "l2",
+      "start": 2.491,
+      "end": 5.398,
+      "text": "Applications, assessments, recruiter emails,"
+    },
+    {
+      "line": "l2",
+      "start": 5.348,
+      "end": 8.739,
+      "text": "and interviews disappear into different threads."
+    },
+    {
+      "line": "l3",
+      "start": 8.989,
+      "end": 13.645,
+      "text": "Opportunity Inbox turns those emails into one live recruiting workspace."
+    },
+    {
+      "line": "l4",
+      "start": 13.745,
+      "end": 15.495,
+      "text": "See what needs you today,"
+    },
+    {
+      "line": "l5",
+      "start": 15.395,
+      "end": 19.454,
+      "text": "follow every opportunity from application to interview to offer,"
+    },
+    {
+      "line": "l6",
+      "start": 19.454,
+      "end": 22.323,
+      "text": "and rebuild each company into one clean history."
+    },
+    {
+      "line": "l7",
+      "start": 22.473,
+      "end": 25.55,
+      "text": "No spreadsheets. No digging through Gmail."
+    },
+    {
+      "line": "l8",
+      "start": 25.9,
+      "end": 29.079,
+      "text": "Your recruiting life, organized automatically."
+    }
+  ],
+  "product": {
+    "todayMountMs": 7239,
+    "inspectorOpenMs": 11095,
+    "inspectorEntryFirstS": 0.8,
+    "inspectorEntryStepS": 0.4,
+    "pipelineStartMs": 15245,
+    "stagesMs": [
+      [
+        15245,
+        "applied"
+      ],
+      [
+        16895,
+        "assessment"
+      ],
+      [
+        17795,
+        "interview"
+      ],
+      [
+        18595,
+        "offer"
+      ]
+    ],
+    "historyStartMs": 19904,
+    "historyFirstS": 0.45,
+    "historyStepS": 0.24,
+    "historyScrollMs": [
+      3340,
+      2600
+    ],
+    "endMs": 26100
+  },
+  "film": {
+    "chaos": {
+      "in": 0,
+      "outStart": 6.889,
+      "outEnd": 7.789
+    },
+    "todayMount": 7.239,
+    "closingStart": 25.4
+  }
+}

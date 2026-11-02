@@ -1,0 +1,8 @@
+{
+  "provider": "local-say",
+  "providers": {
+    "local-say": { "voice": "Samantha", "rate": 172, "provisional": true, "note": "macOS system voice. Temporary, for timing only." },
+    "human": { "dir": "voice/human", "note": "Drop <id>.wav|mp3|m4a|aiff here, one file per line id. Set provider to \"human\"." },
+    "elevenlabs": { "voiceId": "", "model": "eleven_multilingual_v2", "note": "PAID. Never called without --i-authorize-paid-api AND ELEVENLABS_API_KEY." }
+  }
+}

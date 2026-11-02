@@ -944,92 +944,92 @@ html[data-demo-cue="hero-history"] .hero .link-quiet {
 /* Timeline entries settle in one by one: each is an email being read into the story. */
 html[data-presentation] .inspector ol > li:nth-child(1) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(1.00s / var(--speed, 1));
+  animation-delay: calc((var(--insp-first, 1s) + 0 * var(--insp-step, 0.55s)) / var(--speed, 1));
 }
 html[data-presentation] .inspector ol > li:nth-child(2) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(1.55s / var(--speed, 1));
+  animation-delay: calc((var(--insp-first, 1s) + 1 * var(--insp-step, 0.55s)) / var(--speed, 1));
 }
 html[data-presentation] .inspector ol > li:nth-child(3) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(2.10s / var(--speed, 1));
+  animation-delay: calc((var(--insp-first, 1s) + 2 * var(--insp-step, 0.55s)) / var(--speed, 1));
 }
 html[data-presentation] .inspector ol > li:nth-child(4) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(2.65s / var(--speed, 1));
+  animation-delay: calc((var(--insp-first, 1s) + 3 * var(--insp-step, 0.55s)) / var(--speed, 1));
 }
 html[data-presentation] .inspector ol > li:nth-child(5) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(3.20s / var(--speed, 1));
+  animation-delay: calc((var(--insp-first, 1s) + 4 * var(--insp-step, 0.55s)) / var(--speed, 1));
 }
 html[data-presentation] .inspector ol > li:nth-child(6) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(3.75s / var(--speed, 1));
+  animation-delay: calc((var(--insp-first, 1s) + 5 * var(--insp-step, 0.55s)) / var(--speed, 1));
 }
 html[data-presentation] .inspector ol > li:nth-child(7) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(4.30s / var(--speed, 1));
+  animation-delay: calc((var(--insp-first, 1s) + 6 * var(--insp-step, 0.55s)) / var(--speed, 1));
 }
 html[data-presentation] .inspector ol > li:nth-child(8) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(4.85s / var(--speed, 1));
+  animation-delay: calc((var(--insp-first, 1s) + 7 * var(--insp-step, 0.55s)) / var(--speed, 1));
 }
 
 .history-stage ol[aria-label="History"] > li:nth-child(1) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(0.5s / var(--speed, 1));
+  animation-delay: calc((var(--hist-first, 0.5s) + 0 * var(--hist-step, 0.4s)) / var(--speed, 1));
 }
 .history-stage ol[aria-label="History"] > li:nth-child(2) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(0.9s / var(--speed, 1));
+  animation-delay: calc((var(--hist-first, 0.5s) + 1 * var(--hist-step, 0.4s)) / var(--speed, 1));
 }
 .history-stage ol[aria-label="History"] > li:nth-child(3) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(1.3s / var(--speed, 1));
+  animation-delay: calc((var(--hist-first, 0.5s) + 2 * var(--hist-step, 0.4s)) / var(--speed, 1));
 }
 .history-stage ol[aria-label="History"] > li:nth-child(4) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(1.7s / var(--speed, 1));
+  animation-delay: calc((var(--hist-first, 0.5s) + 3 * var(--hist-step, 0.4s)) / var(--speed, 1));
 }
 .history-stage ol[aria-label="History"] > li:nth-child(5) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(2.1s / var(--speed, 1));
+  animation-delay: calc((var(--hist-first, 0.5s) + 4 * var(--hist-step, 0.4s)) / var(--speed, 1));
 }
 .history-stage ol[aria-label="History"] > li:nth-child(6) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(2.5s / var(--speed, 1));
+  animation-delay: calc((var(--hist-first, 0.5s) + 5 * var(--hist-step, 0.4s)) / var(--speed, 1));
 }
 .history-stage ol[aria-label="History"] > li:nth-child(7) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(2.9s / var(--speed, 1));
+  animation-delay: calc((var(--hist-first, 0.5s) + 6 * var(--hist-step, 0.4s)) / var(--speed, 1));
 }
 .history-stage ol[aria-label="History"] > li:nth-child(8) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(3.3s / var(--speed, 1));
+  animation-delay: calc((var(--hist-first, 0.5s) + 7 * var(--hist-step, 0.4s)) / var(--speed, 1));
 }
 .history-stage ol[aria-label="History"] > li:nth-child(9) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(3.7s / var(--speed, 1));
+  animation-delay: calc((var(--hist-first, 0.5s) + 8 * var(--hist-step, 0.4s)) / var(--speed, 1));
 }
 .history-stage ol[aria-label="History"] > li:nth-child(10) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(4.1s / var(--speed, 1));
+  animation-delay: calc((var(--hist-first, 0.5s) + 9 * var(--hist-step, 0.4s)) / var(--speed, 1));
 }
 .history-stage ol[aria-label="History"] > li:nth-child(11) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(4.5s / var(--speed, 1));
+  animation-delay: calc((var(--hist-first, 0.5s) + 10 * var(--hist-step, 0.4s)) / var(--speed, 1));
 }
 .history-stage ol[aria-label="History"] > li:nth-child(12) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(4.9s / var(--speed, 1));
+  animation-delay: calc((var(--hist-first, 0.5s) + 11 * var(--hist-step, 0.4s)) / var(--speed, 1));
 }
 .history-stage ol[aria-label="History"] > li:nth-child(13) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(5.3s / var(--speed, 1));
+  animation-delay: calc((var(--hist-first, 0.5s) + 12 * var(--hist-step, 0.4s)) / var(--speed, 1));
 }
 .history-stage ol[aria-label="History"] > li:nth-child(14) {
   animation: reveal 0.55s var(--ease) both;
-  animation-delay: calc(5.7s / var(--speed, 1));
+  animation-delay: calc((var(--hist-first, 0.5s) + 13 * var(--hist-step, 0.4s)) / var(--speed, 1));
 }
 
 /* Closing frame: the journey line draws itself, then the name. */
@@ -1116,4 +1116,89 @@ html[data-presentation] .inspector ol > li:nth-child(8) {
 .replay[data-visible="true"] {
   opacity: 1;
   pointer-events: auto;
+}
+
+
+/* ---- intro: the inbox without the product. Subject fragments, quiet, in the product's own type. */
+.chaos {
+  position: fixed;
+  z-index: 30;
+  inset: var(--nav-h) 0 0 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.chaos-fragment {
+  position: absolute;
+  max-width: 28rem;
+  color: var(--ink-3);
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+  opacity: 0;
+  animation:
+    chaos-in 0.9s var(--ease) both,
+    chaos-drift 9s ease-in-out infinite alternate;
+}
+@keyframes chaos-in {
+  to {
+    opacity: var(--o, 0.4);
+  }
+}
+@keyframes chaos-drift {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(6px, -8px);
+  }
+}
+.chaos-out .chaos-fragment {
+  animation: chaos-out 0.9s ease-in both;
+}
+@keyframes chaos-out {
+  from {
+    opacity: var(--o, 0.4);
+  }
+  to {
+    opacity: 0;
+    transform: translate(0, 10px);
+  }
+}
+
+/* ---- captions: neutral, two lines at most, tucked clear of the interface */
+.caption {
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  bottom: 1.6rem;
+  transform: translateX(-50%);
+  max-width: min(46rem, calc(100vw - 3rem));
+  padding: 0.5rem 1.1rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--paper) 92%, transparent);
+  box-shadow: 0 0 0 1px var(--line);
+  text-align: center;
+  font-size: 1.0625rem;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  pointer-events: none;
+  animation: reveal 0.3s var(--ease) both;
+}
+
+/* ---- idle screen: the only thing on the page until "Play" is clicked */
+.idle {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  padding: 2rem;
+  text-align: center;
+  background: var(--paper);
+}
+.idle-line {
+  margin-bottom: 1.6rem;
+  transform: scale(1.5);
+  color: var(--ink);
 }

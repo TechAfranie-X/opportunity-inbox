@@ -46,3 +46,13 @@ docs/dogfood-*.md
 
 # Rendered demo videos (binary, regenerable from /demo/presentation)
 recordings/
+
+# Video production pipeline: sources are tracked, renders and heavy assets are not
+demo-video/node_modules/
+demo-video/out/
+demo-video/public/raw/
+demo-video/public/audio/
+demo-video/voice/clips/
+demo-video/.sfx/
+
+demo-video/.rec/

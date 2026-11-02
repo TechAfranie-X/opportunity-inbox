@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The film pipeline is isolated from the product and has its own tooling.
+    "demo-video/**",
   ]),
 ]);
 

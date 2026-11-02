@@ -15,6 +15,11 @@ export default async function PresentationPage({ searchParams }: PageProps<"/dem
   const params = await searchParams;
   const raw = typeof params.speed === "string" ? Number(params.speed) : 1;
   const speed = Number.isFinite(raw) ? Math.min(8, Math.max(0.25, raw)) : 1;
+  // ?film=1 starts immediately with every overlay off (clean capture for demo-video/); ?autoplay=1 starts silently;
+  // otherwise the page waits for "Play 30-second demo" and never makes sound without a click.
+  const mode = params.film ? "film" : params.autoplay ? "auto" : "button";
+  // Film capture is rendered at 1920x1200 with the layout kept at 1440x900 CSS px, so text is crisp.
+  const filmZoom = mode === "film" ? <style>{`html{zoom:1.3333333}`}</style> : null;
 
   const needs = buildBriefing(w.opportunities, w.actions, w.now).needsYou.length;
   const today = w.now.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" });
@@ -24,6 +29,7 @@ export default async function PresentationPage({ searchParams }: PageProps<"/dem
     <>
       {/* Pin light before first paint so a saved dark preference never flashes. */}
       <script dangerouslySetInnerHTML={{ __html: 'document.documentElement.dataset.theme="light"' }} />
+      {filmZoom}
       <PresentationDirector
       opportunities={w.opportunities}
       now={w.now}
@@ -31,6 +37,7 @@ export default async function PresentationPage({ searchParams }: PageProps<"/dem
       historyKey={w.historyKey}
       emailCount={w.emailCount}
       speed={speed}
+      mode={mode}
       todayNode={
         <>
           <Greeting hour={9} needsYou={needs}>
