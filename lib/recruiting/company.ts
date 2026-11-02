@@ -194,7 +194,7 @@ export function inferCompany(input: {
 
 const ROLE_KW =
   "(?:Intern(?:ship)?|Engineer(?:ing)?|Developer|Analyst|Scientist|Designer|Manager|Associate|Researcher|Consultant|Architect|Specialist|Co-?op|Fellow|Apprentice|Programmer)";
-const ROLE_CAP = `((?:[A-Z0-9][\\w+#&./'’\\-]*\\s+){0,4}${ROLE_KW}(?:\\s+(?:Intern|Co-?op))?(?:\\s*\\([^)]{1,30}\\))?)`;
+const ROLE_CAP = `((?<![\\w-])(?:[A-Z0-9][\\w+#&./'’\\-]*\\s+){0,4}${ROLE_KW}(?:\\s+(?:Intern|Co-?op))?(?:\\s*\\([^)]{1,30}\\))?)`;
 
 const ROLE_PATTERNS: RegExp[] = [
   new RegExp(`\\b(?:for|to|as|of)\\s+(?:the\\s+|an?\\s+)?${ROLE_CAP}(?:\\s+(?:position|role|internship|opportunity|job))?`),
@@ -204,16 +204,39 @@ const ROLE_PATTERNS: RegExp[] = [
   new RegExp(`\\b${ROLE_CAP}\\b`),
 ];
 
-export function inferRole(subject: string, body: string): string | null {
-  for (const text of [subject, body.slice(0, 1500)]) {
-    for (const pattern of ROLE_PATTERNS) {
+/** Loose patterns are only safe in the subject; in a body they pick up recruiter signatures ("Will Shelton Student Engagement Consultant"). */
+const BODY_SAFE_ROLE_PATTERNS = ROLE_PATTERNS.slice(0, 2);
+
+const REQ_ID = /\b(?:R|JR|REQ|ID)[-_ ]?\d{4,}\b|\b\d{5,}\b/gi;
+const REQ_PAREN = /\((?:\s*(?:job|req(?:uisition)?)\s*(?:number|id|#)?\s*[:#]?[^)]*|\s*id[^)]*)\)/gi;
+
+/** Remove requisition ids, leading articles / legal suffixes and a leading company name. */
+export function cleanRole(role: string, company: string | null): string | null {
+  let value = role.replace(REQ_PAREN, " ").replace(REQ_ID, " ");
+  if (company) {
+    const escaped = company.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    value = value.replace(new RegExp(`^\\s*${escaped}(?:['’]s)?[,]?\\s+`, "i"), "");
+  }
+  let previous = "";
+  while (previous !== value) {
+    previous = value;
+    value = value.replace(/^\s*(?:your|the|an?|inc\.?|llc|ltd\.?|corp\.?)[,]?\s+/i, "");
+  }
+  value = value.replace(/\s{2,}/g, " ").replace(/^[\s\-–:,|]+|[\s\-–:,|]+$/g, "").trim();
+  return /[A-Za-z]{4}/.test(value) && value.length >= 4 ? value : null;
+}
+
+export function inferRole(subject: string, body: string, company: string | null = null): string | null {
+  const sources: Array<[string, RegExp[]]> = [
+    [subject, ROLE_PATTERNS],
+    [body.slice(0, 1500), BODY_SAFE_ROLE_PATTERNS],
+  ];
+  for (const [text, patterns] of sources) {
+    for (const pattern of patterns) {
       const match = text.match(pattern);
-      if (match) {
-        const role = match[1].replace(/\s+/g, " ").trim();
-        if (role.length >= 4 && !/^(?:Software|Hiring|Engineering) (?:Team|Manager)$/i.test(role)) {
-          return role;
-        }
-      }
+      if (!match) continue;
+      const cleaned = cleanRole(match[1].replace(/\s+/g, " ").trim(), company);
+      if (cleaned && !/^(?:Software|Hiring|Engineering) (?:Team|Manager)$/i.test(cleaned)) return cleaned;
     }
   }
   return null;

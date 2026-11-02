@@ -154,7 +154,7 @@ export function extractEvent(email: RecruitingEmail): ExtractedEvent | null {
   }
 
   const company = inferCompany({ from: email.from, subject, body: bodyText });
-  let role = inferRole(subject, bodyText);
+  let role = inferRole(subject, bodyText, company);
   if (role && company && role.toLowerCase().startsWith(`${company.toLowerCase()} `)) {
     role = role.slice(company.length + 1); // "Datadog Backend Engineer" -> "Backend Engineer"
   }

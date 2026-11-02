@@ -82,7 +82,7 @@ function endedByUser(group: Group) {
  *
  * Linking rules, strongest first:
  *  1. Same Gmail thread -> same opportunity.
- *  2. Same company + matching role -> same opportunity.
+ *  2. Same company + matching role -> same opportunity (unless it already ended).
  *  3. Same company + generic role ("Intern", unknown) -> the most recently active
  *     opportunity at that company within 90 days. Both-specific-and-different roles
  *     are never merged ("Software Engineer" vs "Data Analyst").
@@ -101,7 +101,14 @@ export function groupEvents(events: EffectiveEvent[]): Group[] {
         const ck = companyKey(event.company);
         const candidates = groups.filter((g) => g.company && companyKey(g.company) === ck);
         target =
-          candidates.find((g) => roleRelation(g.role, event.role) === "match" && g.role !== null && event.role !== null) ??
+          candidates.find(
+            (g) =>
+              roleRelation(g.role, event.role) === "match" &&
+              g.role !== null &&
+              event.role !== null &&
+              // A new application for the same role after a rejection is a new opportunity.
+              (!endedByUser(g) || NEUTRAL_AFTER_CLOSE.has(event.type)),
+          ) ??
           candidates
             .filter(
               (g) =>
