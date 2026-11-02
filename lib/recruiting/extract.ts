@@ -127,7 +127,9 @@ export function extractEvent(email: RecruitingEmail): ExtractedEvent | null {
   }
 
   const bodyText = stripQuoted(email.bodyText);
-  const detected = detectType(normalizedSubject, bodyText);
+  // A reply's subject is inherited thread history, so only its new text can type it.
+  const isReply = /^\s*(?:re|fwd?)\s*:/i.test(subject);
+  const detected = detectType(isReply ? "" : normalizedSubject, bodyText);
   if (!detected) return null;
 
   // "offer"/"next steps" words are common in marketing; require some recruiting context.
