@@ -14,6 +14,7 @@ import {
 } from "@/lib/db/schema";
 import { buildActions, toFloating } from "@/lib/recruiting/actions";
 import { parseCorrection, serializeCorrection } from "@/lib/recruiting/corrections";
+import { parsePolicy } from "@/lib/recruiting/policy";
 import {
   applyCorrection,
   buildOpportunities,
@@ -48,6 +49,8 @@ function rowToExtracted(row: EventRow): ExtractedEvent & { id: string } {
     eventDateHasTime: row.eventDateHasTime,
     dateKind: (row.dateKind as ExtractedEvent["dateKind"]) ?? null,
     confidence: row.confidence,
+    fieldConfidence: row.fieldConfidence ?? undefined,
+    reviewReasons: row.reviewReasons ?? undefined,
     signals: row.signals,
   };
 }
@@ -79,8 +82,10 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
         : [],
     ),
   );
-  const opportunities = buildOpportunities(events, overrides);
-  const actions = buildActions(opportunities, toFloating(now), new Set(dismissalRows.map((d) => d.actionId)));
+  // Thresholds are configuration (OPPORTUNITY_POLICY, JSON), not code: they are chosen from measured risk-coverage, not by hand.
+  const policy = parsePolicy(process.env.OPPORTUNITY_POLICY);
+  const opportunities = buildOpportunities(events, overrides, policy);
+  const actions = buildActions(opportunities, toFloating(now), new Set(dismissalRows.map((d) => d.actionId)), policy);
 
   return { opportunities, actions, lastSyncedAt: syncRows[0]?.lastSyncedAt ?? null, eventCount: events.length };
 }
@@ -104,6 +109,8 @@ export async function saveExtractedEvents(userGoogleSub: string, events: Extract
           dateKind: sql`excluded.date_kind`,
           confidence: sql`excluded.confidence`,
           signals: sql`excluded.signals`,
+          fieldConfidence: sql`excluded.field_confidence`,
+          reviewReasons: sql`excluded.review_reasons`,
         },
       });
   }

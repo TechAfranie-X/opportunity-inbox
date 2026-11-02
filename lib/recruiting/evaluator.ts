@@ -153,9 +153,9 @@ export function evaluate(input: EvalInput): EvalReport {
     const conf = (field: string) => p.fieldConfidence?.[field] ?? p.confidence ?? 0;
     return {
       recruiting: true as const,
-      type: decide(p.type, conf("type"), policy),
-      company: decide(p.company, conf("company"), policy),
-      role: decide(p.role, conf("role"), policy),
+      type: decide(p.type, conf("type"), policy, "type"),
+      company: decide(p.company, conf("company"), policy, "company"),
+      role: decide(p.role, conf("role"), policy, "role"),
       confidence: p.confidence ?? 0,
       date: p.eventDate,
     };

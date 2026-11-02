@@ -1,5 +1,6 @@
 import { parseSender, stripSubjectAnnotations } from "../opportunities/normalize.ts";
-import { inferCompany, inferRole } from "./company.ts";
+import { companyKey, inferCompany, inferRole } from "./company.ts";
+import { resolveCompany } from "./entity/resolve.ts";
 import { pickDate } from "./dates.ts";
 import type { EventType, ExtractedEvent, RecruitingEmail } from "./types.ts";
 
@@ -74,7 +75,7 @@ function bodyMatch(candidates: Rule[], body: string): Rule | undefined {
   );
 }
 
-type Detected = { type: EventType; signal: string; inSubject: boolean };
+type Detected = { type: EventType; signal: string; inSubject: boolean; /** How trustworthy the tier that matched is, 0..1. */ strength: number };
 
 /**
  * Tiered evidence, strongest first:
@@ -90,22 +91,22 @@ function detectType(subject: string, rawBody: string): Detected | null {
   const body = stripQuoted(rawBody).slice(0, 3000);
   const strong = RULES.filter((r) => !r.weak);
   const weak = RULES.filter((r) => r.weak);
-  const hit = (rule: Rule, inSubject: boolean): Detected => ({ type: rule.type, signal: rule.signal, inSubject });
+  const hit = (rule: Rule, inSubject: boolean, strength: number): Detected => ({ type: rule.type, signal: rule.signal, inSubject, strength });
 
   const subjectStrong = strong.find((r) => r.pattern.test(subject));
-  if (subjectStrong) return hit(subjectStrong, true);
+  if (subjectStrong) return hit(subjectStrong, true, 0.9);
 
   const terminal = bodyMatch(strong.filter((r) => r.terminal), body);
-  if (terminal) return hit(terminal, false);
+  if (terminal) return hit(terminal, false, 0.75);
 
   const advancing = bodyMatch(strong.filter((r) => !r.terminal), body);
-  if (advancing) return hit(advancing, false);
+  if (advancing) return hit(advancing, false, 0.7);
 
   const subjectWeak = weak.find((r) => r.pattern.test(subject));
-  if (subjectWeak) return hit(subjectWeak, true);
+  if (subjectWeak) return hit(subjectWeak, true, 0.55);
 
   const bodyWeak = bodyMatch(weak, body);
-  return bodyWeak ? hit(bodyWeak, false) : null;
+  return bodyWeak ? hit(bodyWeak, false, 0.5) : null;
 }
 
 /** Verification / login codes are transactional noise, never recruiting activity. */
@@ -187,6 +188,24 @@ export function extractWithReason(email: RecruitingEmail): Extraction {
     dateKind = "deadline";
   }
 
+  // Second opinion on the employer. The value stays what the existing rules found; the resolver only says how far to trust it.
+  // Agreement carries the resolver's evidence-based confidence; disagreement or silence means "check this".
+  const audit = resolveCompany({ from: email.from, replyTo: email.replyTo, subject, body: bodyText });
+  const reviewReasons: string[] = [];
+  let companyConfidence = 0;
+  if (!company) {
+    reviewReasons.push("company: none found");
+  } else if (audit.entity && companyKey(audit.entity.name) === companyKey(company)) {
+    companyConfidence = audit.confidence;
+    if (audit.reviewRequired) reviewReasons.push(`company: weak evidence (${audit.evidence.map((e) => e.source).join(", ") || "none"})`);
+  } else if (audit.entity) {
+    companyConfidence = Math.min(audit.confidence, 0.3);
+    reviewReasons.push("company: rules and evidence disagree");
+  } else {
+    companyConfidence = Math.min(audit.confidence, 0.35);
+    reviewReasons.push(`company: ${audit.reasons[0] ?? "no corroborating evidence"}`);
+  }
+
   let confidence = detected.inSubject ? 0.9 : 0.7;
   if (!company) confidence -= 0.3;
   if (sender.domain.length === 0) confidence -= 0.1;
@@ -206,6 +225,12 @@ export function extractWithReason(email: RecruitingEmail): Extraction {
     eventDateHasTime,
     dateKind,
     confidence: Math.max(0.2, Math.round(confidence * 100) / 100),
+    fieldConfidence: {
+      type: detected.strength,
+      company: Math.round(companyConfidence * 100) / 100,
+      role: role ? 0.6 : 0,
+    },
+    reviewReasons,
     signals: [detected.signal, detected.inSubject ? "subject" : "body"],
   };
   return { event, reason: null };
@@ -254,6 +279,8 @@ export function extractAll(emails: RecruitingEmail[]): ExtractedEvent[] {
       eventDateHasTime: false,
       dateKind: null,
       confidence: 0.6,
+      fieldConfidence: { type: 0.5, company: Math.round((anchor.fieldConfidence?.company ?? anchor.confidence) * 0.9 * 100) / 100, role: anchor.fieldConfidence?.role ?? 0 },
+      reviewReasons: [],
       signals: ["reply-in-recruiting-thread"],
     });
   }
@@ -278,6 +305,8 @@ export function extractAll(emails: RecruitingEmail[]): ExtractedEvent[] {
       eventDateHasTime: false,
       dateKind: null,
       confidence: 0.9,
+      fieldConfidence: { type: 0.9, company: anchor.fieldConfidence?.company ?? anchor.confidence, role: anchor.fieldConfidence?.role ?? 0 },
+      reviewReasons: [],
       signals: ["outbound-in-recruiting-thread"],
     });
   }

@@ -49,3 +49,12 @@ Label from the message alone, as the reader would understand it. Do not look at 
 - **actionable / urgency**: does the reader need to do something, and how soon as of the dataset's as-of date (shown on the page)? `today` means due or needed today or already overdue.
 
 Leave a message unlabeled (skip) rather than guess; unlabeled messages are reported, not scored.
+
+## Abstention policy
+
+`lib/recruiting/policy.ts` holds the thresholds. Each field (type, company, role) has a `reviewBelow` line (shown, but flagged) and an `unknownBelow` line (withheld, reported as unknown). `urgentMinConfidence` keeps an uncertain action off the overdue/today buckets: it is downgraded to "worth a look" and marked uncertain, never hidden.
+Serving reads `OPPORTUNITY_POLICY` (JSON, e.g. `{"fields":{"company":{"reviewBelow":0.5}},"urgentMinConfidence":0.5}`); unknown keys and out-of-range numbers are ignored.
+
+The defaults are **not tuned**. They flag only clear doubt (the employer where independent evidence disagrees or is missing) and withhold nothing. Stricter values are chosen from the DEV-RANDOM risk-coverage table (`npm run eval -- run --dataset dev-random-1`) and then frozen before the BLIND run.
+
+Company confidence today is a second opinion: the existing rules still choose the value, and the evidence-based resolver (`lib/recruiting/entity/`) says how far to trust it. The resolver replaces the rules only after `eval run --shadow` shows, on DEV-RANDOM, no more confident-wrong answers and no loss of exact match.

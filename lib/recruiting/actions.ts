@@ -1,3 +1,4 @@
+import { DEFAULT_POLICY, type Policy } from "./policy.ts";
 import type { ActionItem, ActionKind, EffectiveEvent, Opportunity } from "./types.ts";
 
 const DAY = 86_400_000;
@@ -53,6 +54,7 @@ export function buildActions(
   opportunities: Opportunity[],
   now: Date,
   dismissed: Set<string> = new Set(),
+  policy: Policy = DEFAULT_POLICY,
 ): ActionItem[] {
   const today = dayStart(now);
   const items: ActionItem[] = [];
@@ -72,11 +74,18 @@ export function buildActions(
     if (!bucket) {
       bucket = d === undefined ? "worth_a_look" : d < 0 ? "overdue" : d === 0 ? "today" : d <= 7 ? "soon" : "worth_a_look";
     }
+    // Abstention: an action resting on an event we are unsure about must not shout. It stays visible, quietly, and says so.
+    let uncertain = false;
+    const trust = source.corrected ? 1 : Math.min(source.fieldConfidence?.type ?? source.confidence, source.company ? (source.fieldConfidence?.company ?? 1) : 1);
+    if ((bucket === "overdue" || bucket === "today") && trust < policy.urgentMinConfidence) {
+      bucket = "worth_a_look";
+      uncertain = true;
+    }
     let priority = BASE[kind];
     if (d !== undefined) priority += d < 0 ? 20 : d === 0 ? 15 : d <= 1 ? 10 : d <= 3 ? 5 : 0;
     items.push({
       id, kind, opportunityKey: opp.key, company: opp.company, role: opp.role, title, reason,
-      due: opts.due ?? null, dueHasTime: opts.dueHasTime ?? false, bucket, priority,
+      due: opts.due ?? null, dueHasTime: opts.dueHasTime ?? false, bucket, priority, ...(uncertain ? { uncertain } : {}),
       sourceThreadId: source.gmailThreadId,
     });
   };

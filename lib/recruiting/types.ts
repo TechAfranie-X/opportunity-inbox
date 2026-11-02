@@ -84,6 +84,10 @@ export type ExtractedEvent = {
   dateKind: "deadline" | "scheduled" | null;
   /** 0..1 — how sure the extractor is about the event type + company. */
   confidence: number;
+  /** Per-field confidence, 0..1. Absent on older rows. Thresholds live in policy.ts. */
+  fieldConfidence?: { type: number; company: number; role: number };
+  /** Plain-language reasons a field is doubtful (evidence, never message text). */
+  reviewReasons?: string[];
   signals: string[];
 };
 
@@ -129,6 +133,8 @@ export type ActionItem = {
   due: Date | null;
   dueHasTime: boolean;
   bucket: "overdue" | "today" | "soon" | "worth_a_look";
+  /** True when the evidence behind this action is too uncertain to show it as urgent. */
+  uncertain?: boolean;
   priority: number;
   sourceThreadId: string | null;
 };

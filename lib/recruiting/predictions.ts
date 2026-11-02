@@ -58,9 +58,9 @@ export function buildPredictions(emails: RecruitingEmail[], version = EXTRACTOR_
         eventDate: event.eventDate,
         dateKind: event.dateKind,
         confidence: event.confidence,
-        fieldConfidence: null, // filled in by the resolver / abstention stages
+        fieldConfidence: event.fieldConfidence ?? null,
         signals: event.signals,
-        reviewReasons: [],
+        reviewReasons: event.reviewReasons ?? [],
       });
       continue;
     }

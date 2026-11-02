@@ -50,6 +50,9 @@ export const recruitingEvents = pgTable(
     dateKind: text("date_kind"),
     confidence: real("confidence").notNull(),
     signals: jsonb("signals").$type<string[]>().notNull().default([]),
+    /** Per-field confidence and doubt reasons. Null on rows written before the abstention policy. */
+    fieldConfidence: jsonb("field_confidence").$type<{ type: number; company: number; role: number }>(),
+    reviewReasons: jsonb("review_reasons").$type<string[]>(),
     /** User correction (see lib/recruiting/corrections.ts). Survives re-sync. */
     correction: jsonb("correction").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -230,7 +233,7 @@ export const evalRuns = pgTable(
     datasetId: uuid("dataset_id").notNull().references(() => evalDatasets.id, { onDelete: "cascade" }),
     extractorVersion: text("extractor_version").notNull(),
     gitCommit: text("git_commit"),
-    policy: jsonb("policy").$type<Record<string, number>>().notNull(),
+    policy: jsonb("policy").$type<Record<string, unknown>>().notNull(),
     /** Label sources included in this run's headline numbers. */
     labelSources: jsonb("label_sources").$type<string[]>().notNull(),
     metrics: jsonb("metrics").$type<Record<string, unknown>>().notNull(),

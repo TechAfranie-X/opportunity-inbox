@@ -1,5 +1,5 @@
 import { companyKey, roleRelation, roleTokens } from "./company.ts";
-import { DEFAULT_POLICY } from "./policy.ts";
+import { decide, DEFAULT_POLICY, type Policy } from "./policy.ts";
 import type {
   EffectiveEvent,
   EventType,
@@ -157,9 +157,20 @@ export function opportunityKey(company: string | null, role: string | null, used
   return key;
 }
 
+/**
+ * Does this event carry a value the policy says to doubt? Uses the field confidences when the row has them,
+ * and falls back to the event-level confidence for older rows. A person's own correction settles it.
+ */
+export function eventNeedsReview(e: EffectiveEvent, policy: Policy = DEFAULT_POLICY): boolean {
+  if (e.corrected) return false;
+  if (!e.fieldConfidence) return e.confidence < policy.reviewBelow;
+  return decide(e.type, e.fieldConfidence.type, policy, "type").state !== "accepted" || (e.company !== null && decide(e.company, e.fieldConfidence.company, policy, "company").state !== "accepted");
+}
+
 export function buildOpportunities(
   events: EffectiveEvent[],
   overrides: Map<string, OpportunityOverride> = new Map(),
+  policy: Policy = DEFAULT_POLICY,
 ): Opportunity[] {
   const used = new Set<string>();
   const opportunities = groupEvents(events).map((group): Opportunity => {
@@ -179,7 +190,7 @@ export function buildOpportunities(
       firstActivityAt: group.events[0].occurredAt,
       lastActivityAt: group.events[group.events.length - 1].occurredAt,
       events: group.events,
-      needsReview: !group.company || group.events.some((e) => !e.corrected && e.confidence < DEFAULT_POLICY.reviewBelow),
+      needsReview: !group.company || group.events.some((e) => eventNeedsReview(e, policy)),
     };
   });
   return opportunities.sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
