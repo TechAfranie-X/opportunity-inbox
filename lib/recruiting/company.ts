@@ -9,6 +9,11 @@ const PLATFORM_DOMAINS = [
   "hirevue.com", "karat.com", "linkedin.com", "indeed.com", "handshake.com",
   "joinhandshake.com", "wellfound.com", "ripplematching.com", "calendly.com",
   "goodtime.io", "gem.com", "metaview.ai",
+  // ATS / assessment / program platforms whose mail names a different company
+  "oracle.com", "oraclecloud.com", "tal.net", "applicantemails.com", "applyresponse.com",
+  "coderpad.io", "theforage.com", "ripplematch.com", "applytojob.com", "jazzhr.com",
+  "paylocity.com", "ultipro.com", "dayforcehcm.com", "eightfold.ai", "phenom.com",
+  "beamery.com", "avature.net", "careerhub.com", "isolvedhire.com", "starred.com",
 ];
 
 const FREE_MAIL = ["gmail.com", "outlook.com", "hotmail.com", "yahoo.com", "icloud.com", "proton.me"];
@@ -29,17 +34,27 @@ const ROLE_WORD =
 const WORD = "[A-Za-z0-9&'’\\-]+(?:\\.[A-Za-z0-9]+)*";
 const CAP = `([A-Z]${WORD.slice(0)}(?: (?:[A-Z0-9]${WORD}|of|and|&)){0,3})`;
 
-// Ordered most-specific first.
+/** Case-insensitive keyword inside an otherwise case-sensitive pattern (company names need capitals). */
+const K = (word: string) => word.replace(/[a-z]/gi, (c) => `[${c.toLowerCase()}${c.toUpperCase()}]`);
+const KS = (phrase: string) => phrase.split(" ").map(K).join("\\s+");
+
+// Ordered most-specific first. Keywords are case-insensitive; the captured name must be Capitalised.
 const COMPANY_PATTERNS: RegExp[] = [
+  // Assessment-platform phrasing: "X invited you to…", "Request from X has expired", "Reminder: X is waiting…", "Next step: X online…"
+  new RegExp(`^${CAP}\\s+(?:${K("has")}\\s+)?${K("invited")} ${K("you")}\\b`),
+  new RegExp(`\\b(?:${K("request")}|${K("invitation")}|${K("assessment")})\\s+${K("from")}\\s+${CAP}\\b`),
+  new RegExp(`\\b${CAP}\\s+${K("is")}\\s+${K("waiting")}\\s+${K("for")}\\s+${K("your")}\\b`),
+  new RegExp(`${K("next")}\\s+${K("step")}:\\s*${CAP}\\b`),
   new RegExp(`^${CAP}:\\s`), // "Stripe: Online Assessment …"
-  new RegExp(`\\byour ${CAP} (?:assessment|interview|application|offer|challenge)\\b`),
-  new RegExp(`\\b(?:position|role|internship|co-?op|opportunity|job|interview|offer|application)\\s+(?:at|with)\\s+${CAP}`),
-  new RegExp(`\\b(?:applying|applied|application)\\s+(?:to|at|with)\\s+(?:the\\s+)?${CAP}`),
-  new RegExp(`\\binterest in (?:working (?:at|for|with)|joining|a career at|careers? at)\\s+${CAP}`),
-  new RegExp(`\\b(?:welcome to|joining|join|team at|careers? at|working (?:at|for))\\s+${CAP}`),
-  new RegExp(`\\bfrom the ${CAP} (?:recruiting |talent |hiring |university |campus )?team\\b`),
-  new RegExp(`\\b${CAP} (?:recruiting|talent|careers|hiring|university recruiting) team\\b`),
-  new RegExp(`\\b(?:at|with)\\s+${CAP}[.!,]`),
+  new RegExp(`^${CAP}\\s+\\|\\s`), // "BlackRock | Application update"
+  new RegExp(`\\b${K("your")}\\s+${CAP}\\s+(?:(?:${K("coding")}|${K("online")}|${K("technical")})\\s+)?(?:${K("assessment")}|${K("interview")}|${K("application")}|${K("offer")}|${K("challenge")})\\b`),
+  new RegExp(`\\b(?:${K("position")}|${K("role")}|${K("internship")}|${K("co-op")}|${K("opportunity")}|${K("job")}|${K("interview")}|${K("offer")}|${K("application")})\\s+(?:${K("at")}|${K("with")})\\s+${CAP}`),
+  new RegExp(`\\b(?:${K("applying")}|${K("applied")}|${K("application")})\\s+(?:${K("to")}|${K("at")}|${K("with")})\\s+(?:${K("the")}\\s+)?${CAP}`),
+  new RegExp(`\\b${K("interest")} ${K("in")} (?:${KS("working at")}|${KS("working for")}|${KS("working with")}|${K("joining")}|${KS("a career at")}|${KS("careers at")})\\s+${CAP}`),
+  new RegExp(`\\b(?:${KS("welcome to")}|${K("joining")}|${K("join")}|${KS("team at")}|${KS("careers at")}|${KS("working at")}|${KS("working for")})\\s+${CAP}`),
+  new RegExp(`\\b${K("from")} ${K("the")} ${CAP} (?:${K("recruiting")} |${K("talent")} |${K("hiring")} |${K("university")} |${K("campus")} )?${K("team")}\\b`),
+  new RegExp(`\\b${CAP} (?:${K("recruiting")}|${K("talent")}|${K("careers")}|${K("hiring")}|${K("university recruiting")}) ${K("team")}\\b`),
+  new RegExp(`\\b(?:${K("at")}|${K("with")})\\s+${CAP}[.!,]`),
 ];
 
 function titleCase(label: string) {
@@ -62,8 +77,17 @@ export function isFreeMailDomain(domain: string) {
   return FREE_MAIL.includes(domain);
 }
 
+/** Subject-lead phrases that look like a "Company:" prefix but are not companies. */
+const GENERIC_LEAD =
+  /^(?:action(?: needed| required)?|reminder|urgent|important|final|apply|new|thank|thanks|welcome|congratulations?|last|update|your|application|re|fwd?|next step|follow[- ]?up|notice|alert|invitation|interview|assessment|offer|security)\b/i;
+
 function cleanCandidate(raw: string): string | null {
-  const value = raw.replace(/[.,!]+$/, "").trim();
+  const value = raw
+    .replace(/\s+(?:of|and|&)$/i, "")
+    .replace(/\s+(?:application|update|assessment|interview|offer|status|confirmation|invitation|reminder|notification|account)$/i, "")
+    .replace(/[.,!]+$/, "")
+    .trim();
+  if (GENERIC_LEAD.test(value)) return null;
   if (value.length < 2) return null;
   const lower = value.toLowerCase();
   if (GENERIC_WORDS.has(lower)) return null;
@@ -72,28 +96,49 @@ function cleanCandidate(raw: string): string | null {
   return value;
 }
 
-export function companyFromText(text: string): string | null {
-  for (const pattern of COMPANY_PATTERNS) {
-    const match = text.match(pattern);
-    const candidate = match ? cleanCandidate(match[1]) : null;
-    if (candidate) return candidate;
+/** Subject is the most reliable text, so it is searched first; the body only fills gaps. */
+export function companyFromText(subject: string, body = ""): string | null {
+  for (const text of [subject, body]) {
+    if (!text) continue;
+    for (const pattern of COMPANY_PATTERNS) {
+      const match = text.match(pattern);
+      const candidate = match ? cleanCandidate(match[1]) : null;
+      if (candidate) return candidate;
+    }
   }
   return null;
 }
 
-/** Display name with "Recruiting"/"Careers"… stripped; null when it's a person or generic. */
+const SENDER_NOISE = new Set([
+  "do", "not", "reply", "noreply", "no", "donotreply", "do-not-reply", "no-reply", "workday",
+  "system", "notifications", "notification", "recruiting", "careers", "career", "talent", "hr",
+  "jobs", "job", "team", "admin", "automated", "support", "mailer", "via", "the", "hiring",
+  "university", "campus", "early", "acquisition", "recruitment", "people", "candidate", "experience",
+]);
+
+/**
+ * Company from a sender display name. Returns null for addresses, people-style
+ * generic senders and anything that reduces to noise words ("Workday System").
+ */
 function companyFromDisplayName(rawFrom: string): string | null {
   const display = rawFrom.replace(/<[^>]+>/g, "").replace(/["']/g, "").trim();
-  const stripped = display.replace(COMPANY_SUFFIX, "").trim();
-  if (!stripped || GENERIC_WORDS.has(stripped.toLowerCase())) return null;
-  return stripped;
+  if (!display || display.includes("@")) return null;
+  const tokens = display
+    .replace(/[._]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t && !t.toLowerCase().split("-").every((part) => SENDER_NOISE.has(part)));
+  if (tokens.length === 0) return null;
+  const name = tokens.join(" ");
+  if (GENERIC_WORDS.has(name.toLowerCase())) return null;
+  return name === name.toLowerCase() ? name.replace(/\b\w/g, (c) => c.toUpperCase()) : name;
 }
 
 /** "datadoghq" -> "Datadog" when the email text contains that capitalized brand. */
 function recoverBrandName(label: string, text: string) {
   for (const m of text.matchAll(/\b[A-Z][A-Za-z0-9]{3,}\b/g)) {
     const word = m[0].toLowerCase();
-    if (word !== label && label.startsWith(word)) return m[0];
+    // The word must cover most of the label ("Datadog" of "datadoghq"), not a stub ("Last" of "lastmile-ed").
+    if (word !== label && label.startsWith(word) && word.length >= 0.6 * label.replace(/[^a-z0-9]/g, "").length) return m[0];
   }
   return titleCase(label);
 }
@@ -105,20 +150,32 @@ export function inferCompany(input: {
 }): string | null {
   const sender = parseSender(input.from);
   const domain = sender.domain;
-  const text = `${input.subject}\n${input.body.slice(0, 2500)}`;
+  const body = input.body.slice(0, 2500);
+  const text = `${input.subject}\n${body}`;
+  const flat = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
 
   if (domain && !isPlatformDomain(domain) && !isFreeMailDomain(domain)) {
     const label = registrableLabel(domain);
+    const fromText = companyFromText(input.subject, body);
     const display = companyFromDisplayName(input.from);
-    const flat = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (display && label && (flat(display).includes(flat(label)) || flat(label).includes(flat(display)))) {
-      return display;
-    }
-    return label ? recoverBrandName(label, text) : companyFromText(text);
+    const fl = flat(label);
+    // The name used in the content wins when it is consistent with the domain
+    // ("Notion" in the text vs "makenotion.com"): same brand, nicer spelling.
+    if (fromText && fl && (fl.includes(flat(fromText)) || flat(fromText).includes(fl))) return fromText;
+    if (display && fl && (flat(display).includes(fl) || fl.includes(flat(display)))) return display;
+    return label ? recoverBrandName(label, text) : fromText;
   }
 
   // Platform / personal mail: the company must come from the content.
-  return companyFromText(text) ?? companyFromDisplayName(input.from);
+  const fromText = companyFromText(input.subject, body);
+  if (fromText) return fromText;
+  const display = companyFromDisplayName(input.from);
+  if (display) return display;
+  // Workday tenants are addressed as <tenant>@myworkday.com.
+  if (/(^|\.)myworkday\.com$/.test(domain) && sender.localPart && !SENDER_NOISE.has(sender.localPart) && !/reply/.test(sender.localPart)) {
+    return titleCase(sender.localPart);
+  }
+  return null;
 }
 
 const ROLE_KW =
