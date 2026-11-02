@@ -93,13 +93,14 @@ function toEmail(message: GmailMessage, includeBody: boolean): RecruitingEmail |
   };
 }
 
-async function listIds(accessToken: string, max: number) {
+/** Message ids matching a Gmail query (default: the recruiting-looking first filter). */
+export async function listMessageIds(accessToken: string, max: number, query: string = RECRUITING_QUERY) {
   const ids: string[] = [];
   let pageToken: string | undefined;
   while (ids.length < max) {
     const url = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
-    url.searchParams.set("q", RECRUITING_QUERY);
-    url.searchParams.set("maxResults", String(Math.min(100, max - ids.length)));
+    url.searchParams.set("q", query);
+    url.searchParams.set("maxResults", String(Math.min(500, max - ids.length)));
     if (pageToken) url.searchParams.set("pageToken", pageToken);
     const page = await gmailGet<{ messages?: Array<{ id?: string }>; nextPageToken?: string }>(accessToken, url);
     ids.push(...(page.messages ?? []).flatMap((m) => (m.id ? [m.id] : [])));
@@ -109,11 +110,53 @@ async function listIds(accessToken: string, max: number) {
   return ids;
 }
 
+/**
+ * Full messages (with bodies, transient) for known ids, in the same shape the extractor sees in production.
+ * Ids that can no longer be fetched are returned in `missing` rather than silently dropped.
+ */
+export async function fetchEmailsById(accessToken: string, ids: string[]): Promise<{ emails: RecruitingEmail[]; missing: string[] }> {
+  const emails: RecruitingEmail[] = [];
+  const missing: string[] = [];
+  await inBatches(ids, 2, async (id) => {
+    try {
+      const m = await gmailGet<GmailMessage>(accessToken, new URL(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=full`));
+      const email = toEmail(m, true);
+      if (email) emails.push(email); else missing.push(id);
+    } catch (error) {
+      if (error instanceof GmailAccessError && error.reason === "reconnect_required") throw error;
+      missing.push(id);
+    }
+  });
+  return { emails, missing };
+}
+
+/**
+ * Every message in the given threads, shaped like production input: inbound with bodies, the user's own
+ * messages metadata-only. Used to give an evaluation snapshot the same thread context the product has.
+ */
+export async function fetchThreadMessages(accessToken: string, threadIds: string[]): Promise<RecruitingEmail[]> {
+  const threads = await inBatches([...new Set(threadIds)], 2, async (threadId) => {
+    try {
+      return await gmailGet<{ messages?: GmailMessage[] }>(accessToken, new URL(`https://gmail.googleapis.com/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}?format=full`));
+    } catch (error) {
+      if (error instanceof GmailAccessError && error.reason === "reconnect_required") throw error;
+      return { messages: [] };
+    }
+  });
+  return threads.flatMap((t) =>
+    (t.messages ?? []).flatMap((m) => {
+      const outbound = (m.labelIds ?? []).includes("SENT");
+      const email = toEmail(m, !outbound);
+      return email ? [email] : [];
+    }),
+  );
+}
+
 export type FetchedMail = { emails: RecruitingEmail[]; scanned: number };
 
 /** Inbound recruiting-looking mail, with bodies (transient). */
 export async function fetchInboundCandidates(accessToken: string, max = 200): Promise<FetchedMail> {
-  const ids = await listIds(accessToken, max);
+  const ids = await listMessageIds(accessToken, max);
   const messages = await inBatches(ids, 2, (id) =>
     gmailGet<GmailMessage>(accessToken, new URL(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=full`)),
   );

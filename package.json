@@ -11,7 +11,9 @@
     "eval:extraction": "node scripts/eval-extraction.ts",
     "db:up": "docker compose up -d",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "eval": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/eval.ts",
+    "eval:purge": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/eval.ts purge"
   },
   "dependencies": {
     "drizzle-orm": "0.45.3",

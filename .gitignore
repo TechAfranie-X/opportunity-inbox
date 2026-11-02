@@ -58,3 +58,7 @@ demo-video/.sfx/
 demo-video/.rec/
 .venv-kokoro/
 demo-video/audio/clean-product-confidence-1.mp3
+
+# Local evaluation store lives in ~/.opportunity-inbox/eval (outside the repo). If one is ever created in the tree, never commit it.
+.opportunity-inbox/
+*.eval-tasks.jsonl
