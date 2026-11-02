@@ -6,12 +6,21 @@ import {
   resetEventAction,
   setOpportunityStatusAction,
 } from "@/app/actions";
+import { Disclose } from "@/app/components/disclose";
+import { EventTools } from "@/app/components/event-tools";
+import { Menu } from "@/app/components/menu";
+import {
+  buildBriefing,
+  describeAction,
+  type RecentChange,
+} from "@/lib/recruiting/briefing";
 import {
   EVENT_LABEL,
   STAGE_LABEL,
-  formatDay,
+  daysBetween,
   formatFloating,
   gmailThreadUrl,
+  relativeDay,
   toInputValue,
 } from "@/lib/recruiting/format";
 import {
@@ -19,269 +28,508 @@ import {
   STAGES,
   type ActionItem,
   type EffectiveEvent,
+  type EventType,
   type Opportunity,
   type Stage,
 } from "@/lib/recruiting/types";
 
-const BUCKETS: Array<{ id: ActionItem["bucket"]; title: string; tone: string }> = [
-  { id: "overdue", title: "Overdue", tone: "text-red-700 dark:text-red-400" },
-  { id: "today", title: "Today", tone: "text-foreground" },
-  { id: "soon", title: "This week", tone: "text-foreground" },
-  { id: "worth_a_look", title: "Worth a look", tone: "text-zinc-500" },
-];
-
 const oppHref = (base: string, key: string) => `${base}/${encodeURIComponent(key)}`;
 
-const quietButton =
-  "appearance-none rounded-md border border-zinc-300 bg-transparent px-2.5 py-1 text-xs font-medium transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
+/* ------------------------------------------------------------------ Today */
 
-const QUIET_VISIBLE = 5;
-
-function ActionCard({ item, basePath, editable }: { item: ActionItem; basePath: string; editable: boolean }) {
+function Section({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
   return (
-    <li className="rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
-      <div className="flex items-start justify-between gap-3">
+    <section className="mt-14">
+      <h2 className="flex items-baseline gap-2 text-[0.9375rem] font-semibold tracking-tight">
+        {title}
+        {count !== undefined ? <span className="tnum font-normal text-ink-3">{count}</span> : null}
+      </h2>
+      <div className="mt-2">{children}</div>
+    </section>
+  );
+}
+
+function ActionMenu({
+  item,
+  basePath,
+  editable,
+  lean = false,
+  align = "right",
+}: {
+  item: ActionItem;
+  basePath: string;
+  editable: boolean;
+  /** Omit "Open email" when the primary button already opens it. */
+  lean?: boolean;
+  align?: "left" | "right";
+}) {
+  return (
+    <Menu label={`More for ${item.company}`} align={align}>
+      <Link className="menu-item" href={oppHref(basePath, item.opportunityKey)} role="menuitem">
+        View history
+      </Link>
+      {item.sourceThreadId && editable && !lean ? (
+        <a className="menu-item" role="menuitem" href={gmailThreadUrl(item.sourceThreadId)} target="_blank" rel="noreferrer">
+          Open email
+        </a>
+      ) : null}
+      {editable ? (
+        <form action={dismissActionAction}>
+          <input type="hidden" name="actionId" value={item.id} />
+          <button type="submit" className="menu-item" role="menuitem">
+            Mark done
+          </button>
+        </form>
+      ) : null}
+    </Menu>
+  );
+}
+
+/** The one thing that matters most, set large. Everything below it is quieter. */
+function Hero({ item, now, basePath, editable }: { item: ActionItem; now: Date; basePath: string; editable: boolean }) {
+  const copy = describeAction(item, now);
+  const primaryHref = editable && item.sourceThreadId ? gmailThreadUrl(item.sourceThreadId) : oppHref(basePath, item.opportunityKey);
+  return (
+    <section className="mt-10 border-t border-line pt-10">
+      <h2 className="t-title">{copy.headline}</h2>
+      {item.role ? <p className="t-lead mt-1.5 text-ink-2">{item.role}</p> : null}
+      {copy.when ? (
+        <p className="t-lead mt-5 tnum">
+          {copy.when}
+          <span className={`ml-2 ${copy.critical ? "text-signal" : "text-ink-3"}`}>{copy.relative}</span>
+        </p>
+      ) : (
+        <p className="t-lead mt-5 text-ink-2">
+          {copy.critical ? (
+            <>
+              <span className="text-signal">{item.reason.split(" — ")[0]}</span>
+              {item.reason.includes(" — ") ? ` — ${item.reason.split(" — ").slice(1).join(" — ")}` : ""}
+            </>
+          ) : (
+            item.reason
+          )}
+        </p>
+      )}
+      <div className="mt-7 flex items-center gap-4">
+        <a
+          className="btn-primary"
+          href={primaryHref}
+          {...(editable && item.sourceThreadId ? { target: "_blank", rel: "noreferrer" } : {})}
+        >
+          {editable ? copy.primaryLabel : "See the history"}
+        </a>
+        <ActionMenu item={item} basePath={basePath} editable={editable} lean align="left" />
+      </div>
+    </section>
+  );
+}
+
+/** A row in "Also needs you" / "Coming up": what, for whom, and when. The whole row opens the history. */
+function ActionRow({ item, now, basePath, editable }: { item: ActionItem; now: Date; basePath: string; editable: boolean }) {
+  const copy = describeAction(item, now);
+  // The date is already on the right, so the subline only repeats it when there is no date.
+  const sub = copy.relative ? (item.role ?? "") : [item.role, item.reason].filter(Boolean).join(" · ");
+  return (
+    <li>
+      <div className="row">
         <div className="min-w-0">
-          <p className="text-sm font-medium">{item.title}</p>
-          <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">
-            {item.company}
-            {item.role ? ` · ${item.role}` : ""}
-          </p>
-          <p className="mt-1 text-xs text-zinc-500">
-            {item.reason}
-            {item.due ? ` (${formatFloating(item.due, item.dueHasTime)})` : ""}
-          </p>
+          <Link href={oppHref(basePath, item.opportunityKey)} className="row-link block font-medium tracking-tight">
+            {copy.headline}
+          </Link>
+          {sub ? <p className="t-meta mt-0.5 truncate text-ink-2">{sub}</p> : null}
         </div>
-        <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          <Link className={quietButton} href={oppHref(basePath, item.opportunityKey)}>Timeline</Link>
-          {item.sourceThreadId && editable ? (
-            <a className={quietButton} href={gmailThreadUrl(item.sourceThreadId)} target="_blank" rel="noreferrer">Open email</a>
+        <div className="row-end shrink-0">
+          {copy.relative ? (
+            <span className={`row-time t-meta tnum ${copy.critical ? "text-signal" : "text-ink-3"}`}>{copy.relative}</span>
           ) : null}
-          {editable ? (
-            <form action={dismissActionAction}>
-              <input type="hidden" name="actionId" value={item.id} />
-              <button type="submit" className={quietButton}>Done</button>
-            </form>
-          ) : null}
+          <div className="row-tools">
+            <ActionMenu item={item} basePath={basePath} editable={editable} />
+          </div>
         </div>
       </div>
     </li>
   );
 }
 
-export function TodayView({
+/** "Applied 19 days ago with no update" -> "19 days quiet": one short fact per row. */
+function quietFor(reason: string) {
+  const m = reason.match(/(\d+) days? ago/);
+  return m ? `${m[1]} days quiet` : reason.replace(/ — consider.*$/, "");
+}
+
+/** Follow-up suggestions are deliberately the quietest thing on the page. */
+function WaitingRow({ item, basePath, editable }: { item: ActionItem; basePath: string; editable: boolean }) {
+  return (
+    <li>
+      <div className="row !py-2.5">
+        <p className="min-w-0 truncate">
+          <Link href={oppHref(basePath, item.opportunityKey)} className="row-link text-ink-2 transition-colors hover:text-ink">
+            {item.company}
+          </Link>
+          {item.role ? <span className="t-meta text-ink-3"> {item.role}</span> : null}
+        </p>
+        <div className="row-end shrink-0">
+          <span className="row-time t-meta tnum text-ink-3">{quietFor(item.reason)}</span>
+          <div className="row-tools">
+            <ActionMenu item={item} basePath={basePath} editable={editable} />
+          </div>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function RecentRow({ change, now, basePath }: { change: RecentChange; now: Date; basePath: string }) {
+  return (
+    <li>
+      <div className="row">
+        <Link href={oppHref(basePath, change.opportunityKey)} className="row-link min-w-0 truncate">
+          <span className="font-medium tracking-tight">{change.company}</span>
+          <span className="text-ink-2"> · {change.label}</span>
+        </Link>
+        <span className="t-meta shrink-0 text-ink-3">{relativeDay(now, change.when)}</span>
+      </div>
+    </li>
+  );
+}
+
+const QUIET_VISIBLE = 4;
+
+export function TodayBriefing({
+  opportunities,
   actions,
+  now,
   basePath,
   editable,
+  greeting,
 }: {
+  opportunities: Opportunity[];
   actions: ActionItem[];
+  now: Date;
   basePath: string;
   editable: boolean;
+  greeting: React.ReactNode;
 }) {
-  if (actions.length === 0) {
-    return (
-      <div className="rounded-md border border-dashed border-zinc-300 px-6 py-10 text-center dark:border-zinc-700">
-        <p className="font-medium">Nothing needs you right now.</p>
-        <p className="mt-1 text-sm text-zinc-500">
-          No open deadlines, interviews or unanswered recruiters. Check the Pipeline for the full picture.
-        </p>
-      </div>
-    );
-  }
+  const briefing = buildBriefing(opportunities, actions, now);
+  const [hero, ...otherNeeds] = briefing.needsYou;
+  const visibleWaiting = briefing.waiting.slice(0, QUIET_VISIBLE);
+  const hiddenWaiting = briefing.waiting.slice(QUIET_VISIBLE);
 
   return (
-    <div className="space-y-8">
-      {BUCKETS.map((bucket) => {
-        const items = actions.filter((a) => a.bucket === bucket.id);
-        if (items.length === 0) return null;
-        // "Worth a look" is a long tail of quiet applications: show the top few, tuck away the rest.
-        const visible = bucket.id === "worth_a_look" ? items.slice(0, QUIET_VISIBLE) : items;
-        const hidden = items.slice(visible.length);
-        return (
-          <section key={bucket.id}>
-            <h2 className={`text-xs font-semibold uppercase tracking-wide ${bucket.tone}`}>
-              {bucket.title} · {items.length}
-            </h2>
-            <ul className="mt-3 space-y-3">
-              {visible.map((item) => (
-                <ActionCard key={item.id} item={item} basePath={basePath} editable={editable} />
-              ))}
-            </ul>
-            {hidden.length > 0 ? (
-              <details className="mt-3">
-                <summary className="cursor-pointer text-xs font-medium text-zinc-500">Show {hidden.length} more</summary>
-                <ul className="mt-3 space-y-3">
-                  {hidden.map((item) => (
-                    <ActionCard key={item.id} item={item} basePath={basePath} editable={editable} />
-                  ))}
-                </ul>
-              </details>
-            ) : null}
-          </section>
-        );
-      })}
+    <div>
+      {greeting}
+
+      {hero ? (
+        <Hero item={hero} now={now} basePath={basePath} editable={editable} />
+      ) : (
+        <p className="t-lead mt-8 max-w-[34ch] text-ink-2">
+          Nothing is waiting on you. New emails and deadlines show up here as they arrive.
+        </p>
+      )}
+
+      {otherNeeds.length > 0 ? (
+        <Section title="Also needs you" count={otherNeeds.length}>
+          <ul className="list">
+            {otherNeeds.map((a) => (
+              <ActionRow key={a.id} item={a} now={now} basePath={basePath} editable={editable} />
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+
+      {briefing.comingUp.length > 0 ? (
+        <Section title="Coming up" count={briefing.comingUp.length}>
+          <ul className="list">
+            {briefing.comingUp.map((a) => (
+              <ActionRow key={a.id} item={a} now={now} basePath={basePath} editable={editable} />
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+
+      {briefing.recent.length > 0 ? (
+        <Section title="Recently changed">
+          <ul className="list">
+            {briefing.recent.map((c) => (
+              <RecentRow key={c.opportunityKey} change={c} now={now} basePath={basePath} />
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+
+      {briefing.waiting.length > 0 ? (
+        <Section title="Waiting" count={briefing.waiting.length}>
+          <p className="t-meta -mt-0.5 mb-1 text-ink-3">Applications with no reply yet. Only worth a nudge if you want one.</p>
+          <ul className="list">
+            {visibleWaiting.map((a) => (
+              <WaitingRow key={a.id} item={a} basePath={basePath} editable={editable} />
+            ))}
+          </ul>
+          {hiddenWaiting.length > 0 ? (
+            <Disclose className="mt-2" summary={`Show ${hiddenWaiting.length} more`} openSummary="Show fewer">
+              <ul className="list mt-2">
+                {hiddenWaiting.map((a) => (
+                  <WaitingRow key={a.id} item={a} basePath={basePath} editable={editable} />
+                ))}
+              </ul>
+            </Disclose>
+          ) : null}
+        </Section>
+      ) : null}
     </div>
   );
 }
 
-function ago(date: Date, now: Date) {
-  const days = Math.floor((now.getTime() - date.getTime()) / 86_400_000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  return `${days} days ago`;
+/* --------------------------------------------------------------- Pipeline */
+
+/** The last thing that actually moved the process, not a reply or a generic update. */
+function lastMeaningful(opp: Opportunity): { label: string; at: Date; scheduled: Date | null } {
+  const quiet = new Set<EventType>(["user_reply", "status_update", "follow_up"]);
+  const event = [...opp.events].reverse().find((e) => !quiet.has(e.type)) ?? opp.events[opp.events.length - 1];
+  return {
+    label: EVENT_LABEL[event.type],
+    at: event.occurredAt,
+    scheduled: event.type === "interview_scheduled" ? event.eventDate : null,
+  };
 }
 
-export function PipelineView({
+function OpportunityRow({ opp, now, basePath }: { opp: Opportunity; now: Date; basePath: string }) {
+  const last = lastMeaningful(opp);
+  const upcoming = last.scheduled && daysBetween(now, last.scheduled) >= 0;
+  return (
+    <li>
+      <div className="row">
+        <div className="min-w-0">
+          <Link href={oppHref(basePath, opp.key)} className="row-link block truncate font-medium tracking-tight">
+            {opp.company}
+          </Link>
+          <p className={`t-meta mt-0.5 truncate ${opp.role ? "text-ink-2" : "text-ink-3"}`}>{opp.role ?? "No role detected"}</p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="t-meta text-ink-2">{last.label}</p>
+          <p className="t-meta tnum text-ink-3">
+            {upcoming && last.scheduled ? formatFloating(last.scheduled, true) : relativeDay(now, last.at)}
+          </p>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+export function PipelineList({
   opportunities,
-  actions,
-  basePath,
   now,
+  basePath,
 }: {
   opportunities: Opportunity[];
-  actions: ActionItem[];
-  basePath: string;
   now: Date;
+  basePath: string;
 }) {
   const active = opportunities.filter((o) => o.status === "active");
   const closed = opportunities.filter((o) => o.status === "closed");
-  const nextAction = (key: string) => actions.find((a) => a.opportunityKey === key);
-  const stageOrder = [...STAGES].filter((s) => s !== "closed").reverse() as Stage[];
+  // Most advanced first: the offer you're weighing matters more than the application you sent last week.
+  const order = STAGES.filter((s) => s !== "closed").reverse() as Stage[];
+  const groups = order
+    .map((stage) => ({ stage, rows: active.filter((o) => o.stage === stage) }))
+    .filter((g) => g.rows.length > 0);
 
-  const Row = ({ opp }: { opp: Opportunity }) => {
-    const next = nextAction(opp.key);
+  if (opportunities.length === 0) {
     return (
-      <li>
-        <Link
-          href={oppHref(basePath, opp.key)}
-          className="flex items-center justify-between gap-3 rounded-md border border-zinc-200 px-4 py-3 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
-        >
-          <div className="min-w-0">
-            <p className="text-sm font-medium">
-              {opp.company}
-              {opp.needsReview ? <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">Check details</span> : null}
-            </p>
-            <p className="text-xs text-zinc-500">{opp.role ?? "Role unknown"} · last activity {ago(opp.lastActivityAt, now)}</p>
-          </div>
-          {next ? <span className="shrink-0 text-xs text-zinc-600 dark:text-zinc-400">{next.title}</span> : null}
-          {!next && opp.outcome ? <span className="shrink-0 text-xs text-zinc-500">{opp.outcome === "rejected" ? "Rejected" : opp.outcome === "offer" ? "Offer" : "Withdrawn"}</span> : null}
-        </Link>
-      </li>
+      <p className="t-lead max-w-[36ch] text-ink-2">
+        No recruiting activity found yet. Refresh to read your inbox, or check back after your next application.
+      </p>
     );
-  };
+  }
 
   return (
-    <div className="space-y-8">
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        {active.length} active · {closed.length} closed · {opportunities.length} total
-      </p>
-      {stageOrder.map((stage) => {
-        const rows = active.filter((o) => o.stage === stage);
-        if (rows.length === 0) return null;
-        return (
-          <section key={stage}>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{STAGE_LABEL[stage]} · {rows.length}</h2>
-            <ul className="mt-3 space-y-2">{rows.map((o) => <Row key={o.key} opp={o} />)}</ul>
-          </section>
-        );
-      })}
+    <div>
+      {groups.map(({ stage, rows }) => (
+        <section key={stage} className="mt-12 first:mt-0">
+          <h2 className="flex items-baseline gap-2 text-[0.9375rem] font-semibold tracking-tight">
+            {STAGE_LABEL[stage]}
+            <span className="tnum font-normal text-ink-3">{rows.length}</span>
+          </h2>
+          <ul className="list mt-2">
+            {rows.map((o) => (
+              <OpportunityRow key={o.key} opp={o} now={now} basePath={basePath} />
+            ))}
+          </ul>
+        </section>
+      ))}
       {closed.length > 0 ? (
-        <section>
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Closed · {closed.length}</h2>
-          <ul className="mt-3 space-y-2">{closed.map((o) => <Row key={o.key} opp={o} />)}</ul>
+        <section className="mt-12">
+          <h2 className="flex items-baseline gap-2 text-[0.9375rem] font-semibold tracking-tight text-ink-2">
+            Closed
+            <span className="tnum font-normal text-ink-3">{closed.length}</span>
+          </h2>
+          <Disclose className="mt-2" summary="Show closed" openSummary="Hide closed">
+            <ul className="list mt-2">
+              {closed.map((o) => (
+                <OpportunityRow key={o.key} opp={o} now={now} basePath={basePath} />
+              ))}
+            </ul>
+          </Disclose>
         </section>
       ) : null}
     </div>
   );
 }
 
-function StageTrack({ stage }: { stage: Stage }) {
+/* --------------------------------------------------------------- Timeline */
+
+const MINOR: EventType[] = ["user_reply", "status_update", "follow_up"];
+
+function StageTrack({ stage, outcome }: { stage: Stage; outcome: Opportunity["outcome"] }) {
   const steps = STAGES.filter((s) => s !== "closed");
   const index = steps.indexOf(stage === "closed" ? "applied" : stage);
   return (
-    <ol className="flex flex-wrap items-center gap-2 text-xs">
-      {steps.map((s, i) => (
-        <li key={s} className={`rounded-full px-2.5 py-1 ${i <= index && stage !== "closed" ? "bg-foreground text-background" : "bg-zinc-100 text-zinc-500 dark:bg-zinc-900"}`}>
-          {STAGE_LABEL[s]}
+    <ol className="flex items-center gap-x-5 text-sm" aria-label="Stage">
+      {steps.map((s, i) => {
+        const reached = stage !== "closed" && i <= index;
+        const current = stage !== "closed" && i === index;
+        return (
+          <li
+            key={s}
+            aria-current={current ? "step" : undefined}
+            className={current ? "font-semibold text-ink" : reached ? "text-ink-2" : "text-ink-3/70"}
+          >
+            {STAGE_LABEL[s]}
+          </li>
+        );
+      })}
+      {stage === "closed" ? (
+        <li className="font-semibold text-ink">
+          {outcome === "rejected" ? "Rejected" : outcome === "withdrawn" ? "Withdrawn" : "Closed"}
         </li>
-      ))}
+      ) : null}
     </ol>
   );
 }
 
 function EventEditor({ event }: { event: EffectiveEvent }) {
   return (
-    <details className="mt-2">
-      <summary className="cursor-pointer text-xs font-medium text-zinc-500">Something wrong?</summary>
-      <form action={editEventAction} className="mt-2 grid gap-2 rounded-md border border-zinc-200 p-3 text-xs dark:border-zinc-800 sm:grid-cols-2">
+    <form action={editEventAction} className="grid gap-4 pb-1 pt-5 sm:grid-cols-2">
         <input type="hidden" name="eventId" value={event.id} />
-        <label className="grid gap-1">Event type
-          <select name="type" defaultValue={event.type} className="rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700">
-            {EVENT_TYPES.map((t) => <option key={t} value={t} className="text-black">{EVENT_LABEL[t]}</option>)}
+        <label className="field">
+          What happened
+          <select name="type" defaultValue={event.type} className="input">
+            {EVENT_TYPES.map((t) => (
+              <option key={t} value={t} className="text-black">
+                {EVENT_LABEL[t]}
+              </option>
+            ))}
           </select>
         </label>
-        <label className="grid gap-1">Company
-          <input name="company" defaultValue={event.company ?? ""} required className="rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700" />
+        <label className="field">
+          Company
+          <input name="company" defaultValue={event.company ?? ""} required className="input" />
         </label>
-        <label className="grid gap-1">Role
-          <input name="role" defaultValue={event.role ?? ""} className="rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700" />
+        <label className="field">
+          Role
+          <input name="role" defaultValue={event.role ?? ""} className="input" />
         </label>
-        <label className="grid gap-1">Deadline / date (blank = none)
-          <input name="eventDate" type="datetime-local" defaultValue={toInputValue(event.eventDate)} className="rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700" />
+        <label className="field">
+          Date or deadline
+          <input name="eventDate" type="datetime-local" defaultValue={toInputValue(event.eventDate)} className="input" />
         </label>
-        <div className="flex flex-wrap gap-2 sm:col-span-2">
-          <button type="submit" className={quietButton}>Save fix</button>
-          <button type="submit" formAction={ignoreEventAction} className={quietButton}>Not recruiting — hide</button>
-          {event.corrected ? <button type="submit" formAction={resetEventAction} className={quietButton}>Undo my edits</button> : null}
+        <div className="flex flex-wrap items-center gap-4 sm:col-span-2">
+          <button type="submit" className="btn-primary">
+            Save
+          </button>
+          <button type="submit" formAction={ignoreEventAction} className="link-quiet">
+            Not recruiting, hide it
+          </button>
+          {event.corrected ? (
+            <button type="submit" formAction={resetEventAction} className="link-quiet">
+              Undo my edits
+            </button>
+          ) : null}
         </div>
-      </form>
-    </details>
+    </form>
   );
 }
 
-export function Timeline({ opportunity, editable }: { opportunity: Opportunity; editable: boolean }) {
-  return (
-    <div>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{opportunity.company}</h1>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{opportunity.role ?? "Role not detected"}</p>
-        </div>
-        {editable ? (
-          <form action={setOpportunityStatusAction}>
-            <input type="hidden" name="key" value={opportunity.key} />
-            <input type="hidden" name="status" value={opportunity.status === "closed" ? "active" : "closed"} />
-            <button type="submit" className={quietButton}>{opportunity.status === "closed" ? "Reopen" : "Mark closed"}</button>
-          </form>
-        ) : null}
-      </div>
+function shortDay(date: Date) {
+  const sameYear = date.getUTCFullYear() === new Date().getUTCFullYear();
+  return date.toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
+}
 
-      <div className="mt-5">
-        <StageTrack stage={opportunity.stage} />
-        {opportunity.status === "closed" ? (
-          <p className="mt-2 text-xs text-zinc-500">
-            Closed{opportunity.outcome === "rejected" ? " — rejected" : opportunity.outcome === "offer" ? " — offer" : opportunity.outcome === "withdrawn" ? " — you withdrew" : ""}.
+function TimelineEntry({ event, editable }: { event: EffectiveEvent; editable: boolean }) {
+  const minor = MINOR.includes(event.type);
+  return (
+    <li className="group relative grid grid-cols-[4.5rem_1fr] gap-x-6 pb-8 last:pb-0">
+      <span
+        className="absolute -left-px top-[0.62rem] h-[7px] w-[7px] -translate-x-1/2 rounded-full"
+        style={{ background: minor ? "var(--line-strong)" : "var(--ink)" }}
+        aria-hidden
+      />
+      <p className="t-meta tnum whitespace-nowrap pl-6 pt-[0.3rem] text-ink-3">{shortDay(event.occurredAt)}</p>
+      <div className="min-w-0 sm:pr-28">
+        <p className={minor ? "text-ink-2" : "font-medium tracking-tight"}>
+          {EVENT_LABEL[event.type]}
+          {event.corrected ? <span className="t-meta ml-2 font-normal text-ink-3">edited by you</span> : null}
+          {!event.corrected && event.confidence < 0.6 ? (
+            <span className="t-meta ml-2 font-normal text-ink-3">not sure about this one</span>
+          ) : null}
+        </p>
+        {event.eventDate ? (
+          <p className="mt-0.5 tnum">
+            {event.dateKind === "deadline" ? "Due " : ""}
+            {formatFloating(event.eventDate, event.eventDateHasTime)}
           </p>
         ) : null}
+        <p className="t-meta mt-0.5 truncate text-ink-3">
+          {event.outbound ? "From you" : event.senderName || event.senderDomain}: {event.subject}
+        </p>
+      </div>
+      {editable ? (
+        <EventTools emailHref={gmailThreadUrl(event.gmailThreadId)}>
+          <EventEditor event={event} />
+        </EventTools>
+      ) : null}
+    </li>
+  );
+}
+
+export function OpportunityHistory({ opportunity, editable }: { opportunity: Opportunity; editable: boolean }) {
+  const closedNote =
+    opportunity.status === "closed"
+      ? opportunity.outcome === "rejected"
+        ? "Closed after a rejection."
+        : opportunity.outcome === "offer"
+          ? "Closed with an offer."
+          : opportunity.outcome === "withdrawn"
+            ? "Closed after you withdrew."
+            : "Closed."
+      : null;
+  return (
+    <div>
+      <header className="flex items-start justify-between gap-6">
+        <div className="min-w-0">
+          <h1 className="t-display break-words">{opportunity.company}</h1>
+          <p className="t-lead mt-2 text-ink-2">{opportunity.role ?? "Role not detected"}</p>
+        </div>
+        {editable ? (
+          <Menu label="Options for this opportunity">
+            <form action={setOpportunityStatusAction}>
+              <input type="hidden" name="key" value={opportunity.key} />
+              <input type="hidden" name="status" value={opportunity.status === "closed" ? "active" : "closed"} />
+              <button type="submit" className="menu-item" role="menuitem">
+                {opportunity.status === "closed" ? "Reopen" : "Mark as closed"}
+              </button>
+            </form>
+          </Menu>
+        ) : null}
+      </header>
+
+      <div className="mt-8">
+        <StageTrack stage={opportunity.stage} outcome={opportunity.outcome} />
+        {closedNote ? <p className="t-meta mt-2 text-ink-3">{closedNote}</p> : null}
       </div>
 
-      <ol className="mt-8 space-y-0 border-l border-zinc-200 pl-6 dark:border-zinc-800">
+      <ol className="relative mt-14 ml-1 border-l border-line" aria-label="History">
         {opportunity.events.map((event) => (
-          <li key={event.gmailMessageId} className="relative pb-6 last:pb-0">
-            <span className={`absolute -left-[29px] top-1.5 h-2.5 w-2.5 rounded-full ${event.outbound ? "bg-zinc-400" : "bg-foreground"}`} />
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-medium">{EVENT_LABEL[event.type]}</p>
-              {event.corrected ? <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-800 dark:bg-sky-950/50 dark:text-sky-300">You edited</span> : null}
-              {!event.corrected && event.confidence < 0.6 ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">Low confidence</span> : null}
-            </div>
-            <p className="text-xs text-zinc-500">{formatDay(event.occurredAt)} · {event.outbound ? "You" : event.senderName || event.senderDomain}</p>
-            {event.eventDate ? (
-              <p className="mt-1 text-sm">
-                {event.dateKind === "deadline" ? "Deadline" : "Scheduled"}: {formatFloating(event.eventDate, event.eventDateHasTime)}
-              </p>
-            ) : null}
-            <p className="mt-1 text-xs text-zinc-500">&ldquo;{event.subject}&rdquo;{editable ? <> · <a className="underline" href={gmailThreadUrl(event.gmailThreadId)} target="_blank" rel="noreferrer">Open email</a></> : null}</p>
-            {editable ? <EventEditor event={event} /> : null}
-          </li>
+          <TimelineEntry key={event.gmailMessageId} event={event} editable={editable} />
         ))}
       </ol>
     </div>

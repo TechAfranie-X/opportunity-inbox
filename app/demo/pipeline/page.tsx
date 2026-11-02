@@ -1,18 +1,20 @@
 import { connection } from "next/server";
 import { AppShell } from "@/app/components/app-shell";
-import { PipelineView } from "@/app/components/recruiting-views";
+import { PipelineList } from "@/app/components/recruiting-views";
 import { loadDemoWorkspace } from "@/lib/recruiting/demo";
 
 export const metadata = { title: "Demo pipeline · Opportunity Inbox" };
 
 export default async function DemoPipeline() {
-  await connection(); // render per request so sample dates stay relative to today
-  const { opportunities, actions, now } = loadDemoWorkspace();
+  await connection();
+  const { opportunities, now } = loadDemoWorkspace();
+  const active = opportunities.filter((o) => o.status === "active").length;
   return (
     <AppShell demo active="pipeline">
-      <h1 className="text-2xl font-semibold tracking-tight">Pipeline</h1>
-      <div className="mt-6">
-        <PipelineView opportunities={opportunities} actions={actions} basePath="/demo" now={now} />
+      <h1 className="t-display">Pipeline</h1>
+      <p className="t-meta tnum mt-5 text-ink-3">{active} active, {opportunities.length - active} closed</p>
+      <div className="mt-14">
+        <PipelineList opportunities={opportunities} now={now} basePath="/demo" />
       </div>
     </AppShell>
   );

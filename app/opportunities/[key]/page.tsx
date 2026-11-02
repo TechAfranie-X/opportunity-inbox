@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { AppShell } from "@/app/components/app-shell";
-import { Timeline } from "@/app/components/recruiting-views";
+import { OpportunityHistory } from "@/app/components/recruiting-views";
 import { isDatabaseConfigured } from "@/lib/db";
 import { loadWorkspace, recordUsage } from "@/lib/recruiting/store";
 
@@ -18,11 +18,14 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
   await recordUsage(sub, "view_opportunity");
 
   return (
-    <AppShell active="pipeline" userLabel={session?.user?.email ?? undefined}>
-      <Link href="/pipeline" className="text-sm text-zinc-500 hover:text-foreground">← Pipeline</Link>
-      <div className="mt-4">
-        <Timeline opportunity={opportunity} editable />
-      </div>
+    <AppShell active="pipeline" user={session?.user}>
+      <Link href="/pipeline" className="link-quiet mb-10 inline-flex items-center gap-1.5">
+        <svg width="6" height="10" viewBox="0 0 6 10" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden>
+          <path d="M5 1 1 5l4 4" />
+        </svg>
+        Pipeline
+      </Link>
+      <OpportunityHistory opportunity={opportunity} editable />
     </AppShell>
   );
 }

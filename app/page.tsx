@@ -12,9 +12,6 @@ const GMAIL_ERRORS: Record<string, string> = {
   failed: "Could not connect Gmail. Try again.",
 };
 
-const primaryButton =
-  "appearance-none rounded-md bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90";
-
 export default async function Home({ searchParams }: PageProps<"/">) {
   const session = await auth();
   const sub = session?.user?.googleSub;
@@ -26,42 +23,58 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   if (connection && !gmailError) redirect("/today");
 
   return (
-    <div className="flex min-h-full flex-col bg-background font-sans text-foreground">
-      <header className="flex items-center justify-between px-6 py-5 sm:px-10">
-        <p className="text-sm font-semibold tracking-tight">Opportunity Inbox</p>
-        <Link href="/demo" className="text-sm text-zinc-500 underline">See a demo</Link>
+    <div className="flex min-h-full flex-col">
+      <header className="mx-auto flex w-full max-w-[42rem] items-baseline justify-between px-6 pt-6">
+        <p className="text-[0.9375rem] font-semibold tracking-tight">Opportunity Inbox</p>
+        <Link href="/demo" className="link-quiet">
+          See a demo
+        </Link>
       </header>
-      <main className="flex flex-1 flex-col items-center justify-center px-6 pb-24">
-        <div className="w-full max-w-2xl text-center">
-          <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-            Your recruiting, finally in one place.
-          </h1>
-          <p className="mt-5 text-base leading-7 text-zinc-600 dark:text-zinc-400">
-            Connect Gmail and Opportunity Inbox rebuilds your recruiting
-            pipeline from the emails you already have: every application,
-            assessment, recruiter, interview and offer, with a Today list of
-            what needs you and what you might be about to miss.
-          </p>
 
-          <div className="mt-8">
-            {!session?.user ? (
-              <form action={async () => { "use server"; await signIn("google", { redirectTo: "/" }); }}>
-                <button type="submit" className={primaryButton}>Sign in with Google</button>
-              </form>
-            ) : (
-              <form action="/api/gmail/connect" method="post">
-                <button type="submit" className={primaryButton}>Connect Gmail</button>
-              </form>
-            )}
-            {gmailError ? <p className="mt-3 text-sm text-red-600 dark:text-red-400">{gmailError}</p> : null}
-          </div>
+      <main className="mx-auto flex w-full max-w-[42rem] flex-1 flex-col justify-center px-6 pb-24 pt-20">
+        <h1 className="t-display max-w-[14ch]">Know where every application stands.</h1>
+        <p className="t-lead mt-6 max-w-[40ch] text-ink-2">
+          Connect Gmail and your recruiting is rebuilt from the emails you already have, then every morning you see what needs you.
+        </p>
 
-          <ul className="mx-auto mt-10 max-w-md space-y-2 text-left text-sm text-zinc-600 dark:text-zinc-400">
-            <li><strong className="text-foreground">Read-only.</strong> We can&apos;t send, delete or change anything in your mailbox.</li>
-            <li><strong className="text-foreground">No email storage.</strong> We read messages to extract company, stage and dates, then keep only those facts, plus a link back to the email.</li>
-            <li><strong className="text-foreground">You&apos;re in control.</strong> Correct anything we get wrong, or delete all derived data and disconnect in one click.</li>
-          </ul>
+        <div className="mt-9 flex items-center gap-5">
+          {!session?.user ? (
+            <form
+              action={async () => {
+                "use server";
+                await signIn("google", { redirectTo: "/" });
+              }}
+            >
+              <button type="submit" className="btn-primary">
+                Continue with Google
+              </button>
+            </form>
+          ) : (
+            <form action="/api/gmail/connect" method="post">
+              <button type="submit" className="btn-primary">
+                Connect Gmail
+              </button>
+            </form>
+          )}
         </div>
+        {gmailError ? (
+          <p className="t-meta mt-4 text-signal" role="alert">
+            {gmailError}
+          </p>
+        ) : null}
+
+        <dl className="mt-24 max-w-[34rem] border-t border-line">
+          {[
+            ["Read-only", "We can't send, delete or change anything in your mailbox."],
+            ["Your emails aren't stored", "We keep the company, stage and dates, plus a link back to the email. Never the message text."],
+            ["Yours to correct", "Fix anything we get wrong, or delete everything in one click."],
+          ].map(([term, detail]) => (
+            <div key={term} className="grid gap-1 border-b border-line py-4 sm:grid-cols-[11rem_1fr] sm:gap-6">
+              <dt className="font-medium tracking-tight">{term}</dt>
+              <dd className="text-ink-2">{detail}</dd>
+            </div>
+          ))}
+        </dl>
       </main>
     </div>
   );

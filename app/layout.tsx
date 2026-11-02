@@ -1,28 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Instrument_Sans } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+// One family carries the whole interface; weight and size do the hierarchy.
+const ui = Instrument_Sans({
+  variable: "--font-ui",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
   title: "Opportunity Inbox",
   description:
-    "Turn recruiting emails, assessments, interviews, deadlines, and scholarships into one actionable dashboard.",
+    "Your recruiting, rebuilt from the emails you already have: where every application stands and what needs you today.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${ui.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

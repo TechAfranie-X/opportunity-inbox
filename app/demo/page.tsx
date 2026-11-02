@@ -1,20 +1,24 @@
 import { connection } from "next/server";
 import { AppShell } from "@/app/components/app-shell";
-import { TodayView } from "@/app/components/recruiting-views";
+import { Greeting } from "@/app/components/greeting";
+import { TodayBriefing } from "@/app/components/recruiting-views";
+import { buildBriefing } from "@/lib/recruiting/briefing";
 import { loadDemoWorkspace } from "@/lib/recruiting/demo";
 
 export const metadata = { title: "Demo · Opportunity Inbox" };
 
 export default async function DemoToday() {
   await connection(); // render per request so sample dates stay relative to today
-  const { actions } = loadDemoWorkspace();
+  const { opportunities, actions, now } = loadDemoWorkspace();
+  const needs = buildBriefing(opportunities, actions, now).needsYou.length;
+  const today = now.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" });
   return (
     <AppShell demo active="today">
-      <h1 className="text-2xl font-semibold tracking-tight">Today</h1>
-      <p className="mt-1 text-sm text-zinc-500">Built from a synthetic mailbox by the same pipeline that reads your Gmail.</p>
-      <div className="mt-8">
-        <TodayView actions={actions} basePath="/demo" editable={false} />
-      </div>
+      <Greeting name="Sam" hour={9} needsYou={needs}>
+        <span>{today}</span>
+        <span>Built from a synthetic mailbox</span>
+      </Greeting>
+      <TodayBriefing opportunities={opportunities} actions={actions} now={now} basePath="/demo" editable={false} greeting={null} />
     </AppShell>
   );
 }
