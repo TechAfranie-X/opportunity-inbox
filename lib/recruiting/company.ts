@@ -14,6 +14,8 @@ const PLATFORM_DOMAINS = [
   "coderpad.io", "theforage.com", "ripplematch.com", "applytojob.com", "jazzhr.com",
   "paylocity.com", "ultipro.com", "dayforcehcm.com", "eightfold.ai", "phenom.com",
   "beamery.com", "avature.net", "careerhub.com", "isolvedhire.com", "starred.com",
+  "interfolio.com", "emailmeform.com", "linklings.com", "hackerrankforwork.com", "submittable.com",
+  "slate.org", "technolutions.com", "formstack.com", "typeform.com", "jotform.com",
 ];
 
 const FREE_MAIL = ["gmail.com", "outlook.com", "hotmail.com", "yahoo.com", "icloud.com", "proton.me"];
@@ -22,7 +24,7 @@ const GENERIC_WORDS = new Set([
   "greenhouse", "lever", "workday", "ashby", "icims", "smartrecruiters", "workable",
   "hackerrank", "codesignal", "codility", "hirevue", "linkedin", "indeed", "handshake",
   "noreply", "no-reply", "careers", "jobs", "recruiting", "talent", "hiring",
-  "notifications", "mail", "team", "the", "your", "our", "hr", "people",
+  "notifications", "mail", "team", "the", "your", "our", "hr", "people", "job", "application", "internship", "update",
 ]);
 
 const COMPANY_SUFFIX =
@@ -133,14 +135,26 @@ function companyFromDisplayName(rawFrom: string): string | null {
   return name === name.toLowerCase() ? name.replace(/\b\w/g, (c) => c.toUpperCase()) : name;
 }
 
-/** "datadoghq" -> "Datadog" when the email text contains that capitalized brand. */
+/**
+ * Recover a properly spelled brand from the email text when we only have a domain label:
+ * "datadoghq" -> "Datadog", "owenscorning" -> "Owens Corning", "mongodb" -> "MongoDB".
+ * The text spelling must cover most of the label, so a stub ("Last" of "lastmile-ed") never wins.
+ */
 function recoverBrandName(label: string, text: string) {
-  for (const m of text.matchAll(/\b[A-Z][A-Za-z0-9]{3,}\b/g)) {
-    const word = m[0].toLowerCase();
-    // The word must cover most of the label ("Datadog" of "datadoghq"), not a stub ("Last" of "lastmile-ed").
-    if (word !== label && label.startsWith(word) && word.length >= 0.6 * label.replace(/[^a-z0-9]/g, "").length) return m[0];
+  const flat = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const target = flat(label);
+  const words = [...text.matchAll(/\b[A-Z][A-Za-z0-9]*\b/g)].map((m) => m[0]);
+  let best: string | null = null;
+  for (let i = 0; i < words.length; i += 1) {
+    for (let n = 1; n <= 3 && i + n <= words.length; n += 1) {
+      const gram = words.slice(i, i + n).join(" ");
+      const g = flat(gram);
+      if (g.length < 3) continue;
+      if (g === target) return gram;
+      if (target.startsWith(g) && g.length >= 0.6 * target.length && (!best || g.length > flat(best).length)) best = gram;
+    }
   }
-  return titleCase(label);
+  return best ?? titleCase(label);
 }
 
 export function inferCompany(input: {

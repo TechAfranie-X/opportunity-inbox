@@ -30,7 +30,7 @@ export const RULES: Rule[] = [
   { type: "rejection", signal: "rejection", terminal: true,
     pattern: /\b(?:not (?:be )?(?:moving|proceeding|going) forward|will not be (?:moving|proceeding)|regret to inform|decided to (?:move|go|proceed|progress|pursue) (?:forward )?with (?:other|another)|(?:pursue|progress with|moving forward with) (?:other|another) (?:candidates?|applicants?)|we (?:have )?filled this role|position has been filled|not (?:been )?selected for|you (?:were|are|have been) not selected|unable to (?:offer you|move (?:you )?forward)|won't be able to move you forward|not able to move forward)\b/i },
   { type: "offer", signal: "offer", terminal: true,
-    pattern: /\b(?:pleased to (?:extend|offer)|(?:extend|extending) (?:you )?(?:an? |the )?offer|offer letter|offer of employment|formal offer|excited to offer you|your (?:\w+ )?offer (?:is|letter|for)|next steps for your (?:\w+ )?offer)\b/i },
+    pattern: /\b(?:pleased to (?:extend|offer)|(?:extend|extending) (?:you )?(?:an? |the )?offer|offer letter|offer of employment|formal offer|excited to offer you|your (?:\w+ )?offer (?:is ready|letter|is attached|has been)|next steps for your (?:\w+ )?offer)\b/i },
   { type: "assessment_completed", signal: "assessment received",
     pattern: /\b(?:thank(?:s| you) for (?:completing|submitting your (?:assessment|solution))|we(?:'ve| have) received your (?:assessment|submission|solution)|assessment (?:complete|completed|received|submitted|results|submission))\b/i },
   { type: "assessment", signal: "assessment",
@@ -104,6 +104,17 @@ function detectType(subject: string, rawBody: string): Detected | null {
   return bodyWeak ? hit(bodyWeak, false) : null;
 }
 
+/** Verification / login codes are transactional noise, never recruiting activity. */
+const TRANSACTIONAL_SUBJECT =
+  /\b(?:security|verification|confirmation|one[- ]time|login|sign[- ]in|access) (?:pass)?code\b|\bverify your (?:email|account|identity)\b|\bpassword reset\b|\breset your password\b/i;
+
+/** Promotions that borrow recruiting vocabulary ("applications are now open", "free offer"). */
+const MARKETING_SUBJECT =
+  /\bapplications? (?:are )?(?:now )?open\b|\bnow open\b|\bapply (?:today|now|by|before)\b|\blast call\b|\bdon'?t miss\b|\blimited[- ]time\b|\bregister (?:now|today)\b|\bwebinar\b|\bcareer fair\b|\bsave the date\b|\bfree offer\b|\d+% off\b|\bon sale\b|\bis (?:still )?open\b|\bjob matches\b|\bdiscover\b|\bget ready for\b/i;
+
+/** Types a promotion can fake. Rejections, confirmed interviews and assessment receipts are never promotional. */
+const MARKETING_FAKEABLE = new Set<EventType>(["applied", "follow_up", "status_update", "recruiter_outreach", "interview_invite", "assessment", "offer"]);
+
 const AUTO_REPLY = /^\s*(?:automatic reply|auto-?reply|out of office|undeliverable)\b/i;
 const WITHDRAW = /\b(?:withdraw(?:ing)? (?:my|from)|please withdraw|no longer (?:interested|available))\b/i;
 
@@ -118,6 +129,7 @@ export function extractEvent(email: RecruitingEmail): ExtractedEvent | null {
   if (AUTO_REPLY.test(email.subject)) return null; // out-of-office / bounce notices are never recruiting events
   const sender = parseSender(email.from);
   const subject = email.subject.trim();
+  if (TRANSACTIONAL_SUBJECT.test(subject)) return null;
   const normalizedSubject = stripSubjectAnnotations(subject);
 
   // Cheap veto: reuse the metadata classifier to drop obvious marketing/noise.
@@ -131,6 +143,7 @@ export function extractEvent(email: RecruitingEmail): ExtractedEvent | null {
   const isReply = /^\s*(?:re|fwd?)\s*:/i.test(subject);
   const detected = detectType(isReply ? "" : normalizedSubject, bodyText);
   if (!detected) return null;
+  if (MARKETING_FAKEABLE.has(detected.type) && MARKETING_SUBJECT.test(subject)) return null;
 
   // "offer"/"next steps" words are common in marketing; require some recruiting context.
   if (
