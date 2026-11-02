@@ -173,6 +173,12 @@ export function extractEvent(email: RecruitingEmail): ExtractedEvent | null {
     }
   }
 
+  // "Your request has expired" is itself the deadline: it lets Today stop nagging about it.
+  if (detected.type === "assessment" && !eventDate && /\bexpired\b/i.test(`${subject}\n${bodyText.slice(0, 600)}`)) {
+    eventDate = new Date(Date.UTC(email.receivedAt.getUTCFullYear(), email.receivedAt.getUTCMonth(), email.receivedAt.getUTCDate()));
+    dateKind = "deadline";
+  }
+
   let confidence = detected.inSubject ? 0.9 : 0.7;
   if (!company) confidence -= 0.3;
   if (sender.domain.length === 0) confidence -= 0.1;

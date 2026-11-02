@@ -35,6 +35,40 @@ const oppHref = (base: string, key: string) => `${base}/${encodeURIComponent(key
 const quietButton =
   "appearance-none rounded-md border border-zinc-300 bg-transparent px-2.5 py-1 text-xs font-medium transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
 
+const QUIET_VISIBLE = 5;
+
+function ActionCard({ item, basePath, editable }: { item: ActionItem; basePath: string; editable: boolean }) {
+  return (
+    <li className="rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{item.title}</p>
+          <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">
+            {item.company}
+            {item.role ? ` · ${item.role}` : ""}
+          </p>
+          <p className="mt-1 text-xs text-zinc-500">
+            {item.reason}
+            {item.due ? ` (${formatFloating(item.due, item.dueHasTime)})` : ""}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          <Link className={quietButton} href={oppHref(basePath, item.opportunityKey)}>Timeline</Link>
+          {item.sourceThreadId && editable ? (
+            <a className={quietButton} href={gmailThreadUrl(item.sourceThreadId)} target="_blank" rel="noreferrer">Open email</a>
+          ) : null}
+          {editable ? (
+            <form action={dismissActionAction}>
+              <input type="hidden" name="actionId" value={item.id} />
+              <button type="submit" className={quietButton}>Done</button>
+            </form>
+          ) : null}
+        </div>
+      </div>
+    </li>
+  );
+}
+
 export function TodayView({
   actions,
   basePath,
@@ -60,42 +94,29 @@ export function TodayView({
       {BUCKETS.map((bucket) => {
         const items = actions.filter((a) => a.bucket === bucket.id);
         if (items.length === 0) return null;
+        // "Worth a look" is a long tail of quiet applications: show the top few, tuck away the rest.
+        const visible = bucket.id === "worth_a_look" ? items.slice(0, QUIET_VISIBLE) : items;
+        const hidden = items.slice(visible.length);
         return (
           <section key={bucket.id}>
             <h2 className={`text-xs font-semibold uppercase tracking-wide ${bucket.tone}`}>
               {bucket.title} · {items.length}
             </h2>
             <ul className="mt-3 space-y-3">
-              {items.map((item) => (
-                <li key={item.id} className="rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">{item.title}</p>
-                      <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">
-                        {item.company}
-                        {item.role ? ` · ${item.role}` : ""}
-                      </p>
-                      <p className="mt-1 text-xs text-zinc-500">
-                        {item.reason}
-                        {item.due ? ` (${formatFloating(item.due, item.dueHasTime)})` : ""}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                      <Link className={quietButton} href={oppHref(basePath, item.opportunityKey)}>Timeline</Link>
-                      {item.sourceThreadId && editable ? (
-                        <a className={quietButton} href={gmailThreadUrl(item.sourceThreadId)} target="_blank" rel="noreferrer">Open email</a>
-                      ) : null}
-                      {editable ? (
-                        <form action={dismissActionAction}>
-                          <input type="hidden" name="actionId" value={item.id} />
-                          <button type="submit" className={quietButton}>Done</button>
-                        </form>
-                      ) : null}
-                    </div>
-                  </div>
-                </li>
+              {visible.map((item) => (
+                <ActionCard key={item.id} item={item} basePath={basePath} editable={editable} />
               ))}
             </ul>
+            {hidden.length > 0 ? (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-medium text-zinc-500">Show {hidden.length} more</summary>
+                <ul className="mt-3 space-y-3">
+                  {hidden.map((item) => (
+                    <ActionCard key={item.id} item={item} basePath={basePath} editable={editable} />
+                  ))}
+                </ul>
+              </details>
+            ) : null}
           </section>
         );
       })}

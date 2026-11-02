@@ -27,9 +27,6 @@ const GENERIC_WORDS = new Set([
   "notifications", "mail", "team", "the", "your", "our", "hr", "people", "job", "application", "internship", "update",
 ]);
 
-const COMPANY_SUFFIX =
-  /\s+(?:university recruiting|early careers?|campus recruiting|recruiting team|talent acquisition|talent team|recruiting|careers?|talent|hiring team|hiring|jobs|team|people|hr|notifications?)$/i;
-
 const ROLE_WORD =
   /\b(?:intern|internship|engineer|developer|analyst|scientist|designer|manager|associate|researcher|consultant|architect|specialist|co-?op|fellow|apprentice|programmer|position|role)\b/i;
 
@@ -86,7 +83,7 @@ const GENERIC_LEAD =
 function cleanCandidate(raw: string): string | null {
   const value = raw
     .replace(/\s+(?:of|and|&)$/i, "")
-    .replace(/\s+(?:application|update|assessment|interview|offer|status|confirmation|invitation|reminder|notification|account)$/i, "")
+    .replace(/\s+(?:application|update|assessment|interview|offer|status|confirmation|invitation|reminder|notification|account|coding|online|technical)$/i, "")
     .replace(/[.,!]+$/, "")
     .trim();
   if (GENERIC_LEAD.test(value)) return null;

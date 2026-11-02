@@ -36,6 +36,13 @@ function when(daysUntil: number) {
   return `in ${plural(daysUntil, "day")}`;
 }
 
+/** A passed deadline is only actionable (extension request) for this many days. */
+const STALE_AFTER_DEADLINE_DAYS = 3;
+/** Offers with a passed deadline stop appearing after this grace period. */
+const OFFER_GRACE_DAYS = 7;
+/** Unanswered invites/outreach count as overdue only this long; after that they are probably gone. */
+const INVITE_OVERDUE_MAX_DAYS = 14;
+
 const PROGRESS_AFTER_ASSESSMENT = new Set(["assessment_completed", "interview_invite", "interview_scheduled", "offer", "rejection", "withdrawn"]);
 
 /**
@@ -88,7 +95,8 @@ export function buildActions(
     if (assessment && !laterThan(assessment).some((e) => PROGRESS_AFTER_ASSESSMENT.has(e.type))) {
       if (assessment.eventDate) {
         const d = Math.round((dayStart(assessment.eventDate) - today) / DAY);
-        if (d <= 14) {
+        // Within 14 days ahead, or at most 3 days past due. Older than that it is history, not an action.
+        if (d <= 14 && d >= -STALE_AFTER_DEADLINE_DAYS) {
           add(opp, assessment, "assessment_deadline",
             d < 0 ? "Assessment deadline passed" : "Complete your assessment",
             d < 0 ? `Due ${when(d)} — if you haven't finished, ask the recruiter about an extension.` : `Due ${when(d)}.`,
@@ -122,9 +130,12 @@ export function buildActions(
       const answered = laterThan(invite).some((e) => e.outbound || e.type === "interview_scheduled" || e.type === "rejection" || e.type === "offer");
       const age = ageDays(invite);
       if (!answered && age <= 30) {
-        add(opp, invite, "schedule_interview", "Reply to schedule your interview",
-          `They asked ${when(-age)} — recruiters often hold slots only briefly.`,
-          { daysUntil: age >= 2 ? -1 : 0, bucket: age >= 2 ? "overdue" : "today" });
+        const stale = age > INVITE_OVERDUE_MAX_DAYS;
+        add(opp, invite, "schedule_interview", stale ? "Old interview invite, still open?" : "Reply to schedule your interview",
+          stale
+            ? `They asked ${when(-age)} — it may have lapsed; a quick reply can revive it.`
+            : `They asked ${when(-age)} — recruiters often hold slots only briefly.`,
+          { daysUntil: age >= 2 ? -1 : 0, bucket: stale ? "worth_a_look" : age >= 2 ? "overdue" : "today" });
       }
     }
 
@@ -140,15 +151,18 @@ export function buildActions(
       }
     }
 
-    // 5. Offer decision
+    // 5. Offer decision. Later activity (a reply, "congrats on accepting") means it is being handled.
     const offer = lastOf("offer");
     if (offer && !laterThan(offer).some((e) => e.type === "withdrawn" || e.type === "rejection")) {
+      const after = laterThan(offer);
       if (offer.eventDate) {
         const d = Math.round((dayStart(offer.eventDate) - today) / DAY);
-        add(opp, offer, "offer_decision", "Offer decision due",
-          d < 0 ? `Deadline was ${when(d)}.` : `Respond ${when(d)}.`,
-          { due: offer.eventDate, dueHasTime: offer.eventDateHasTime, daysUntil: d });
-      } else if (!laterThan(offer).some((e) => e.outbound)) {
+        if (d >= -OFFER_GRACE_DAYS) {
+          add(opp, offer, "offer_decision", "Offer decision due",
+            d < 0 ? `Deadline was ${when(d)}.` : `Respond ${when(d)}.`,
+            { due: offer.eventDate, dueHasTime: offer.eventDateHasTime, daysUntil: d });
+        }
+      } else if (after.length === 0 && ageDays(offer) <= 30) {
         add(opp, offer, "offer_decision", "You have an offer", "No deadline detected — confirm the response date.",
           { bucket: "today", daysUntil: 0 });
       }
@@ -158,8 +172,10 @@ export function buildActions(
     const quiet = Math.floor((today - dayStart(last.occurredAt)) / DAY);
     const alreadyActed = items.some((i) => i.opportunityKey === opp.key);
     if (!alreadyActed) {
-      if (opp.stage === "applied" && !last.outbound && quiet >= 14 && quiet <= 60) {
+      if (opp.stage === "applied" && !last.outbound && quiet >= 14 && quiet <= 45) {
         add(opp, last, "follow_up", "No response yet", `Applied ${quiet} days ago with no update — consider a follow-up.`, { bucket: "worth_a_look" });
+        // Rank quiet applications: around three weeks of silence is the most useful moment to nudge.
+        items[items.length - 1].priority -= Math.abs(quiet - 21) * 0.5;
       } else if (last.outbound && quiet >= 7 && quiet <= 45) {
         add(opp, last, "check_in", "Still waiting to hear back", `You last wrote ${quiet} days ago with no reply.`, { bucket: "worth_a_look" });
       } else if (opp.stage === "assessment" && last.type === "assessment_completed" && quiet >= 7 && quiet <= 45) {
