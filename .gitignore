@@ -43,3 +43,6 @@ next-env.d.ts
 
 # Dogfood reports contain real inbox details; keep local
 docs/dogfood-*.md
+
+# Rendered demo videos (binary, regenerable from /demo/presentation)
+recordings/

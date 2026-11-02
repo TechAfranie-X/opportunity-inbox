@@ -74,6 +74,9 @@ type DirectorProps = {
 function Stage({ opportunities, heroKey, historyKey, emailCount, todayNode, historyNode, speed }: DirectorProps) {
   const { open, close } = useWorkspace();
   const [runId, setRunId] = useState(0);
+  // The story starts only once fonts are loaded and two frames have painted, so the first scene
+  // appears fully formed and its entrance animations begin at the same instant as the script clock.
+  const [ready, setReady] = useState(false);
   const [layers, setLayers] = useState<Layer[]>([{ id: "today", leaving: false, key: 0 }]);
   const [stage, setStage] = useState<string>("applied");
   const [emails, setEmails] = useState(0);
@@ -85,8 +88,25 @@ function Stage({ opportunities, heroKey, historyKey, emailCount, todayNode, hist
   const historyTotal = historyOpp?.events.length ?? 0;
   const activeCount = opportunities.length;
 
+  useEffect(() => {
+    let cancelled = false;
+    document.fonts.ready.then(() =>
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          if (cancelled) return;
+          performance.mark("presentation-start"); // time zero, for anything recording this
+          setReady(true);
+        }),
+      ),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // The script. Re-runs from scratch on every replay.
   useEffect(() => {
+    if (!ready) return;
     const timers: number[] = [];
     const cancelled = { current: false };
     window.scrollTo(0, 0);
@@ -157,7 +177,7 @@ function Stage({ opportunities, heroKey, historyKey, emailCount, todayNode, hist
       }
       root.dataset.theme = saved === "dark" || saved === "system" ? saved : "light";
     };
-  }, [runId, speed, heroKey, historyTotal, open, close]);
+  }, [ready, runId, speed, heroKey, historyTotal, open, close]);
 
   const replay = () => {
     setLayers([{ id: "today", leaving: false, key: layerKey.current++ }]);
@@ -211,8 +231,8 @@ function Stage({ opportunities, heroKey, historyKey, emailCount, todayNode, hist
         <div className="workspace flex-1" style={{ paddingTop: "calc(var(--nav-h) + 2.75rem)", paddingBottom: "4rem" }}>
           <main className="mx-auto w-full max-w-[75rem] px-6 lg:px-10">
             <div className="scene-stack">
-              {layers.map((layer) => (
-                <section key={layer.key} className={`scene ${layer.leaving ? "scene-out" : "scene-in"}`}>
+              {(ready ? layers : []).map((layer) => (
+                <section key={layer.key} className={`scene ${layer.leaving ? "scene-out" : layer.key === 0 ? "scene-first" : "scene-in"}`}>
                   {layer.id === "today" ? todayNode : null}
                   {layer.id === "pipeline" ? (
                     <div>

@@ -896,6 +896,10 @@ html[data-presentation-done] {
 .scene-in {
   animation: scene-in 0.55s var(--ease) both;
 }
+/* The very first scene is simply there; only its own details (the greeting) settle. */
+.scene-first {
+  animation: none;
+}
 .scene-out {
   animation: scene-out 0.26s ease-in both;
   pointer-events: none;
