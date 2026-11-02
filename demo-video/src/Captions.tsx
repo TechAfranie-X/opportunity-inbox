@@ -19,7 +19,7 @@ export function Captions() {
       <span
         style={{
           fontFamily: FONT,
-          fontSize: 23,
+          fontSize: 27,
           fontWeight: 500,
           lineHeight: 1.35,
           letterSpacing: "-0.008em",

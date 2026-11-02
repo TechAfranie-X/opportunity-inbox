@@ -53,7 +53,7 @@ Everything re-times itself from the clip lengths.
   rest, 3.5-4.5 dB further under speech, recovering in pauses), lifted 5 dB after the last word, and the script prints the
   measurements. `scripts/check-mix.py` prints the voice-to-music margin per line, in full band and in the 300-4000 Hz speech band.
 - **SFX**: only the inspector "open" remains, on the drop. The periodic ticks were removed because they fought the track's groove.
-- Final mix is normalised to -16 LUFS / -1.5 dBTP; `.sfx/preview-voice-music.wav` is the voice+music preview without SFX.
+- Final mix is normalised to -14 LUFS, true peak about -2.4 dBTP; `.sfx/preview-voice-music.wav` is the voice+music preview without SFX.
 
 ## Live narrated route
 `/demo/presentation` shows a **Play 30-second demo** button. Clicking it starts `public/demo/soundtrack.mp3`

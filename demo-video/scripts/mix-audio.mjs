@@ -57,17 +57,31 @@ if (mk.status !== 0) throw new Error(mk.stderr);
 process.stdout.write(mk.stdout);
 
 // combine; a voice+music preview is written first so the speech/music balance can be checked on its own
-const combine = "[0:a][1:a][2:a]amix=inputs=3:normalize=0:dropout_transition=0,alimiter=limit=0.89[pre]";
+const combine = "[0:a][1:a][2:a]amix=inputs=3:normalize=0:dropout_transition=0[pre]";
 const inputs = ["-i", path.join(stems, "voice.wav"), "-i", path.join(stems, "sfx.wav"), "-i", path.join(stems, "music.wav")];
 ff(["-i", path.join(stems, "voice.wav"), "-i", path.join(stems, "music.wav"), "-filter_complex", "[0:a][1:a]amix=inputs=2:normalize=0:dropout_transition=0,alimiter=limit=0.89[o]", "-map", "[o]", "-ar", "48000", "-c:a", "pcm_s16le", path.join(sfxDir, "preview-voice-music.wav")]);
 
-// two-pass loudnorm to -16 LUFS integrated, -1.5 dBTP
-const probe = spawnSync("ffmpeg", ["-y", "-v", "info", ...inputs, "-filter_complex", `${combine};[pre]loudnorm=I=-16:TP=-1.5:LRA=7:print_format=json[o]`, "-map", "[o]", "-f", "null", "-"], { encoding: "utf8" });
+// two-pass loudnorm to -14 LUFS integrated, -1.2 dBTP
+const probe = spawnSync("ffmpeg", ["-y", "-v", "info", ...inputs, "-filter_complex", `${combine};[pre]loudnorm=I=-14:TP=-1.2:LRA=7:print_format=json[o]`, "-map", "[o]", "-f", "null", "-"], { encoding: "utf8" });
 const log = `${probe.stderr}`;
 const m = JSON.parse(log.slice(log.lastIndexOf("{"), log.lastIndexOf("}") + 1));
-const ln = `loudnorm=I=-16:TP=-1.5:LRA=7:measured_I=${m.input_i}:measured_TP=${m.input_tp}:measured_LRA=${m.input_lra}:measured_thresh=${m.input_thresh}:offset=${m.target_offset}:linear=true`;
+// Master: one linear gain for the whole mix, a gentle 2:1 compressor that only acts above -5 dBFS (the narration's peaks;
+// the music sits far below it, so the voice/music ratio is unchanged), then a fast peak limiter for strays. The gain is iterated until the *limited* result is on target.
+const TARGET_LUFS = -14.0, LIMIT = 1.0; // full-scale ceiling; ffmpeg's alimiter lands about 3-4 dB under its limit in practice, so the result measures near -1.5 dBTP
 const wav = path.join(root, "public/audio/soundtrack.wav");
-ff([...inputs, "-filter_complex", `${combine};[pre]${ln}[o]`, "-map", "[o]", "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", wav]);
+const measure = (file) => {
+  const r = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", file, "-af", "ebur128=peak=true", "-f", "null", "-"], { encoding: "utf8" });
+  const sum = r.stderr.slice(r.stderr.lastIndexOf("Summary:"));
+  return { lufs: Number(/I:\s+(-?[\d.]+) LUFS/.exec(sum)[1]), tp: Number(/Peak:\s+(-?[\d.]+) dBFS/.exec(sum)[1]) };
+};
+let gain = TARGET_LUFS - Number(m.input_i);
+for (let i = 0; i < 6; i++) {
+  ff([...inputs, "-filter_complex", `${combine};[pre]volume=${gain.toFixed(3)}dB,acompressor=threshold=0.55:ratio=2:attack=6:release=120:knee=6:makeup=1,alimiter=limit=${LIMIT}:attack=3:release=40:level=disabled[o]`, "-map", "[o]", "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", wav]);
+  const r = measure(wav);
+  console.log(`master pass ${i + 1}: gain ${gain.toFixed(2)} dB -> ${r.lufs} LUFS, ${r.tp} dBTP`);
+  if (Math.abs(r.lufs - TARGET_LUFS) < 0.08) break;
+  gain += TARGET_LUFS - r.lufs;
+}
 const siteDir = path.resolve(root, "../public/demo");
 fs.mkdirSync(siteDir, { recursive: true });
 ff(["-i", wav, "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "48000", path.join(siteDir, "soundtrack.mp3")]);
