@@ -16,6 +16,7 @@ const PLATFORM_DOMAINS = [
   "beamery.com", "avature.net", "careerhub.com", "isolvedhire.com", "starred.com",
   "interfolio.com", "emailmeform.com", "linklings.com", "hackerrankforwork.com", "submittable.com",
   "slate.org", "technolutions.com", "formstack.com", "typeform.com", "jotform.com",
+  "yello.co", "smapply.net", "modernloop.io", "formassembly.com", "hirevue.com", "paradox.ai", "olivia.paradox.ai",
 ];
 
 const FREE_MAIL = ["gmail.com", "outlook.com", "hotmail.com", "yahoo.com", "icloud.com", "proton.me"];
@@ -46,6 +47,8 @@ const COMPANY_PATTERNS: RegExp[] = [
   new RegExp(`${K("next")}\\s+${K("step")}:\\s*${CAP}\\b`),
   new RegExp(`^${CAP}:\\s`), // "Stripe: Online Assessment …"
   new RegExp(`^${CAP}\\s+\\|\\s`), // "BlackRock | Application update"
+  new RegExp(`^${CAP}\\s+(?:${K("event")}\\s+|${K("program")}\\s+)?${K("application")}\\s+(?:${K("update")}|${K("status")}|${K("received")})`), // "Morgan Stanley Event Application Update"
+  new RegExp(`${K("assessment")} ${K("completed")}:\\s*${CAP}`), // "Assessment completed: X Pre-Screen"
   new RegExp(`\\b${K("your")}\\s+${CAP}\\s+(?:(?:${K("coding")}|${K("online")}|${K("technical")})\\s+)?(?:${K("assessment")}|${K("interview")}|${K("application")}|${K("offer")}|${K("challenge")})\\b`),
   new RegExp(`\\b(?:${K("position")}|${K("role")}|${K("internship")}|${K("co-op")}|${K("opportunity")}|${K("job")}|${K("interview")}|${K("offer")}|${K("application")})\\s+(?:${K("at")}|${K("with")})\\s+${CAP}`),
   new RegExp(`\\b(?:${K("applying")}|${K("applied")}|${K("application")})\\s+(?:${K("to")}|${K("at")}|${K("with")})\\s+(?:${K("the")}\\s+)?${CAP}`),
@@ -54,6 +57,7 @@ const COMPANY_PATTERNS: RegExp[] = [
   new RegExp(`\\b${K("from")} ${K("the")} ${CAP} (?:${K("recruiting")} |${K("talent")} |${K("hiring")} |${K("university")} |${K("campus")} )?${K("team")}\\b`),
   new RegExp(`\\b${CAP} (?:${K("recruiting")}|${K("talent")}|${K("careers")}|${K("hiring")}|${K("university recruiting")}) ${K("team")}\\b`),
   new RegExp(`\\b(?:${K("at")}|${K("with")})\\s+${CAP}[.!,]`),
+  new RegExp(`\\b${K("with")}\\s+${CAP}\\s+(?:${K("was")}|${K("were")}|${K("has")}|${K("have")}|${K("is")}|${K("are")})\\b`), // "availability with Acme was submitted"
 ];
 
 function titleCase(label: string) {
@@ -83,7 +87,7 @@ const GENERIC_LEAD =
 function cleanCandidate(raw: string): string | null {
   const value = raw
     .replace(/\s+(?:of|and|&)$/i, "")
-    .replace(/\s+(?:application|update|assessment|interview|offer|status|confirmation|invitation|reminder|notification|account|coding|online|technical)$/i, "")
+    .replace(/\s+(?:application|update|assessment|interview|offer|status|confirmation|invitation|reminder|notification|account|coding|online|technical|event|pre-screen|pre-screening|screen|challenge)$/i, "")
     .replace(/[.,!]+$/, "")
     .trim();
   if (GENERIC_LEAD.test(value)) return null;
@@ -113,6 +117,7 @@ const SENDER_NOISE = new Set([
   "system", "notifications", "notification", "recruiting", "careers", "career", "talent", "hr",
   "jobs", "job", "team", "admin", "automated", "support", "mailer", "via", "the", "hiring",
   "university", "campus", "early", "acquisition", "recruitment", "people", "candidate", "experience",
+  "business", "process", "workflow", "onboarding", "alerts", "admissions",
 ]);
 
 /**
@@ -148,6 +153,19 @@ function recoverBrandName(label: string, text: string) {
       const g = flat(gram);
       if (g.length < 3) continue;
       if (g === target) return gram;
+      // "hudson-trading" -> "Hudson River Trading": each hyphen part must start a word, in order.
+      const parts = label.toLowerCase().split("-").filter(Boolean);
+      if (parts.length > 1) {
+        const lowerWords = gram.toLowerCase().split(" ");
+        let at = 0;
+        const ordered = parts.every((part) => {
+          const idx = lowerWords.findIndex((w, k) => k >= at && w.startsWith(part));
+          if (idx < 0) return false;
+          at = idx + 1;
+          return true;
+        });
+        if (ordered && lowerWords.length <= parts.length + 1) return gram;
+      }
       if (target.startsWith(g) && g.length >= 0.6 * target.length && (!best || g.length > flat(best).length)) best = gram;
     }
   }

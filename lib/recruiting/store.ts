@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   actionDismissals,
@@ -104,6 +104,32 @@ export async function saveExtractedEvents(userGoogleSub: string, events: Extract
         },
       });
   }
+}
+
+/**
+ * After a re-sync, drop events for emails we just re-evaluated and no longer consider recruiting
+ * (e.g. the extractor got better at rejecting promotions). Events outside this scan, and any
+ * the user has corrected, are never touched.
+ */
+export async function pruneReclassified(userGoogleSub: string, scannedMessageIds: string[], keptMessageIds: string[]) {
+  const dropped = scannedMessageIds.filter((id) => !new Set(keptMessageIds).has(id));
+  if (dropped.length === 0) return 0;
+  const db = getDb();
+  let removed = 0;
+  for (let i = 0; i < dropped.length; i += 200) {
+    const rows = await db
+      .delete(recruitingEvents)
+      .where(
+        and(
+          eq(recruitingEvents.userGoogleSub, userGoogleSub),
+          inArray(recruitingEvents.gmailMessageId, dropped.slice(i, i + 200)),
+          isNull(recruitingEvents.correction),
+        ),
+      )
+      .returning({ id: recruitingEvents.id });
+    removed += rows.length;
+  }
+  return removed;
 }
 
 export async function markSynced(userGoogleSub: string, scanned: number, extracted: number) {

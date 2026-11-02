@@ -4,7 +4,7 @@ import { getGmailRefreshToken } from "@/lib/gmail/credentials";
 import { GmailAccessError, refreshGmailAccessToken } from "@/lib/gmail/oauth";
 import { fetchInboundCandidates, fetchOutboundInThreads } from "@/lib/gmail/recruiting-source";
 import { extractAll } from "@/lib/recruiting/extract";
-import { markSynced, saveExtractedEvents } from "@/lib/recruiting/store";
+import { markSynced, pruneReclassified, saveExtractedEvents } from "@/lib/recruiting/store";
 
 export type SyncResult =
   | { ok: true; scanned: number; events: number }
@@ -28,6 +28,11 @@ export async function syncRecruitingMail(userGoogleSub: string): Promise<SyncRes
     const events = extractAll([...inbound.emails, ...outbound]);
 
     await saveExtractedEvents(userGoogleSub, events);
+    await pruneReclassified(
+      userGoogleSub,
+      inbound.emails.map((e) => e.id),
+      events.map((e) => e.gmailMessageId),
+    );
     await markSynced(userGoogleSub, inbound.scanned, events.length);
     return { ok: true, scanned: inbound.scanned, events: events.length };
   } catch (error) {

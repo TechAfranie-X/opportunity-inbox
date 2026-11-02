@@ -1,4 +1,3 @@
-import { classifyOpportunityEmail } from "../opportunities/classify.ts";
 import { parseSender, stripSubjectAnnotations } from "../opportunities/normalize.ts";
 import { inferCompany, inferRole } from "./company.ts";
 import { pickDate } from "./dates.ts";
@@ -31,14 +30,19 @@ export const RULES: Rule[] = [
     pattern: /\b(?:not (?:be )?(?:moving|proceeding|going) forward|will not be (?:moving|proceeding)|regret to inform|decided to (?:move|go|proceed|progress|pursue) (?:forward )?with (?:other|another)|(?:pursue|progress with|moving forward with) (?:other|another) (?:candidates?|applicants?)|we (?:have )?filled this role|position has been filled|not (?:been )?selected for|you (?:were|are|have been) not selected|unable to (?:offer you|move (?:you )?forward)|won't be able to move you forward|not able to move forward)\b/i },
   { type: "offer", signal: "offer", terminal: true,
     pattern: /\b(?:pleased to (?:extend|offer)|(?:extend|extending) (?:you )?(?:an? |the )?offer|offer letter|offer of employment|formal offer|excited to offer you|your (?:\w+ )?offer (?:is ready|letter|is attached|has been)|next steps for your (?:\w+ )?offer)\b/i },
+  // Nudges about an unfinished application. Strong, so a keyword in the body can't re-type them.
+  { type: "follow_up", signal: "unfinished application reminder", subjectOnly: true,
+    pattern: /\b(?:incomplete application|application (?:is )?due|due date|still have an application|(?:finish|complete) your [\w ]{0,30}application|final step to complete|days? left to|reminder:? .{0,60}application)\b/i },
+  { type: "status_update", signal: "platform confirmation",
+    pattern: /\b(?:interview )?availability (?:was )?submitted\b|\byou(?:'|’)?re moving forward\b/i },
   { type: "assessment_completed", signal: "assessment received",
     pattern: /\b(?:thank(?:s| you) for (?:completing|submitting your (?:assessment|solution))|we(?:'ve| have) received your (?:assessment|submission|solution)|assessment (?:complete|completed|received|submitted|results|submission))\b/i },
   { type: "assessment", signal: "assessment",
     pattern: /\b(?:online assessment|coding assessment|technical assessment|coding challenge|take-?home|invited (?:you )?to (?:complete|take) (?:an? |the )?(?:online )?(?:assessment|challenge|test)|complete (?:the|your|an?) (?:\w+ ){0,2}(?:assessment|challenge)|assessment (?:invitation|link)|(?:hackerrank|codesignal|codility|coderpad) (?:assessment|test|challenge|link)|waiting for your .{0,40}assessment|(?:request|assessment|invitation) (?:from .{1,40} )?(?:has )?expired)\b/i },
   { type: "interview_scheduled", signal: "interview confirmed",
-    pattern: /\b(?:interview (?:is )?(?:confirmed|scheduled)|confirm(?:ing|ation of)? your (?:upcoming )?interview|your (?:upcoming )?interview (?:on|is|will)|invitation[^:]{0,40}:.{0,80}interview|reminder\W.{0,20}interview|interview confirmation|interview schedule|you(?:'re| are) (?:all set|scheduled) for)\b/i },
+    pattern: /\b(?:interview (?:is )?(?:confirmed|scheduled)|confirm(?:ing|ation of)? your (?:upcoming )?interview|your (?:upcoming )?interview (?:on|is|will)|\b(?:upcoming|final|technical|virtual|onsite|on-site|panel) interview\b|(?:externship|internship) interview\b|invitation[^:]{0,40}:.{0,80}interview|reminder\W+(?!to schedule).{0,20}interview|interview confirmation|interview schedule|you(?:'re| are) (?:all set|scheduled) for)\b/i },
   { type: "interview_invite", signal: "interview invite",
-    pattern: /\b(?:schedule (?:your |an? |the )?(?:interview|call|conversation|time|chat)|(?:invite|like to invite) you (?:to|for) (?:an? |the )?(?:\w+ )?interview|like to interview you|interview invitation|select (?:a |your )?(?:time|slot)|(?:share|send) (?:me )?your availability|book (?:a )?(?:time|slot)|pick a time)\b/i },
+    pattern: /\b(?:schedule (?:your |an? |the )?(?:interview|call|conversation|time|chat)|(?:invite|like to invite) you (?:to|for) (?:an? |the )?(?:\w+ )?interview|like to interview you|interview invitation|invitation to (?:an? )?interview|reminder to schedule|select (?:a |your )?(?:time|slot)|(?:share|send) (?:me )?your availability|book (?:a )?(?:time|slot)|pick a time)\b/i },
   { type: "recruiter_outreach", signal: "recruiter outreach",
     pattern: /\b(?:i(?:'m| am) (?:a |the )?(?:recruiter|sourcer|talent)|reaching out (?:to you )?(?:about|regarding|because)|came across your (?:profile|resume|background|application)|your (?:background|profile) (?:caught|stood|looks)|chat about (?:an? |the )?(?:opportunity|role|position)|quick (?:call|chat)|recruiter screen|phone screen|intro call)\b/i },
   { type: "applied", signal: "application confirmation", weak: true,
@@ -46,7 +50,7 @@ export const RULES: Rule[] = [
   { type: "follow_up", signal: "follow up", weak: true,
     pattern: /\b(?:following up|follow-up|checking in|just checking|any updates?|touching base|(?:finish|complete) your (?:job )?application|final step to complete|days? left to)\b/i },
   { type: "status_update", signal: "generic update", weak: true, subjectOnly: true,
-    pattern: /\b(?:application|candidacy|candidate) (?:update|status)|update (?:on|to) your|an update on|important information about your application|your (?:recent )?(?:job )?application status|your interest in|follow(?:ing)? up (?:on|to) your/i },
+    pattern: /\b(?:application|candidacy|candidate) (?:update|status)|update (?:on|to) your|an update on|important information about your application|update regarding your|your (?:recent )?(?:job )?application status|your interest in|follow(?:ing)? up (?:on|to) your/i },
 ];
 
 /** Drop quoted history so a reply doesn't inherit the thread's earlier "offer"/"rejection". */
@@ -110,7 +114,7 @@ const TRANSACTIONAL_SUBJECT =
 
 /** Promotions that borrow recruiting vocabulary ("applications are now open", "free offer"). */
 const MARKETING_SUBJECT =
-  /\bapplications? (?:are )?(?:now )?open\b|\bnow open\b|\bapply (?:today|now|by|before)\b|\blast call\b|\bdon'?t miss\b|\blimited[- ]time\b|\bregister (?:now|today)\b|\bwebinar\b|\bcareer fair\b|\bsave the date\b|\bfree offer\b|\d+% off\b|\bon sale\b|\bis (?:still )?open\b|\bjob matches\b|\bdiscover\b|\bget ready for\b/i;
+  /\bapplications? (?:are )?(?:now )?open\b|\bnow open\b|\bapply (?:today|now|by|before)\b|\blast call\b|\bdon'?t miss\b|\blimited[- ]time\b|\bregister (?:now|today)\b|\bwebinar\b|\bcareer fair\b|\bsave the date\b|\bfree offer\b|\d+% off\b|\bon sale\b|\bis (?:still )?open\b|\bjob matches\b|\bget ready for\b/i;
 
 /** Types a promotion can fake. Rejections, confirmed interviews and assessment receipts are never promotional. */
 const MARKETING_FAKEABLE = new Set<EventType>(["applied", "follow_up", "status_update", "recruiter_outreach", "interview_invite", "assessment", "offer"]);
@@ -132,11 +136,6 @@ export function extractEvent(email: RecruitingEmail): ExtractedEvent | null {
   if (TRANSACTIONAL_SUBJECT.test(subject)) return null;
   const normalizedSubject = stripSubjectAnnotations(subject);
 
-  // Cheap veto: reuse the metadata classifier to drop obvious marketing/noise.
-  const classification = classifyOpportunityEmail({ subject, from: email.from });
-  if (classification.label === "not_opportunity" && classification.pipelineScore === 0) {
-    return null;
-  }
 
   const bodyText = stripQuoted(email.bodyText);
   // A reply's subject is inherited thread history, so only its new text can type it.

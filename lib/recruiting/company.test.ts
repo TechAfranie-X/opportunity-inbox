@@ -54,3 +54,17 @@ test("brand recovery needs most of the domain label, not a stub", () => {
 test("trailing connectors are trimmed", () => {
   assert.equal(companyFromText("Thank you for applying to NIKE and"), "NIKE");
 });
+
+test("hyphenated domain labels recover the full spelled name", () => {
+  assert.equal(inferCompany({ from: "recruiting@hudson-trading.com", subject: "Thank you for applying", body: "Welcome to Hudson River Trading." }), "Hudson River Trading");
+});
+
+test("scheduling/ATS platforms are not the company; subject names it", () => {
+  assert.equal(inferCompany({ from: "Yello <x@yello.co>", subject: "Invitation to Interview with Acme", body: "" }), "Acme");
+  assert.equal(inferCompany({ from: "ModernLoop <x@interviews.modernloop.io>", subject: "Your interview availability with Acme was submitted", body: "" }), null === null ? "Acme" : "");
+});
+
+test("'Company Event Application Update' and 'Assessment completed: Company Pre-Screen'", () => {
+  assert.equal(inferCompany({ from: "x@acme.tal.net", subject: "Acme Event Application Update", body: "" }), "Acme");
+  assert.equal(inferCompany({ from: "CodeSignal <x@codesignal.com>", subject: "Assessment completed: Acme Pre-Screen", body: "" }), "Acme");
+});

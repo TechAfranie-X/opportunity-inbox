@@ -83,3 +83,28 @@ test("keyword-free reply inside a known recruiting thread is kept as a neutral u
   assert.deepEqual(events.map((e) => e.gmailMessageId).sort(), ["a", "b"]);
   assert.equal(events.find((e) => e.gmailMessageId === "b")!.type, "status_update");
 });
+
+test("reminders about an unfinished application are follow-ups, not confirmations", () => {
+  for (const s of ["Reminder: your application to Acme is due tomorrow", "Acme - Incomplete Application", "Complete Your Leadership Institute Application Packet"]) {
+    assert.equal(extractEvent(email({ subject: s, bodyText: "Please log in to finish." }))?.type, "follow_up", s);
+  }
+});
+
+test("'complete your application' inside a confirmation body does not turn it into a reminder", () => {
+  const e = extractEvent(email({ subject: "Your application with Acme", bodyText: "We received your application. You can complete your profile at any time." }));
+  assert.equal(e?.type, "applied");
+});
+
+test("interview wording: upcoming/externship interview is scheduled; 'reminder to schedule' is an invite", () => {
+  assert.equal(extractEvent(email({ subject: "Upcoming Interview - Software Engineer Intern at Acme", bodyText: "See you soon." }))?.type, "interview_scheduled");
+  assert.equal(extractEvent(email({ subject: "Reminder to Schedule an Interview with Acme", bodyText: "Pick a slot." }))?.type, "interview_invite");
+  assert.equal(extractEvent(email({ subject: "Invitation to Interview with Acme", bodyText: "Please choose a time." }))?.type, "interview_invite");
+});
+
+test("a program named 'Discover ...' is not a promotion", () => {
+  assert.equal(extractEvent(email({ subject: "Update to your Discover Acme Securities Application", bodyText: "We have an update on your application." }))?.type, "status_update");
+});
+
+test("positive 'you're moving forward' is neutral, not a rejection or an application confirmation", () => {
+  assert.equal(extractEvent(email({ subject: "You're Moving Forward! Acme Externship – Next Steps", bodyText: "Congrats on your application." }))?.type, "status_update");
+});
