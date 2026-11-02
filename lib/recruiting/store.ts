@@ -4,7 +4,9 @@ import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   actionDismissals,
+  eventPredictions,
   gmailConnections,
+  labels,
   opportunityOverrides,
   recruitingEvents,
   recruitingSync,
@@ -18,6 +20,7 @@ import {
   type EventCorrection,
   type OpportunityOverride,
 } from "@/lib/recruiting/opportunity";
+import type { Prediction } from "@/lib/recruiting/predictions";
 import type {
   ActionItem,
   EffectiveEvent,
@@ -107,6 +110,25 @@ export async function saveExtractedEvents(userGoogleSub: string, events: Extract
 }
 
 /**
+ * Append what the extractor concluded, per extractor version. Never updates: re-running the same version is a
+ * no-op, and a new version adds new rows, so the history of predictions survives every re-sync.
+ */
+export async function savePredictions(userGoogleSub: string, predictions: Prediction[]) {
+  if (predictions.length === 0) return 0;
+  const db = getDb();
+  let inserted = 0;
+  for (let i = 0; i < predictions.length; i += 200) {
+    const rows = await db
+      .insert(eventPredictions)
+      .values(predictions.slice(i, i + 200).map((p) => ({ userGoogleSub, ...p })))
+      .onConflictDoNothing()
+      .returning({ id: eventPredictions.id });
+    inserted += rows.length;
+  }
+  return inserted;
+}
+
+/**
  * After a re-sync, drop events for emails we just re-evaluated and no longer consider recruiting
  * (e.g. the extractor got better at rejecting promotions). Events outside this scan, and any
  * the user has corrected, are never touched.
@@ -192,6 +214,9 @@ export async function recordUsage(userGoogleSub: string, kind: string) {
 export async function deleteRecruitingData(userGoogleSub: string) {
   const db = getDb();
   await db.delete(recruitingEvents).where(eq(recruitingEvents.userGoogleSub, userGoogleSub));
+  // Everything derived from this mailbox, including predictions (and the user's own corrections), goes with it.
+  await db.delete(labels).where(eq(labels.userGoogleSub, userGoogleSub));
+  await db.delete(eventPredictions).where(eq(eventPredictions.userGoogleSub, userGoogleSub));
   await db.delete(opportunityOverrides).where(eq(opportunityOverrides.userGoogleSub, userGoogleSub));
   await db.delete(actionDismissals).where(eq(actionDismissals.userGoogleSub, userGoogleSub));
   await db.delete(recruitingSync).where(eq(recruitingSync.userGoogleSub, userGoogleSub));

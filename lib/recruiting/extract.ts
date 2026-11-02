@@ -130,10 +130,19 @@ const DEADLINE_TYPES: EventType[] = ["assessment", "offer", "interview_invite", 
  * recruiting activity. Outbound mail is handled by `extractAll`.
  */
 export function extractEvent(email: RecruitingEmail): ExtractedEvent | null {
-  if (AUTO_REPLY.test(email.subject)) return null; // out-of-office / bounce notices are never recruiting events
+  return extractWithReason(email).event;
+}
+
+/** Why an email was not treated as recruiting activity. Recorded so negatives are explainable, not just absent. */
+export type RejectionReason = "auto_reply" | "transactional" | "no_recruiting_language" | "marketing" | "no_recruiting_context";
+export type Extraction = { event: ExtractedEvent; reason: null } | { event: null; reason: RejectionReason };
+
+export function extractWithReason(email: RecruitingEmail): Extraction {
+  const reject = (reason: RejectionReason): Extraction => ({ event: null, reason });
+  if (AUTO_REPLY.test(email.subject)) return reject("auto_reply"); // out-of-office / bounce notices are never recruiting events
   const sender = parseSender(email.from);
   const subject = email.subject.trim();
-  if (TRANSACTIONAL_SUBJECT.test(subject)) return null;
+  if (TRANSACTIONAL_SUBJECT.test(subject)) return reject("transactional");
   const normalizedSubject = stripSubjectAnnotations(subject);
 
 
@@ -141,15 +150,15 @@ export function extractEvent(email: RecruitingEmail): ExtractedEvent | null {
   // A reply's subject is inherited thread history, so only its new text can type it.
   const isReply = /^\s*(?:re|fwd?)\s*:/i.test(subject);
   const detected = detectType(isReply ? "" : normalizedSubject, bodyText);
-  if (!detected) return null;
-  if (MARKETING_FAKEABLE.has(detected.type) && MARKETING_SUBJECT.test(subject)) return null;
+  if (!detected) return reject("no_recruiting_language");
+  if (MARKETING_FAKEABLE.has(detected.type) && MARKETING_SUBJECT.test(subject)) return reject("marketing");
 
   // "offer"/"next steps" words are common in marketing; require some recruiting context.
   if (
     (detected.type === "offer" || detected.type === "interview_invite" || detected.type === "follow_up") &&
     !/\b(?:applica|candidate|interview|role|position|intern|recruit|team|hiring|career|job)\w*/i.test(`${subject} ${bodyText.slice(0, 1500)}`)
   ) {
-    return null;
+    return reject("no_recruiting_context");
   }
 
   const company = inferCompany({ from: email.from, subject, body: bodyText });
@@ -182,7 +191,7 @@ export function extractEvent(email: RecruitingEmail): ExtractedEvent | null {
   if (!company) confidence -= 0.3;
   if (sender.domain.length === 0) confidence -= 0.1;
 
-  return {
+  const event: ExtractedEvent = {
     gmailMessageId: email.id,
     gmailThreadId: email.threadId,
     occurredAt: email.receivedAt,
@@ -199,6 +208,7 @@ export function extractEvent(email: RecruitingEmail): ExtractedEvent | null {
     confidence: Math.max(0.2, Math.round(confidence * 100) / 100),
     signals: [detected.signal, detected.inSubject ? "subject" : "body"],
   };
+  return { event, reason: null };
 }
 
 /**

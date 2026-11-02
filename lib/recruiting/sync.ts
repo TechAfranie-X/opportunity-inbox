@@ -4,7 +4,8 @@ import { getGmailRefreshToken } from "@/lib/gmail/credentials";
 import { GmailAccessError, refreshGmailAccessToken } from "@/lib/gmail/oauth";
 import { fetchInboundCandidates, fetchOutboundInThreads } from "@/lib/gmail/recruiting-source";
 import { extractAll } from "@/lib/recruiting/extract";
-import { markSynced, pruneReclassified, saveExtractedEvents } from "@/lib/recruiting/store";
+import { buildPredictions } from "@/lib/recruiting/predictions";
+import { markSynced, pruneReclassified, saveExtractedEvents, savePredictions } from "@/lib/recruiting/store";
 
 export type SyncResult =
   | { ok: true; scanned: number; events: number }
@@ -28,6 +29,12 @@ export async function syncRecruitingMail(userGoogleSub: string): Promise<SyncRes
     const events = extractAll([...inbound.emails, ...outbound]);
 
     await saveExtractedEvents(userGoogleSub, events);
+    try {
+      await savePredictions(userGoogleSub, buildPredictions([...inbound.emails, ...outbound]));
+    } catch {
+      // The prediction log is evaluation evidence, not product function: never fail a sync over it, and never log content.
+      console.error("prediction log failed");
+    }
     await pruneReclassified(
       userGoogleSub,
       inbound.emails.map((e) => e.id),
