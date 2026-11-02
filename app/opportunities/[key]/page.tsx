@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { AppShell } from "@/app/components/app-shell";
 import { OpportunityHistory } from "@/app/components/recruiting-views";
 import { isDatabaseConfigured } from "@/lib/db";
+import { toFloating } from "@/lib/recruiting/actions";
 import { loadWorkspace, recordUsage } from "@/lib/recruiting/store";
 
 export default async function OpportunityPage({ params }: PageProps<"/opportunities/[key]">) {
@@ -12,20 +13,23 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
   if (!sub || !isDatabaseConfigured()) redirect("/");
 
   const { key } = await params;
-  const workspace = await loadWorkspace(sub);
+  const real = new Date();
+  const now = toFloating(real);
+  const workspace = await loadWorkspace(sub, real);
   const opportunity = workspace.opportunities.find((o) => o.key === decodeURIComponent(key));
   if (!opportunity) notFound();
   await recordUsage(sub, "view_opportunity");
+  const updated = workspace.lastSyncedAt?.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
   return (
-    <AppShell active="pipeline" user={session?.user}>
+    <AppShell active="pipeline" user={session?.user} updated={updated} opportunities={workspace.opportunities} now={now}>
       <Link href="/pipeline" className="link-quiet mb-10 inline-flex items-center gap-1.5">
         <svg width="6" height="10" viewBox="0 0 6 10" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden>
           <path d="M5 1 1 5l4 4" />
         </svg>
         Pipeline
       </Link>
-      <OpportunityHistory opportunity={opportunity} editable />
+      <OpportunityHistory opportunity={opportunity} now={now} editable />
     </AppShell>
   );
 }

@@ -1,7 +1,7 @@
 import { connection } from "next/server";
 import { AppShell } from "@/app/components/app-shell";
 import { Greeting } from "@/app/components/greeting";
-import { TodayBriefing } from "@/app/components/recruiting-views";
+import { TodayComposition } from "@/app/components/recruiting-views";
 import { buildBriefing } from "@/lib/recruiting/briefing";
 import { loadDemoWorkspace } from "@/lib/recruiting/demo";
 
@@ -13,12 +13,11 @@ export default async function DemoToday() {
   const needs = buildBriefing(opportunities, actions, now).needsYou.length;
   const today = now.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" });
   return (
-    <AppShell demo active="today">
+    <AppShell demo active="today" opportunities={opportunities} now={now}>
       <Greeting name="Sam" hour={9} needsYou={needs}>
         <span>{today}</span>
-        <span>Built from a synthetic mailbox</span>
       </Greeting>
-      <TodayBriefing opportunities={opportunities} actions={actions} now={now} basePath="/demo" editable={false} greeting={null} />
+      <TodayComposition opportunities={opportunities} actions={actions} now={now} basePath="/demo" pipelineHref="/demo/pipeline" editable={false} greeting={null} />
     </AppShell>
   );
 }

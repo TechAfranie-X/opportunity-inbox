@@ -4,16 +4,19 @@ import { signOut } from "@/auth";
 import { deleteMyDataAction, disconnectGmailAction } from "@/app/actions";
 import { ConfirmForm } from "@/app/components/confirm-form";
 import { Menu } from "@/app/components/menu";
+import { SearchButton } from "@/app/components/search-button";
+import { SyncControl } from "@/app/components/sync-control";
+import { ThemeControl } from "@/app/components/theme-control";
+import { WorkspaceProvider } from "@/app/components/workspace";
+import type { Opportunity } from "@/lib/recruiting/types";
 
-const NAV = [
-  { id: "today", href: "/today", label: "Today" },
-  { id: "pipeline", href: "/pipeline", label: "Pipeline" },
-] as const;
+type NavId = "today" | "pipeline" | "activity";
 
-const DEMO_NAV = [
-  { id: "today", href: "/demo", label: "Today" },
-  { id: "pipeline", href: "/demo/pipeline", label: "Pipeline" },
-] as const;
+const NAV: Array<{ id: NavId; label: string; href: string; demoHref: string }> = [
+  { id: "today", label: "Today", href: "/today", demoHref: "/demo" },
+  { id: "pipeline", label: "Pipeline", href: "/pipeline", demoHref: "/demo/pipeline" },
+  { id: "activity", label: "Activity", href: "/activity", demoHref: "/demo/activity" },
+];
 
 export function firstName(name?: string | null, email?: string | null) {
   const source = name?.trim() || email?.split("@")[0] || "";
@@ -21,79 +24,119 @@ export function firstName(name?: string | null, email?: string | null) {
   return first ? first.charAt(0).toUpperCase() + first.slice(1) : "";
 }
 
+/** The mark is the journey line in miniature: three dots on a hairline, the last one lit. */
+function Mark() {
+  return (
+    <svg width="22" height="10" viewBox="0 0 22 10" fill="none" aria-hidden>
+      <path d="M2 5h18" stroke="currentColor" strokeOpacity="0.35" />
+      <circle cx="2.5" cy="5" r="2.2" fill="currentColor" />
+      <circle cx="11" cy="5" r="2.2" fill="currentColor" />
+      <circle cx="19.5" cy="5" r="2.6" style={{ fill: "var(--accent)" }} />
+    </svg>
+  );
+}
+
+/**
+ * The persistent frame. Navigation is a floating glass layer over the content; content scrolls
+ * under it and dissolves at the edge. On narrow screens the same destinations become a floating tab bar.
+ */
 export function AppShell({
   active,
   demo = false,
   user,
+  updated,
+  autoSync = false,
+  opportunities,
+  now,
   children,
 }: {
-  active?: "today" | "pipeline";
+  active: NavId;
   demo?: boolean;
   user?: { name?: string | null; email?: string | null };
+  /** Preformatted time of the last sync. */
+  updated?: string;
+  autoSync?: boolean;
+  opportunities: Opportunity[];
+  now: Date;
   children: ReactNode;
 }) {
-  const nav = demo ? DEMO_NAV : NAV;
+  const hrefOf = (item: (typeof NAV)[number]) => (demo ? item.demoHref : item.href);
+  const initial = firstName(user?.name, user?.email).charAt(0);
+
   return (
-    <div className="flex min-h-full flex-col">
-      {demo ? (
-        <p className="t-meta border-b border-line px-6 py-2 text-center text-ink-2">
-          Sample data, not your inbox.{" "}
-          <Link className="text-ink underline decoration-line underline-offset-2 hover:decoration-ink" href="/">
-            Connect Gmail
-          </Link>{" "}
-          to see your own.
-        </p>
-      ) : null}
-      <header className="mx-auto flex w-full max-w-[42rem] items-center justify-between px-6 pt-6">
-        <div className="flex items-baseline gap-7">
-          <Link href={demo ? "/demo" : "/today"} className="text-[0.9375rem] font-semibold tracking-tight">
-            Opportunity Inbox
-          </Link>
-          <nav className="flex gap-5 text-sm" aria-label="Primary">
-            {nav.map((item) => (
-              <Link
-                key={item.id}
-                href={item.href}
-                aria-current={item.id === active ? "page" : undefined}
-                className={`transition-colors ${item.id === active ? "text-ink" : "text-ink-3 hover:text-ink"}`}
+    <WorkspaceProvider opportunities={opportunities} now={now} basePath={demo ? "/demo" : "/opportunities"} editable={!demo}>
+      <header className="nav glass">
+        <div className="mx-auto flex h-full w-full max-w-[75rem] items-center justify-between px-6 lg:px-10">
+          <div className="flex items-center gap-7">
+            <Link href={demo ? "/demo" : "/today"} className="flex items-center gap-2.5 text-[0.9375rem] font-semibold tracking-tight">
+              <Mark />
+              <span className="max-sm:hidden">Opportunity Inbox</span>
+            </Link>
+            <nav className="flex items-center gap-1 max-md:hidden" aria-label="Primary">
+              {NAV.map((item) => (
+                <Link key={item.id} href={hrefOf(item)} className="nav-link" aria-current={item.id === active ? "page" : undefined}>
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+          </div>
+          <div className="flex items-center gap-3">
+            {!demo ? <SyncControl autoStart={autoSync} updated={updated} /> : null}
+            <SearchButton />
+            {user && !demo ? (
+              <Menu
+                label="Account"
+                trigger={<span className="grid h-8 w-8 place-items-center rounded-full bg-tint text-sm font-medium text-ink">{initial}</span>}
               >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
+                {user.email ? <p className="t-meta px-2.5 pb-1 pt-1.5 text-ink-3">{user.email}</p> : null}
+                <div className="menu-sep" />
+                <ThemeControl />
+                <div className="menu-sep" />
+                <form
+                  action={async () => {
+                    "use server";
+                    await signOut({ redirectTo: "/" });
+                  }}
+                >
+                  <button type="submit" className="menu-item">
+                    Sign out
+                  </button>
+                </form>
+                <div className="menu-sep" />
+                <p className="t-meta px-2.5 pb-1 pt-0.5 text-ink-3">We keep company, role, stage and dates. Never message text.</p>
+                <ConfirmForm action={deleteMyDataAction} label="Delete what we derived" confirmLabel="Click again to delete" />
+                <ConfirmForm action={disconnectGmailAction} label="Disconnect Gmail and delete all" confirmLabel="Click again to disconnect" />
+              </Menu>
+            ) : demo ? (
+              <Menu label="Appearance" trigger={<span className="px-2 text-sm text-ink-2">Appearance</span>}>
+                <ThemeControl />
+              </Menu>
+            ) : null}
+          </div>
         </div>
-        {user && !demo ? (
-          <Menu
-            label="Account"
-            trigger={
-              <span className="flex items-center gap-1.5 px-2 text-sm text-ink-2">
-                {firstName(user.name, user.email)}
-                <svg width="9" height="6" viewBox="0 0 9 6" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden>
-                  <path d="m1 1 3.5 3.5L8 1" />
-                </svg>
-              </span>
-            }
-          >
-            {user.email ? <p className="t-meta px-2.5 pb-1 pt-1.5 text-ink-3">{user.email}</p> : null}
-            <div className="menu-sep" />
-            <form
-              action={async () => {
-                "use server";
-                await signOut({ redirectTo: "/" });
-              }}
-            >
-              <button type="submit" className="menu-item">
-                Sign out
-              </button>
-            </form>
-            <div className="menu-sep" />
-            <p className="t-meta px-2.5 pb-1 pt-0.5 text-ink-3">We keep company, role, stage and dates. Never message text.</p>
-            <ConfirmForm action={deleteMyDataAction} label="Delete what we derived" confirmLabel="Click again to delete" />
-            <ConfirmForm action={disconnectGmailAction} label="Disconnect Gmail and delete all" confirmLabel="Click again to disconnect" />
-          </Menu>
-        ) : null}
       </header>
-      <main className="mx-auto w-full max-w-[42rem] flex-1 px-6 pb-28 pt-16">{children}</main>
-    </div>
+      <div className="scroll-edge" aria-hidden />
+
+      <div className="workspace flex-1" style={{ paddingTop: "calc(var(--nav-h) + 2.75rem)", paddingBottom: "7rem" }}>
+        {demo ? (
+          <p className="t-meta mx-auto -mt-4 mb-8 w-full max-w-[75rem] px-6 text-ink-2 lg:px-10">
+            Sample data, not your inbox.{" "}
+            <Link className="text-ink underline decoration-line underline-offset-2 hover:decoration-ink" href="/">
+              Connect Gmail
+            </Link>{" "}
+            to see your own.
+          </p>
+        ) : null}
+        <main className="mx-auto w-full max-w-[75rem] px-6 lg:px-10">{children}</main>
+      </div>
+
+      <nav className="tabbar glass" aria-label="Primary">
+        {NAV.map((item) => (
+          <Link key={item.id} href={hrefOf(item)} aria-current={item.id === active ? "page" : undefined}>
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+    </WorkspaceProvider>
   );
 }

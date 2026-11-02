@@ -30,7 +30,7 @@ export function Greeting({
 }) {
   return (
     <div>
-      <h1 className="t-display">
+      <h1 className="t-greeting">
         <span className="settle block">
           {dayPart(hour)}
           {name ? `, ${name}.` : "."}
@@ -39,7 +39,7 @@ export function Greeting({
           {needsYou === null ? "Reading your recruiting emails." : countLine(needsYou)}
         </span>
       </h1>
-      {children ? <div className="t-meta mt-5 flex flex-wrap items-center gap-x-5 gap-y-1 text-ink-3">{children}</div> : null}
+      {children ? <div className="t-meta mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 text-ink-3">{children}</div> : null}
     </div>
   );
 }

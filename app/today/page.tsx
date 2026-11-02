@@ -2,8 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { AppShell, firstName } from "@/app/components/app-shell";
 import { Greeting } from "@/app/components/greeting";
-import { TodayBriefing } from "@/app/components/recruiting-views";
-import { SyncControl } from "@/app/components/sync-control";
+import { TodayComposition } from "@/app/components/recruiting-views";
 import { isDatabaseConfigured } from "@/lib/db";
 import { findGmailConnection } from "@/lib/gmail/credentials";
 import { toFloating } from "@/lib/recruiting/actions";
@@ -29,11 +28,9 @@ export default async function TodayPage() {
   const updated = workspace.lastSyncedAt?.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
   return (
-    <AppShell active="today" user={session?.user}>
+    <AppShell active="today" user={session?.user} updated={updated} autoSync={neverSynced} opportunities={workspace.opportunities} now={now}>
       <Greeting name={name} hour={real.getHours()} needsYou={needs}>
         <span>{today}</span>
-        {updated ? <span className="tnum">Updated {updated}</span> : null}
-        <SyncControl autoStart={neverSynced} label={neverSynced ? "Read my inbox" : "Refresh"} />
       </Greeting>
 
       {neverSynced ? (
@@ -45,11 +42,12 @@ export default async function TodayPage() {
           We didn&apos;t find recruiting emails in your inbox. If you were expecting some, tell us which ones we missed.
         </p>
       ) : (
-        <TodayBriefing
+        <TodayComposition
           opportunities={workspace.opportunities}
           actions={workspace.actions}
           now={now}
           basePath="/opportunities"
+          pipelineHref="/pipeline"
           editable
           greeting={null}
         />

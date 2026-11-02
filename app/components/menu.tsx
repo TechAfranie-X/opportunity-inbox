@@ -75,7 +75,7 @@ export function Menu({
         )}
       </button>
       {open ? (
-        <div className="menu" data-align={align} role="menu" onClick={() => window.setTimeout(() => set(false), 180)}>
+        <div className="menu glass-thick" data-align={align} role="menu" onClick={() => window.setTimeout(() => set(false), 180)}>
           {children}
         </div>
       ) : null}
