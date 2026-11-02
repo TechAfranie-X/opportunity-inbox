@@ -26,6 +26,7 @@ export function SyncButton({
   }, [autoStart]);
 
   return (
+    <div className="flex flex-wrap items-center gap-3">
     <form ref={formRef} action={run} className="flex items-center gap-3">
       <button
         type="submit"
@@ -36,5 +37,11 @@ export function SyncButton({
       </button>
       {state.status === "error" ? <p className="text-sm text-red-600 dark:text-red-400">{state.message}</p> : null}
     </form>
+    {state.status === "error" && state.reconnect ? (
+      <form action="/api/gmail/connect" method="post">
+        <button type="submit" className="appearance-none rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background">Reconnect Gmail</button>
+      </form>
+    ) : null}
+    </div>
   );
 }

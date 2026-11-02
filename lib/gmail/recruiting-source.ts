@@ -34,15 +34,38 @@ function header(headers: Header[] | undefined, name: string) {
   return headers?.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value?.trim() ?? "";
 }
 
+const MAX_ATTEMPTS = 7;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * GET with retry. Gmail throttles per-user bursts with 429 or
+ * 403 rateLimitExceeded; those are transient, so back off and retry instead of
+ * failing the whole sync. Only status/reason are ever logged, never content.
+ */
 async function gmailGet<T>(accessToken: string, url: URL): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-  } catch {
-    throw new GmailAccessError("temporary_error");
+  for (let attempt = 1; ; attempt += 1) {
+    let response: Response;
+    try {
+      response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    } catch {
+      if (attempt >= MAX_ATTEMPTS) throw new GmailAccessError("temporary_error");
+      await sleep(500 * attempt);
+      continue;
+    }
+    if (response.ok) return (await response.json()) as T;
+
+    const body = (await response.json().catch(() => ({}))) as { error?: { errors?: Array<{ reason?: string }> } };
+    const reason = body.error?.errors?.[0]?.reason ?? "unknown";
+    const throttled = response.status === 429 || (response.status === 403 && /ratelimit/i.test(reason)) || response.status >= 500;
+    if (throttled && attempt < MAX_ATTEMPTS) {
+      const retryAfter = Number(response.headers.get("retry-after"));
+      const wait = retryAfter > 0 ? retryAfter * 1000 : Math.min(15_000, 500 * 2 ** attempt);
+      await sleep(wait + Math.random() * 300);
+      continue;
+    }
+    console.error(`gmail request failed: status=${response.status} reason=${reason}`);
+    throw new GmailAccessError(classifyGmailApiFailure(response.status));
   }
-  if (!response.ok) throw new GmailAccessError(classifyGmailApiFailure(response.status));
-  return (await response.json()) as T;
 }
 
 async function inBatches<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>) {
@@ -91,7 +114,7 @@ export type FetchedMail = { emails: RecruitingEmail[]; scanned: number };
 /** Inbound recruiting-looking mail, with bodies (transient). */
 export async function fetchInboundCandidates(accessToken: string, max = 200): Promise<FetchedMail> {
   const ids = await listIds(accessToken, max);
-  const messages = await inBatches(ids, 10, (id) =>
+  const messages = await inBatches(ids, 2, (id) =>
     gmailGet<GmailMessage>(accessToken, new URL(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=full`)),
   );
   const emails = messages.flatMap((m) => {
@@ -107,7 +130,7 @@ export async function fetchInboundCandidates(accessToken: string, max = 200): Pr
  */
 export async function fetchOutboundInThreads(accessToken: string, threadIds: string[], max = 80): Promise<RecruitingEmail[]> {
   const unique = [...new Set(threadIds)].slice(0, max);
-  const threads = await inBatches(unique, 8, async (threadId) => {
+  const threads = await inBatches(unique, 2, async (threadId) => {
     const url = new URL(`https://gmail.googleapis.com/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}`);
     url.searchParams.set("format", "metadata");
     for (const h of ["From", "Subject", "Date"]) url.searchParams.append("metadataHeaders", h);

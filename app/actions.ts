@@ -18,7 +18,9 @@ import {
 import { syncRecruitingMail } from "@/lib/recruiting/sync";
 import { EVENT_TYPES, type EventType } from "@/lib/recruiting/types";
 
-export type SyncState = { status: "idle" } | { status: "error"; message: string };
+export type SyncState =
+  | { status: "idle" }
+  | { status: "error"; message: string; reconnect: boolean };
 
 const SYNC_ERRORS = {
   not_connected: "Connect Gmail first.",
@@ -29,7 +31,7 @@ const SYNC_ERRORS = {
 export async function syncAction(): Promise<SyncState> {
   const sub = await requireUserSub();
   const result = await syncRecruitingMail(sub);
-  if (!result.ok) return { status: "error", message: SYNC_ERRORS[result.reason] };
+  if (!result.ok) return { status: "error", message: SYNC_ERRORS[result.reason], reconnect: result.reason === "reconnect_required" };
   await recordUsage(sub, "sync");
   revalidatePath("/", "layout");
   return { status: "idle" };

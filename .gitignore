@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Dogfood reports contain real inbox details; keep local
+docs/dogfood-*.md
