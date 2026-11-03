@@ -101,3 +101,30 @@ numbers are optimistic by construction. Only BLIND measures generalization.
   (`known-contact-continuity`); bulk/role mailboxes and event invitations never are.
 - Role falls back to a labelled field ("Requisition:", "Position:") and then a programme name when there is no job title.
 - Evaluator additions: employer **overreach** (naming an employer the labeler could not tell) and the label-set fingerprint.
+
+## Milestone log: generalization 2 (extractor 2026.11.2-evidence)
+
+**Dataset roles.** dev-random-1 and validation-1 are both development data from here on (validation-1 was looked at and used to
+find failure classes). Neither number below is evidence of generalization. validation-2 is the only fresh check for this milestone.
+
+**Diagnosis (validation-1).** Event-type errors: (a) first-match tiers, so a generic subject outranked a specific task stated in the
+body; (b) over-broad weak cues ("interest", "follow-up capital", "successfully applied"); (c) lexical gaps (plurals, a confirmation
+and a time in one sentence); (d) taxonomy ambiguity: an expired request is a status line, not an assessment. Confidence was a tier
+constant, so it did not predict correctness. Role errors: a keyword vocabulary instead of the syntactic slots senders write roles in,
+and no use of thread context. False positives: "application", "interest" and "registration" vocabulary without employment as the
+object (prizes, conferences, receipts, programme-opening broadcasts).
+
+**Architecture.** Deterministic, evidence-combining; a model-assisted classifier was rejected (new dependency and privacy surface,
+and the errors were evidence-combination and coverage problems a model would not have fixed more simply).
+- `extract.ts`: every rule that fires is a cue with a weight; cues for a type combine; strong specific types outrank generic wrappers
+  (nudge/confirmation/status line); confidence is the winner's evidence less the rival's.
+- `role.ts`: frame-based span extraction with plausibility checks; roles inherited from the thread, or from the employer's only role
+  within 90 days.
+- `signals.ts`: employment must be the object; application portals, receipts, opening broadcasts and event selections are not hiring.
+- Company resolution and grouping were deliberately left alone.
+
+Changed by decision, not by evidence alone: an expired request is now a `status_update` (the labeler did so consistently); the Today
+nag for an expired assessment is gone because there is nothing left to do.
+
+Open label-policy question: "position has been filled / no longer reviewing applicants" notices were labeled No by the labeler but the
+extractor (by design, since before this milestone) treats them as closing notices of the reader's application.
