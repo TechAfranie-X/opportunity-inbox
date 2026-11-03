@@ -60,6 +60,9 @@ Everything re-times itself from the clip lengths.
 and the tour together, with captions. Sound is never started without a click. `?autoplay=1` runs silently;
 `?film=1` is the clean capture mode used by `record-raw`.
 
+`public/demo/soundtrack.mp3` and `demo-video/audio/*.{mp3,wav}` are **generated and not in Git**: they derive from a locally
+licensed music track and local TTS output. Rebuild them with `mix-audio.mjs`; without the file the Play button is silent.
+
 ## Licensing
 Remotion is free for individuals and small teams and requires a company license above that: see
 https://www.remotion.dev/license before using this commercially.

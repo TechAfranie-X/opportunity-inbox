@@ -62,3 +62,8 @@ demo-video/audio/clean-product-confidence-1.mp3
 # Local evaluation store lives in ~/.opportunity-inbox/eval (outside the repo). If one is ever created in the tree, never commit it.
 .opportunity-inbox/
 *.eval-tasks.jsonl
+
+# Generated demo audio (rebuilt by demo-video/scripts/mix-audio.mjs and the TTS scripts); derived from licensed local music, never committed
+public/demo/soundtrack.mp3
+demo-video/audio/*.mp3
+demo-video/audio/*.wav
