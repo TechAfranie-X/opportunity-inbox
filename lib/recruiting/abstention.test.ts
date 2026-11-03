@@ -28,7 +28,9 @@ test("company confidence: corroborated employer is trusted, a conflicting one is
   const conflict = extractEvent(mail({ subject: "Thank you for applying to Globex", bodyText: "We received your application for the Software Engineer Intern role." }))!;
   assert.ok(conflict.fieldConfidence!.company < 0.4, `${conflict.fieldConfidence!.company}`);
   assert.ok(conflict.reviewReasons!.length > 0);
-  assert.ok(eventNeedsReview({ ...ev(), ...conflict, id: "x", corrected: false }, DEFAULT_POLICY));
+  // Two equally plausible employers: the resolver withholds the name rather than guess (and says why).
+  assert.ok(conflict.company === null || eventNeedsReview({ ...ev(), ...conflict, id: "x", corrected: false }, DEFAULT_POLICY));
+  assert.match(conflict.reviewReasons![0], /^company:/);
   assert.ok(!eventNeedsReview({ ...ev(), ...good, id: "x", corrected: false }, DEFAULT_POLICY));
 });
 

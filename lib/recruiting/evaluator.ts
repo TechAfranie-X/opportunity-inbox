@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { companyKey, roleRelation } from "./company.ts";
 import { DATASET_KINDS, HEADLINE_SOURCES, LABEL_SOURCES, NOT_APPLICABLE, UNKNOWN, type DatasetKind, type LabelField, type LabelSource } from "./ground-truth.ts";
 import { DEFAULT_POLICY, decide, type Policy } from "./policy.ts";
@@ -67,11 +68,15 @@ export type EvalReport = {
   banner: string;
   asOf: string;
   labelSources: LabelSource[];
+  /** Fingerprint of the resolved label set (message, field, value) that was scored, so two runs are comparable only when it matches. */
+  labelSetHash: string;
   excludedLabelRows: Partial<Record<LabelSource, number>>;
   coverage: { messages: number; labeledRecruiting: number; unlabeled: number; unpredicted: number };
   recruiting: { tp: number; fp: number; fn: number; tn: number; precision: Rate; recall: Rate; f1: number | null };
   type: { accuracy: Rate; accuracyWhenDetected: Rate; confidentWrong: Rate; unknownLabels: number };
-  company: { exact: Rate; normalized: Rate; confidentWrong: Rate; abstained: Rate; unknownLabels: number };
+  company: { exact: Rate; normalized: Rate; confidentWrong: Rate; abstained: Rate; unknownLabels: number;
+    /** Of recruiting messages whose employer the labeler could not tell, how many did the system name one anyway. */
+    overreach: Rate };
   role: { accuracy: Rate; exact: Rate; unknownLabels: number };
   date: { accuracy: Rate };
   grouping: { precision: Rate; recall: Rate; f1: number | null; truePairs: number; predictedPairs: number };
@@ -164,7 +169,7 @@ export function evaluate(input: EvalInput): EvalReport {
   let tp = 0, fp = 0, fn = 0, tn = 0, unlabeled = 0, unpredicted = 0;
   const cnt = {
     typeK: 0, typeN: 0, typeDetK: 0, typeDetN: 0, typeCwK: 0, typeCwN: 0, typeUnknown: 0,
-    coExK: 0, coNormK: 0, coN: 0, coCwK: 0, coCwN: 0, coAbst: 0, coUnknown: 0,
+    coExK: 0, coNormK: 0, coN: 0, coCwK: 0, coCwN: 0, coAbst: 0, coUnknown: 0, coOverK: 0,
     roleK: 0, roleExK: 0, roleN: 0, roleUnknown: 0,
     dateK: 0, dateN: 0,
     reviewK: 0, reviewN: 0, unkCoK: 0, unkCoN: 0,
@@ -220,7 +225,10 @@ export function evaluate(input: EvalInput): EvalReport {
       if (pc !== null && companyKey(pc) === companyKey(lc)) cnt.coNormK += 1;
       if (!v.recruiting || pc === null) cnt.coAbst += 1;
       else if (v.company.state === "accepted") { cnt.coCwN += 1; if (companyKey(pc) !== companyKey(lc)) cnt.coCwK += 1; }
-    } else if (lc === UNKNOWN) cnt.coUnknown += 1;
+    } else if (lc === UNKNOWN) {
+      cnt.coUnknown += 1;
+      if (v.recruiting && v.company.value !== null) cnt.coOverK += 1;
+    }
 
     // role: a label of not_applicable means "no role is stated", so predicting none is correct
     const lr = label?.role;
@@ -293,11 +301,12 @@ export function evaluate(input: EvalInput): EvalReport {
     banner: input.kind === "blind" && input.official === false ? `CONTAMINATED. ${BANNERS.blind}` : BANNERS[input.kind],
     asOf: input.asOf.toISOString(),
     labelSources: sources,
+    labelSetHash: labelSetHash(labels, members),
     excludedLabelRows: excluded,
     coverage: { messages: members.size, labeledRecruiting: recruitingIds.length, unlabeled, unpredicted },
     recruiting: { tp, fp, fn, tn, precision: recP, recall: recR, f1: f1(recP.value, recR.value) },
     type: { accuracy: rate(cnt.typeK, cnt.typeN), accuracyWhenDetected: rate(cnt.typeDetK, cnt.typeDetN), confidentWrong: rate(cnt.typeCwK, cnt.typeCwN), unknownLabels: cnt.typeUnknown },
-    company: { exact: rate(cnt.coExK, cnt.coN), normalized: rate(cnt.coNormK, cnt.coN), confidentWrong: rate(cnt.coCwK, cnt.coCwN), abstained: rate(cnt.coAbst, cnt.coN), unknownLabels: cnt.coUnknown },
+    company: { exact: rate(cnt.coExK, cnt.coN), normalized: rate(cnt.coNormK, cnt.coN), confidentWrong: rate(cnt.coCwK, cnt.coCwN), abstained: rate(cnt.coAbst, cnt.coN), unknownLabels: cnt.coUnknown, overreach: rate(cnt.coOverK, cnt.coUnknown) },
     role: { accuracy: rate(cnt.roleK, cnt.roleN), exact: rate(cnt.roleExK, cnt.roleN), unknownLabels: cnt.roleUnknown },
     date: { accuracy: rate(cnt.dateK, cnt.dateN) },
     grouping: { precision: gp, recall: gr, f1: f1(gp.value, gr.value), truePairs: truePairs.size, predictedPairs: predPairs.size },
@@ -305,6 +314,16 @@ export function evaluate(input: EvalInput): EvalReport {
     abstention: { reviewRate: rate(cnt.reviewK, cnt.reviewN), unknownCompanyRate: rate(cnt.unkCoK, cnt.unkCoN) },
     riskCoverage: sweepRows.map((r) => ({ threshold: r.t, coverage: rate(r.covK, r.covN), typeAccuracy: rate(r.typeK, r.typeN), companyAccuracy: rate(r.coK, r.coN) })),
   };
+}
+
+/** sha256 over the sorted (message, field, value) triples of the resolved labels for this dataset's members. */
+export function labelSetHash(labels: Map<string, Partial<Record<LabelField, unknown>>>, members: Set<string>) {
+  const lines: string[] = [];
+  for (const [id, fields] of labels) {
+    if (!members.has(id)) continue;
+    for (const [field, value] of Object.entries(fields)) lines.push(`${id}|${field}|${JSON.stringify(value)}`);
+  }
+  return createHash("sha256").update(lines.sort().join("\n")).digest("hex").slice(0, 16);
 }
 
 /** Of the recruiting predictions people were shown, how many did they correct? Computed from user_correction labels. */
@@ -321,12 +340,12 @@ export function formatReport(r: EvalReport): string {
   const lines = [
     r.banner,
     `dataset ${r.datasetName} (${r.kind})${r.official === null ? "" : r.official ? " · OFFICIAL RUN" : " · CONTAMINATED RUN"} · as of ${r.asOf.slice(0, 10)}`,
-    `labels counted: ${r.labelSources.join(", ")}${Object.keys(r.excludedLabelRows).length ? ` · excluded: ${JSON.stringify(r.excludedLabelRows)}` : ""}`,
+    `labels counted: ${r.labelSources.join(", ")} · label set ${r.labelSetHash}${Object.keys(r.excludedLabelRows).length ? ` · excluded: ${JSON.stringify(r.excludedLabelRows)}` : ""}`,
     `messages ${r.coverage.messages} · labeled recruiting ${r.coverage.labeledRecruiting} · unlabeled ${r.coverage.unlabeled} · no prediction ${r.coverage.unpredicted}`,
     "",
     `recruiting   precision ${pct(r.recruiting.precision)}   recall ${pct(r.recruiting.recall)}   F1 ${r.recruiting.f1 === null ? "n/a" : r.recruiting.f1.toFixed(3)}`,
     `type         accuracy ${pct(r.type.accuracy)}   when detected ${pct(r.type.accuracyWhenDetected)}   confident-wrong ${pct(r.type.confidentWrong)}`,
-    `company      exact ${pct(r.company.exact)}   normalized ${pct(r.company.normalized)}   confident-wrong ${pct(r.company.confidentWrong)}   abstained ${pct(r.company.abstained)}`,
+    `company      exact ${pct(r.company.exact)}   normalized ${pct(r.company.normalized)}   confident-wrong ${pct(r.company.confidentWrong)}   abstained ${pct(r.company.abstained)}   overreach (named an employer the labeler could not) ${pct(r.company.overreach)}`,
     `role         accuracy ${pct(r.role.accuracy)}   exact ${pct(r.role.exact)}`,
     `date         accuracy ${pct(r.date.accuracy)}`,
     `grouping     pair precision ${pct(r.grouping.precision)}   recall ${pct(r.grouping.recall)}   F1 ${r.grouping.f1 === null ? "n/a" : r.grouping.f1.toFixed(3)}`,

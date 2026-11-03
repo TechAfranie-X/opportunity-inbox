@@ -28,6 +28,19 @@ export function classifySender(domain: string, learnedVendors: ReadonlySet<strin
   return "employer";
 }
 
+/**
+ * Brands of the intermediaries themselves (assessment, job-board, scheduling, meeting tools). A message that names
+ * one of them is describing the channel, so the name is never the hiring organisation by text alone.
+ */
+const INTERMEDIARY_LISTS = [ASSESSMENT, JOB_BOARD, SCHEDULER];
+const TOOL_BRANDS = ["zoom", "googlecalendar", "googlemeet", "microsoftteams", "teams", "calendly", "docusign", "greenhouse", "lever", "workday", "ashby", "icims", "smartrecruiters", "jobvite", "taleo", "handshake", "indeed"];
+const flat = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
+const INTERMEDIARY_KEYS = new Set<string>([
+  ...TOOL_BRANDS,
+  ...INTERMEDIARY_LISTS.flatMap((list) => list.map((d) => flat(d.split(".")[0]).replace(/^the/, "")).concat(list.map((d) => flat(d.split(".")[0])))),
+]);
+export const isIntermediaryBrand = (name: string) => INTERMEDIARY_KEYS.has(flat(name));
+
 export const canSupplyEmployer = (kind: SenderKind) => kind === "employer";
 
 /**
@@ -45,7 +58,7 @@ const TENANT_PATTERNS: Array<{ re: RegExp; group: number; label: string }> = [
   { re: /https?:\/\/([a-z0-9][a-z0-9-]{1,40})\.(?:jobs\.)?smartrecruiters\.com|https?:\/\/(?:jobs|careers)\.smartrecruiters\.com\/([a-z0-9][a-z0-9-]{1,40})/gi, group: 1, label: "smartrecruiters" },
   { re: /https?:\/\/([a-z0-9][a-z0-9-]{1,40})\.(?:recruitee|breezy|teamtailor|workable)\.(?:com|hr)/gi, group: 1, label: "ats-site" },
 ];
-const SHARED_TENANT_WORDS = new Set(["www", "jobs", "careers", "career", "apply", "app", "mail", "email", "click", "link", "us", "eu", "api", "my", "login", "candidate", "wd1", "wd3", "wd5", "wd12", "boards", "embed", "external", "external-careers"]);
+const SHARED_TENANT_WORDS = new Set(["www", "jobs", "careers", "career", "apply", "app", "mail", "email", "click", "link", "us", "eu", "api", "my", "login", "candidate", "tracking", "track", "trk", "clicks", "links", "url", "urls", "notify", "notifications", "news", "images", "img", "static", "cdn", "assets", "help", "support", "status", "go", "hire", "hiring", "recruiting", "talent", "s", "e", "em", "wd1", "wd3", "wd5", "wd12", "boards", "embed", "external", "external-careers"]);
 
 export function tenantsFromText(text: string): Array<{ slug: string; label: string }> {
   const found: Array<{ slug: string; label: string }> = [];

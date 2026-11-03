@@ -16,7 +16,7 @@ export const PLATFORM_DOMAINS = [
   "beamery.com", "avature.net", "careerhub.com", "isolvedhire.com", "starred.com",
   "interfolio.com", "emailmeform.com", "linklings.com", "hackerrankforwork.com", "submittable.com",
   "slate.org", "technolutions.com", "formstack.com", "typeform.com", "jotform.com",
-  "yello.co", "smapply.net", "modernhire.com", "zeffy.com", "predictiveindex.com", "fillout.com", "modernloop.io", "formassembly.com", "hirevue.com", "paradox.ai", "olivia.paradox.ai",
+  "yello.co", "12twenty.com", "smapply.net", "modernhire.com", "zeffy.com", "predictiveindex.com", "fillout.com", "modernloop.io", "formassembly.com", "hirevue.com", "paradox.ai", "olivia.paradox.ai",
 ];
 
 const FREE_MAIL = ["gmail.com", "outlook.com", "hotmail.com", "yahoo.com", "icloud.com", "proton.me"];
@@ -188,6 +188,50 @@ export function recoverBrandName(label: string, text: string) {
   return best ?? titleCase(label);
 }
 
+const GENERIC_LABELS = new Set(["www", "mail", "email", "e", "em", "mg", "info", "my", "news", "careers", "career", "jobs", "talent", "recruiting", "recruitment", "hiring", "apply", "hr", "people", "team", "notifications", "notify", "noreply", "alerts", "candidate", "talentcommunity", "co", "com", "org", "net", "edu", "ac", "gov", "uk", "io", "ai"]);
+const ORG_NOUN = new Set(["laboratory", "laboratories", "lab", "labs", "university", "college", "institute", "foundation", "fund", "corporation", "corp", "company", "group", "bank", "capital", "partners", "systems", "technologies", "technology", "association", "society", "council", "center", "centre", "agency", "authority", "academy", "school", "hospital", "clinic", "inc", "llc", "ltd", "holdings", "industries", "services", "solutions", "networks", "research", "equity", "securities", "investments", "trust", "alliance", "initiative"]);
+const JOINERS = new Set(["of", "for", "and", "the", "&"]);
+
+/**
+ * A sender domain is an identity key, not a display name. When the message itself names an organisation that the domain
+ * abbreviates ("tmcf.org" / "Thurgood Marshall College Fund") or is a unit of ("slac.stanford.edu" / "SLAC National
+ * Accelerator Laboratory"), that full name is the better answer, and the most specific domain label wins.
+ * Returns null when the text offers no such name, so a domain alone never invents anything.
+ */
+export function expandOrganization(domain: string, text: string): string | null {
+  const labels = domain.split(".").map((l) => l.toLowerCase().replace(/[^a-z0-9]/g, "")).filter((l) => l.length >= 3 && !GENERIC_LABELS.has(l));
+  if (labels.length === 0) return null;
+  const phrase = /\b[A-Z][\w&'’.-]*(?:\s+(?:(?:of|for|and|the|&)\s+)*[A-Z][\w&'’.-]*){1,6}/g;
+  const flatten = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const counts = new Map<string, number>();
+  for (const m of text.matchAll(phrase)) {
+    const name = m[0].replace(/[.,;:]+$/, "");
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  let best: { name: string; rank: number; count: number } | null = null;
+  for (const [phrase, count] of counts) {
+    // a capitalised run can swallow its neighbours ("Talent Acquisition SLAC National Accelerator Laboratory"): try every start
+    const tokens = phrase.split(/\s+/);
+    for (let from = 0; from < tokens.length - 1; from += 1) {
+      const name = tokens.slice(from).join(" ");
+      const content = tokens.slice(from).filter((t) => !JOINERS.has(t.toLowerCase()));
+      if (content.length < 2) continue;
+      const initials = content.map((t) => t[0].toLowerCase()).join("");
+      const last = flatten(content[content.length - 1]);
+      labels.forEach((label, index) => {
+        const startsWith = flatten(content[0]) === label;
+        const acronym = initials === label && content.length >= 3;
+        const unit = startsWith && ORG_NOUN.has(last);
+        if (!acronym && !unit) return;
+        // most specific label first (leftmost), then the more frequently written name, then the longer one
+        const rank = labels.length - index;
+        if (!best || rank > best.rank || (rank === best.rank && (count > best.count || (count === best.count && name.length > best.name.length)))) best = { name, rank, count };
+      });
+    }
+  }
+  return best ? (best as { name: string }).name : null;
+}
+
 const ORG_WORDS = new Set([
   "ai", "labs", "lab", "capital", "trading", "group", "systems", "space", "bank", "health", "tech", "technologies",
   "software", "partners", "financial", "securities", "investments", "research", "energy", "media", "cloud", "data",
@@ -242,7 +286,7 @@ export function inferCompany(input: {
 
 const ROLE_KW =
   "(?:Intern(?:ship)?|Engineer(?:ing)?|Developer|Analyst|Scientist|Designer|Manager|Associate|Researcher|Consultant|Architect|Specialist|Co-?op|Fellow|Apprentice|Programmer)";
-const ROLE_CAP = `((?<![\\w-])(?:[A-Z0-9][\\w+#&./'’\\-]*\\s+){0,4}${ROLE_KW}(?:\\s+(?:Intern|Co-?op))?(?:\\s*\\([^)]{1,30}\\))?)`;
+const ROLE_CAP = `((?<![\\w-])(?:[A-Z0-9][\\w+#&./'’\\-]*\\s+){0,4}${ROLE_KW}(?:,?\\s+(?:Intern|Co-?op))?(?:\\s*\\([^)]{1,30}\\))?)`;
 
 const ROLE_PATTERNS: RegExp[] = [
   new RegExp(`\\b(?:for|to|as|of)\\s+(?:the\\s+|an?\\s+)?${ROLE_CAP}(?:\\s+(?:position|role|internship|opportunity|job))?`),
@@ -274,7 +318,30 @@ export function cleanRole(role: string, company: string | null): string | null {
   return /[A-Za-z]{4}/.test(value) && value.length >= 4 ? value : null;
 }
 
+/** A field the sender labelled themselves is the most reliable statement of the role: "Requisition: …", "Position: …". */
+const LABELLED_ROLE = /^[ \t>*•-]*(?:requisition|position|job title|role|opportunity|program(?:me)?)(?: title| name)?[ \t]*[:：][ \t]*(.{4,140})$/im;
+/** With no job title, an opportunity is named by its programme: "Innovate Boldly Externship Program", "26th Annual Leadership Institute". */
+const PROGRAM_NAME = new RegExp(`\\b(?:for|in|to|of|our|the)\\s+(?:the\\s+|our\\s+)?((?:\\d+(?:st|nd|rd|th)\\s+)?(?:Annual\\s+)?(?:[A-Z][\\w'’&-]*\\s+){0,5}(?:Program|Programme|Externship|Internship|Fellowship|Institute|Academy|Scholars|Experience))\\b`);
+/** A CamelCase event brand with a year ("BrickFest 2026", "DevCon 2026"). */
+const BRAND_YEAR = /\b([A-Z][a-z]+[A-Z][A-Za-z]+ 20\d\d)\b/;
+
 export function inferRole(subject: string, body: string, company: string | null = null): string | null {
+  const labelled = LABELLED_ROLE.exec(body.slice(0, 2500));
+  if (labelled) {
+    const cleaned = cleanRole(labelled[1].replace(/\s+/g, " ").trim(), company);
+    if (cleaned) return cleaned;
+  }
+  const titled = inferJobTitle(subject, body, company);
+  if (titled) return titled;
+  for (const text of [subject, body.slice(0, 1500)]) {
+    const program = PROGRAM_NAME.exec(text)?.[1] ?? BRAND_YEAR.exec(text)?.[1];
+    const cleaned = program ? cleanRole(program.replace(/\s+/g, " ").trim(), company) : null;
+    if (cleaned) return cleaned;
+  }
+  return null;
+}
+
+function inferJobTitle(subject: string, body: string, company: string | null): string | null {
   const sources: Array<[string, RegExp[]]> = [
     [subject, ROLE_PATTERNS],
     [body.slice(0, 1500), BODY_SAFE_ROLE_PATTERNS],

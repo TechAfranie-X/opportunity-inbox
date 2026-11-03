@@ -1,7 +1,7 @@
 import { parseSender } from "../../opportunities/normalize.ts";
-import { companyFromDisplayName, companyFromText, looksLikePerson, recoverBrandName, registrableLabel } from "../company.ts";
+import { companyFromDisplayName, companyFromText, expandOrganization, looksLikePerson, recoverBrandName, registrableLabel } from "../company.ts";
 import { canonicalBrand, flatKey } from "./aliases.ts";
-import { canSupplyEmployer, classifySender, tenantFromAddress, tenantsFromText, type SenderKind } from "./vendors.ts";
+import { canSupplyEmployer, classifySender, isIntermediaryBrand, tenantFromAddress, tenantsFromText, type SenderKind } from "./vendors.ts";
 
 /**
  * Company (employer) resolution as evidence, not as a string guess.
@@ -16,6 +16,16 @@ import { canSupplyEmployer, classifySender, tenantFromAddress, tenantsFromText, 
  *  I4  Disagreement lowers confidence and is surfaced as an alternative, never resolved silently.
  *  I5  An employer domain maps to one employer: a domain seen serving several employers is a vendor.
  *  I6  A person's name is the recruiter, not the company.
+ *  I7  A domain is an identity key, not a name: when the message names an organisation the domain abbreviates or is a unit of,
+ *      that fuller name is the answer. Without such a name the domain still supports its own brand, nothing more.
+ *  I8  Independent corroboration includes the message naming the candidate: a name the sender block asserts and the text
+ *      never mentions is weaker than one the text confirms (this is what separates "sent by a vendor on behalf of X").
+ *  I9  The intermediary's own brand (assessment platform, job board, scheduler, meeting tool) is never the hiring organisation
+ *      by text alone.
+ *  I10 A descriptor attached to a name already confirmed by the sender ("Alcon" + "'s Innovate Boldly Externship") is the name
+ *      of a programme, not part of the employer.
+ *  I11 An identifier a vendor assigns is only as good as its being a name: infrastructure hostnames exist for every customer,
+ *      and a slug the message never mentions is weaker than one it does.
  */
 
 export type EvidenceSource = "sender_domain" | "display_name" | "reply_to_domain" | "subject" | "body" | "ats_tenant" | "thread" | "context";
@@ -73,10 +83,18 @@ const key = (name: string) => flatKey(canonicalBrand(name));
 const FAMILY: Record<EvidenceSource, string> = { sender_domain: "sender", display_name: "sender", reply_to_domain: "reply", subject: "text", body: "text", ats_tenant: "tenant", thread: "thread", context: "context" };
 
 function candidateFromDomainLabel(domain: string, text: string) {
+  const expanded = expandOrganization(domain, text); // I7
+  if (expanded) return canonicalBrand(expanded);
   const label = registrableLabel(domain);
   if (!label) return null;
   return canonicalBrand(recoverBrandName(label, text));
 }
+
+/** Programme descriptors that follow an employer's name (I10). */
+const PROGRAM_TAIL = /\b(?:program(?:me)?|externship|internship|fellowship|apprenticeship|academy|scholars?|challenge|initiative|experience|institute|summit|fest|week)\b/i;
+const possessiveTail = (tail: string) => /^[’']s\b/.test(tail) || PROGRAM_TAIL.test(tail) || tail.trim().split(/\s+/).length >= 3;
+const withoutAddresses = (text: string) => text.replace(/https?:\/\/\S+/g, " ").replace(/\S+@\S+/g, " ");
+const mentions = (name: string, text: string) => new RegExp(`(?<![\\w])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w])`, "i").test(text);
 
 export function collectEvidence(input: ResolveInput, cfg: ResolverConfig = DEFAULT_RESOLVER_CONFIG) {
   const w = cfg.weights;
@@ -89,6 +107,7 @@ export function collectEvidence(input: ResolveInput, cfg: ResolverConfig = DEFAU
     if (!name) return;
     const canonical = canonicalBrand(name.trim());
     if (canonical.length < 2) return;
+    if (source !== "ats_tenant" && isIntermediaryBrand(canonical)) return; // I9
     evidence.push({ source, name: canonical, key: flatKey(canonical), weight, detail });
   };
   let recruiter: string | null = null;
@@ -120,11 +139,25 @@ export function collectEvidence(input: ResolveInput, cfg: ResolverConfig = DEFAU
   add("body", companyFromText("", body), w.body, "body pattern");
 
   // I2: vendor tenant identifiers.
+  // I11: a slug the message never mentions is weaker than one it does.
+  const flatText = flatKey(withoutAddresses(text));
+  const tenantWeight = (slug: string) => (flatText.includes(flatKey(slug)) ? w.ats_tenant : Math.min(w.ats_tenant, 0.5));
   const tenantAddr = tenantFromAddress(input.from);
-  if (tenantAddr) add("ats_tenant", recoverBrandName(tenantAddr, text), w.ats_tenant, "workday tenant address");
-  for (const t of tenantsFromText(`${input.from}\n${input.replyTo ?? ""}\n${body}`).slice(0, 2)) add("ats_tenant", recoverBrandName(t.slug, text), w.ats_tenant, `${t.label} link`);
+  if (tenantAddr) add("ats_tenant", recoverBrandName(tenantAddr, text), tenantWeight(tenantAddr), "workday tenant address");
+  for (const t of tenantsFromText(`${input.from}\n${input.replyTo ?? ""}\n${body}`).slice(0, 2)) add("ats_tenant", recoverBrandName(t.slug, text), tenantWeight(t.slug), `${t.label} link`);
 
   for (const c of input.threadCompanies ?? []) add("thread", c, w.thread, "same thread");
+
+  // I8: a name the sender block asserts is corroborated when the message itself names it (links and addresses do not count).
+  const prose = withoutAddresses(text);
+  const proseSubject = withoutAddresses(input.subject);
+  const asserted = new Map<string, Evidence>();
+  for (const e of evidence) if (e.source === "sender_domain" || e.source === "display_name" || e.source === "reply_to_domain") asserted.set(e.key, e);
+  for (const e of asserted.values()) {
+    if (e.name.length < 3) continue;
+    if (mentions(e.name, proseSubject)) add("subject", e.name, w.subject, "named in subject");
+    else if (mentions(e.name, prose)) add("body", e.name, w.body, "named in message");
+  }
   return { evidence, senderKind, recruiter };
 }
 
@@ -143,6 +176,16 @@ export function resolveCompany(input: ResolveInput, cfg: ResolverConfig = DEFAUL
     c.best.set(fam, Math.max(c.best.get(fam) ?? 0, e.weight));
     c.items.push(e);
     byKey.set(k, c);
+  }
+
+  // I10: "Alcon's Innovate Boldly Externship" next to a sender-confirmed "Alcon" is a programme of Alcon.
+  const confirmed = [...byKey.values()].filter((c) => c.best.has("sender")).sort((a, b) => b.name.length - a.name.length);
+  for (const [k, c] of [...byKey.entries()]) {
+    const base = confirmed.find((a) => a !== c && c.name.toLowerCase().startsWith(a.name.toLowerCase()) && c.name.length > a.name.length && possessiveTail(c.name.slice(a.name.length)));
+    if (!base) continue;
+    for (const [fam, wt] of c.best) base.best.set(fam, Math.max(base.best.get(fam) ?? 0, wt));
+    base.items.push(...c.items);
+    byKey.delete(k);
   }
 
   const scored = [...byKey.entries()].map(([k, c]) => {
@@ -207,7 +250,7 @@ export function resolveBatch(items: BatchItem[], cfg: ResolverConfig = DEFAULT_R
   // Learn vendors from what the CONTENT says (subject, tenant, "X via Y"), not from the final answer, which the vendor's own
   // domain would otherwise drag into conflict and withhold.
   const contentKey = (res: CompanyResolution) => {
-    const e = [...res.evidence].filter((x) => x.source === "subject" || x.source === "ats_tenant" || x.source === "display_name" || x.source === "body").sort((a, b) => b.weight - a.weight)[0];
+    const e = [...res.evidence].filter((x) => (x.source === "subject" || x.source === "ats_tenant" || x.source === "display_name") && x.weight >= 0.5 && x.detail !== "named in subject").sort((a, b) => b.weight - a.weight)[0];
     return e ? e.key : null;
   };
   const learned = inferVendorDomains(items.map((it) => ({ domain: parseSender(it.from).domain, companyKey: contentKey(first.get(it.id)!) })));

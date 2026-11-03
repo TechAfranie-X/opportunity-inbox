@@ -5,4 +5,4 @@
  *
  * Format: <year>.<month>.<n>-<note>. The note is free text for humans.
  */
-export const EXTRACTOR_VERSION = "2026.11.0-baseline";
+export const EXTRACTOR_VERSION = "2026.11.1-generalization";

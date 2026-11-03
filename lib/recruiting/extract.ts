@@ -1,6 +1,8 @@
 import { parseSender, stripSubjectAnnotations } from "../opportunities/normalize.ts";
-import { companyKey, inferCompany, inferRole } from "./company.ts";
-import { resolveCompany } from "./entity/resolve.ts";
+import { inferRole } from "./company.ts";
+import { classifySender } from "./entity/vendors.ts";
+import { resolveBatch, resolveCompany, type CompanyResolution } from "./entity/resolve.ts";
+import { CONDITIONAL, isAutoReply, isNegativeOutcome, processEvidence } from "./signals.ts";
 import { pickDate } from "./dates.ts";
 import type { EventType, ExtractedEvent, RecruitingEmail } from "./types.ts";
 
@@ -23,11 +25,15 @@ type Rule = {
   weak?: boolean;
   /** Only meaningful in the subject (never matched against the body). */
   subjectOnly?: boolean;
+  /** Structural test used alongside the phrase list, so one wording is not the only way to say it. */
+  extra?: (sentence: string) => boolean;
 };
+
+const ruleMatches = (rule: Rule, text: string) => rule.pattern.test(text) || (rule.extra?.(text) ?? false);
 
 // Order = priority within each tier.
 export const RULES: Rule[] = [
-  { type: "rejection", signal: "rejection", terminal: true,
+  { type: "rejection", signal: "rejection", terminal: true, extra: isNegativeOutcome,
     pattern: /\b(?:not (?:be )?(?:moving|proceeding|going) forward|will not be (?:moving|proceeding)|regret to inform|decided to (?:move|go|proceed|progress|pursue) (?:forward )?with (?:other|another)|(?:pursue|progress with|moving forward with) (?:other|another) (?:candidates?|applicants?)|we (?:have )?filled this role|position has been filled|not (?:been )?selected for|you (?:were|are|have been) not selected|unable to (?:offer you|move (?:you )?forward)|won't be able to move you forward|not able to move forward)\b/i },
   { type: "offer", signal: "offer", terminal: true,
     pattern: /\b(?:pleased to (?:extend|offer)|(?:extend|extending) (?:you )?(?:an? |the )?offer|offer letter|offer of employment|formal offer|excited to offer you|your (?:\w+ )?offer (?:is ready|letter|is attached|has been)|next steps for your (?:\w+ )?offer)\b/i },
@@ -45,7 +51,7 @@ export const RULES: Rule[] = [
   { type: "interview_invite", signal: "interview invite",
     pattern: /\b(?:schedule (?:your |an? |the )?(?:interview|call|conversation|time|chat)|(?:invite|like to invite) you (?:to|for) (?:an? |the )?(?:\w+ )?interview|like to interview you|interview invitation|invitation to (?:an? )?interview|invited to interview|reminder to schedule|select (?:a |your )?(?:time|slot)|(?:share|send) (?:me )?your availability|book (?:a )?(?:time|slot)|pick a time)\b/i },
   { type: "recruiter_outreach", signal: "recruiter outreach",
-    pattern: /\b(?:i(?:'m| am) (?:a |the )?(?:recruiter|sourcer|talent)|reaching out (?:to you )?(?:about|regarding|because)|came across your (?:profile|resume|background|application)|your (?:background|profile) (?:caught|stood|looks)|chat about (?:an? |the )?(?:opportunity|role|position)|quick (?:call|chat)|recruiter screen|phone screen|intro call)\b/i },
+    pattern: /\b(?:i(?:'m| am) (?:a |the )?(?:recruiter|sourcer|talent)|reaching out (?:to you )?(?:about|regarding|because)|came across your (?:profile|resume|background|application)|your (?:background|profile) (?:caught|stood|looks)|chat about (?:an? |the )?(?:opportunity|role|position)|quick (?:call|chat)|recruiter screen|phone screen|intro call|(?:contact|recruiter|representative|employer|someone) (?:from .{1,70}? )?(?:has|have) reached out|job listing[^.\n]{0,60}application deadline)\b/i },
   { type: "applied", signal: "application confirmation", weak: true,
     pattern: /\b(?:thank(?:s| you)\W+(?:\w+\W+){0,2}for (?:applying|your (?:application|interest)|submitting)|(?:we(?:'ve| have) )?received your (?:job )?application|application (?:has been )?(?:received|submitted)|successfully (?:submitted|applied)|you have (?:successfully )?applied|your application (?:to|for|at|with) )\b/i },
   { type: "follow_up", signal: "follow up", weak: true,
@@ -63,15 +69,11 @@ export function stripQuoted(body: string) {
   return head.split("\n").filter((line) => !line.trimStart().startsWith(">")).join("\n");
 }
 
-/** Wording that makes a sentence hypothetical, so it must not decide the event type. */
-export const CONDITIONAL =
-  /\b(?:if|should|in case|in the event|unless|whether|either|candidates who|those who|that means|may be|might|could be|will be contacted|you may be asked|are selected|is selected|when you)\b/i;
-
 /** First rule (in `candidates` order) with an *unconditional* sentence match in the body. */
 function bodyMatch(candidates: Rule[], body: string): Rule | undefined {
   const sentences = body.split(/(?<=[.!?])\s+|\n+/);
   return candidates.find((rule) =>
-    !rule.subjectOnly && sentences.some((sentence) => rule.pattern.test(sentence) && !CONDITIONAL.test(sentence)),
+    !rule.subjectOnly && sentences.some((sentence) => ruleMatches(rule, sentence) && !CONDITIONAL.test(sentence)),
   );
 }
 
@@ -93,7 +95,7 @@ function detectType(subject: string, rawBody: string): Detected | null {
   const weak = RULES.filter((r) => r.weak);
   const hit = (rule: Rule, inSubject: boolean, strength: number): Detected => ({ type: rule.type, signal: rule.signal, inSubject, strength });
 
-  const subjectStrong = strong.find((r) => r.pattern.test(subject));
+  const subjectStrong = strong.find((r) => ruleMatches(r, subject));
   if (subjectStrong) return hit(subjectStrong, true, 0.9);
 
   const terminal = bodyMatch(strong.filter((r) => r.terminal), body);
@@ -102,7 +104,7 @@ function detectType(subject: string, rawBody: string): Detected | null {
   const advancing = bodyMatch(strong.filter((r) => !r.terminal), body);
   if (advancing) return hit(advancing, false, 0.7);
 
-  const subjectWeak = weak.find((r) => r.pattern.test(subject));
+  const subjectWeak = weak.find((r) => ruleMatches(r, subject));
   if (subjectWeak) return hit(subjectWeak, true, 0.55);
 
   const bodyWeak = bodyMatch(weak, body);
@@ -120,49 +122,71 @@ const MARKETING_SUBJECT =
 /** Types a promotion can fake. Rejections, confirmed interviews and assessment receipts are never promotional. */
 const MARKETING_FAKEABLE = new Set<EventType>(["interview_scheduled", "applied", "follow_up", "status_update", "recruiter_outreach", "interview_invite", "assessment", "offer"]);
 
-const AUTO_REPLY = /^\s*(?:automatic reply|auto-?reply|out of office|undeliverable)\b/i;
 const WITHDRAW = /\b(?:withdraw(?:ing)? (?:my|from)|please withdraw|no longer (?:interested|available))\b/i;
 
 const SCHEDULE_TYPES: EventType[] = ["interview_scheduled"];
 const DEADLINE_TYPES: EventType[] = ["assessment", "offer", "interview_invite", "recruiter_outreach"];
 
+/** Types whose phrasing is shared with non-hiring mail: they need evidence of a hiring process (see signals.ts). */
+const NEEDS_PROCESS = new Set<EventType>(["applied", "follow_up", "status_update", "recruiter_outreach", "interview_invite", "offer"]);
+/** Types an event registration, course promotion or marketplace message can imitate. Rejections, scheduled interviews and assessments cannot be faked this way. */
+const EVENT_FAKEABLE = new Set<EventType>(["applied", "follow_up", "status_update", "recruiter_outreach", "interview_invite"]);
+
+/** Why an email was not treated as recruiting activity. Recorded so negatives are explainable, not just absent. */
+export type RejectionReason = "auto_reply" | "transactional" | "no_recruiting_language" | "marketing" | "no_recruiting_context" | "non_hiring_event";
+
+type Classified =
+  | { reject: RejectionReason }
+  | { reject: null; detected: Detected; subject: string; bodyText: string };
+
 /**
- * Extract a structured event from one *inbound* email, or null if it isn't
- * recruiting activity. Outbound mail is handled by `extractAll`.
+ * Stage 1, per message: is this recruiting activity, and of what type? Everything here depends on the message alone.
+ * Stage 2 (company, role, dates) builds on it; the company stage is the only one that benefits from seeing the batch.
  */
+function classify(email: RecruitingEmail): Classified {
+  const subject = email.subject.trim();
+  const bodyText = stripQuoted(email.bodyText);
+  if (isAutoReply(subject, bodyText)) return { reject: "auto_reply" }; // a machine answering for a person: context, never a lifecycle event
+  if (TRANSACTIONAL_SUBJECT.test(subject)) return { reject: "transactional" };
+  const normalizedSubject = stripSubjectAnnotations(subject);
+
+  // A reply's subject is inherited thread history, so only its new text can type it.
+  const isReply = /^\s*(?:re|fwd?)\s*:/i.test(subject);
+  const detected = detectType(isReply ? "" : normalizedSubject, bodyText);
+  if (!detected) return { reject: "no_recruiting_language" };
+  if (MARKETING_FAKEABLE.has(detected.type) && MARKETING_SUBJECT.test(subject)) return { reject: "marketing" };
+
+  // Shared vocabulary needs a hiring process behind it. An event/course/promotion with no candidacy attached is not one.
+  const process = processEvidence(subject, bodyText);
+  if (EVENT_FAKEABLE.has(detected.type) && process.eventLike && !process.candidacy) return { reject: "non_hiring_event" };
+  if (NEEDS_PROCESS.has(detected.type) && !process.anchored) return { reject: "no_recruiting_context" };
+  return { reject: null, detected, subject, bodyText };
+}
+
+/** Extract a structured event from one *inbound* email, or null if it isn't recruiting activity. Outbound mail is handled by `extractAll`. */
 export function extractEvent(email: RecruitingEmail): ExtractedEvent | null {
   return extractWithReason(email).event;
 }
 
-/** Why an email was not treated as recruiting activity. Recorded so negatives are explainable, not just absent. */
-export type RejectionReason = "auto_reply" | "transactional" | "no_recruiting_language" | "marketing" | "no_recruiting_context";
 export type Extraction = { event: ExtractedEvent; reason: null } | { event: null; reason: RejectionReason };
 
-export function extractWithReason(email: RecruitingEmail): Extraction {
-  const reject = (reason: RejectionReason): Extraction => ({ event: null, reason });
-  if (AUTO_REPLY.test(email.subject)) return reject("auto_reply"); // out-of-office / bounce notices are never recruiting events
+export function extractWithReason(email: RecruitingEmail, resolution?: CompanyResolution): Extraction {
+  const c = classify(email);
+  if (c.reject) return { event: null, reason: c.reject };
+  return { event: buildEvent(email, c.detected, c.subject, c.bodyText, resolution), reason: null };
+}
+
+/** Stage 2: company, role, date and confidences for a message already known to be recruiting activity. */
+function buildEvent(email: RecruitingEmail, detected: Detected, subject: string, bodyText: string, given?: CompanyResolution): ExtractedEvent {
   const sender = parseSender(email.from);
-  const subject = email.subject.trim();
-  if (TRANSACTIONAL_SUBJECT.test(subject)) return reject("transactional");
-  const normalizedSubject = stripSubjectAnnotations(subject);
 
+  // The employer comes from evidence, never from a single guess (see entity/resolve.ts); no evidence means no company.
+  const audit = given ?? resolveCompany({ from: email.from, replyTo: email.replyTo, subject, body: bodyText });
+  const company = audit.entity?.name ?? null;
+  const reviewReasons: string[] = [];
+  if (!company) reviewReasons.push(`company: ${audit.reasons[0] ?? "no corroborating evidence"}`);
+  else if (audit.reviewRequired) reviewReasons.push(`company: weak evidence (${[...new Set(audit.evidence.map((e) => e.source))].join(", ") || "none"})`);
 
-  const bodyText = stripQuoted(email.bodyText);
-  // A reply's subject is inherited thread history, so only its new text can type it.
-  const isReply = /^\s*(?:re|fwd?)\s*:/i.test(subject);
-  const detected = detectType(isReply ? "" : normalizedSubject, bodyText);
-  if (!detected) return reject("no_recruiting_language");
-  if (MARKETING_FAKEABLE.has(detected.type) && MARKETING_SUBJECT.test(subject)) return reject("marketing");
-
-  // "offer"/"next steps" words are common in marketing; require some recruiting context.
-  if (
-    (detected.type === "offer" || detected.type === "interview_invite" || detected.type === "follow_up") &&
-    !/\b(?:applica|candidate|interview|role|position|intern|recruit|team|hiring|career|job)\w*/i.test(`${subject} ${bodyText.slice(0, 1500)}`)
-  ) {
-    return reject("no_recruiting_context");
-  }
-
-  const company = inferCompany({ from: email.from, subject, body: bodyText });
   let role = inferRole(subject, bodyText, company);
   if (role && company && role.toLowerCase().startsWith(`${company.toLowerCase()} `)) {
     role = role.slice(company.length + 1); // "Datadog Backend Engineer" -> "Backend Engineer"
@@ -188,29 +212,18 @@ export function extractWithReason(email: RecruitingEmail): Extraction {
     dateKind = "deadline";
   }
 
-  // Second opinion on the employer. The value stays what the existing rules found; the resolver only says how far to trust it.
-  // Agreement carries the resolver's evidence-based confidence; disagreement or silence means "check this".
-  const audit = resolveCompany({ from: email.from, replyTo: email.replyTo, subject, body: bodyText });
-  const reviewReasons: string[] = [];
-  let companyConfidence = 0;
-  if (!company) {
-    reviewReasons.push("company: none found");
-  } else if (audit.entity && companyKey(audit.entity.name) === companyKey(company)) {
-    companyConfidence = audit.confidence;
-    if (audit.reviewRequired) reviewReasons.push(`company: weak evidence (${audit.evidence.map((e) => e.source).join(", ") || "none"})`);
-  } else if (audit.entity) {
-    companyConfidence = Math.min(audit.confidence, 0.3);
-    reviewReasons.push("company: rules and evidence disagree");
-  } else {
-    companyConfidence = Math.min(audit.confidence, 0.35);
-    reviewReasons.push(`company: ${audit.reasons[0] ?? "no corroborating evidence"}`);
+  // A scheduled interview is a confirmed time. Without one the wording may be a confirmation, an invitation or a reminder: say so.
+  let typeConfidence = detected.strength;
+  if (detected.type === "interview_scheduled" && !eventDate) {
+    typeConfidence = Math.min(typeConfidence, 0.4);
+    reviewReasons.push("type: interview wording without a specific time");
   }
 
   let confidence = detected.inSubject ? 0.9 : 0.7;
   if (!company) confidence -= 0.3;
   if (sender.domain.length === 0) confidence -= 0.1;
 
-  const event: ExtractedEvent = {
+  return {
     gmailMessageId: email.id,
     gmailThreadId: email.threadId,
     occurredAt: email.receivedAt,
@@ -226,15 +239,17 @@ export function extractWithReason(email: RecruitingEmail): Extraction {
     dateKind,
     confidence: Math.max(0.2, Math.round(confidence * 100) / 100),
     fieldConfidence: {
-      type: detected.strength,
-      company: Math.round(companyConfidence * 100) / 100,
+      type: typeConfidence,
+      company: Math.round(audit.confidence * 100) / 100,
       role: role ? 0.6 : 0,
     },
     reviewReasons,
     signals: [detected.signal, detected.inSubject ? "subject" : "body"],
   };
-  return { event, reason: null };
 }
+
+/** Role mailboxes and bulk senders: their later mail is not evidence of an ongoing candidacy. */
+const BULK_LOCALPART = /^(?:no-?reply|do-?not-?reply|notifications?|newsletter|marketing|news|info|hello|team|careers?|jobs?|recruit\w*|talent|hr|events?|updates?|alerts?|mailer|admin|support|help|campus|university|students?)\b/i;
 
 /**
  * Extract events from a batch. Outbound (sent) mail is only kept when it sits in
@@ -244,26 +259,37 @@ export function extractWithReason(email: RecruitingEmail): Extraction {
 export function extractAll(emails: RecruitingEmail[]): ExtractedEvent[] {
   const events: ExtractedEvent[] = [];
   const byThread = new Map<string, ExtractedEvent>();
+  const byContact = new Map<string, ExtractedEvent>();
 
-  const unmatched: RecruitingEmail[] = [];
-  for (const email of emails.filter((e) => !e.outbound)) {
-    const event = extractEvent(email);
-    if (!event) {
-      unmatched.push(email);
-      continue;
-    }
+  // Stage 1 for the whole batch, then one company resolution over the accepted messages: a sender domain that serves
+  // several employers is a vendor, and employers found in a thread are evidence for its other messages.
+  const inbound = emails.filter((e) => !e.outbound).map((email) => ({ email, c: classify(email) }));
+  const accepted = inbound.filter((x): x is { email: RecruitingEmail; c: Extract<Classified, { reject: null }> } => x.c.reject === null);
+  const resolutions = resolveBatch(accepted.map(({ email, c }) => ({ id: email.id, threadId: email.threadId, from: email.from, replyTo: email.replyTo, subject: c.subject, body: c.bodyText })));
+
+  const unmatched: Array<{ email: RecruitingEmail; reason: RejectionReason }> = [];
+  for (const { email, c } of inbound) {
+    if (c.reject) { unmatched.push({ email, reason: c.reject }); continue; }
+    const event = buildEvent(email, c.detected, c.subject, c.bodyText, resolutions.get(email.id));
     events.push(event);
     const existing = byThread.get(event.gmailThreadId);
     if (!existing || (!existing.company && event.company)) byThread.set(event.gmailThreadId, event);
+    const sender = parseSender(email.from);
+    if (sender.email && classifySender(sender.domain) === "employer" && !BULK_LOCALPART.test(sender.localPart)) byContact.set(sender.email, event);
   }
 
-  // A reply inside a thread we already know is recruiting activity even when its own
-  // text carries no keywords ("sounds good, see you then"). Keep it as a neutral
-  // update so the timeline is complete, but skip auto-replies.
-  for (const email of unmatched) {
-    const anchor = byThread.get(email.threadId);
-    if (!anchor || AUTO_REPLY.test(email.subject)) continue;
+  // A reply inside a thread we already know is recruiting activity even when its own text carries no keywords
+  // ("sounds good, see you then"); so is mail from a named person at an employer who has already written to the reader
+  // about a candidacy (travel logistics after an offer). Keep these as neutral updates so the timeline is complete.
+  // Auto-replies, promotions and transactional mail are never promoted this way.
+  for (const { email, reason } of unmatched) {
+    if (reason === "auto_reply" || reason === "marketing" || reason === "transactional" || reason === "non_hiring_event") continue;
+    if (processEvidence(email.subject, stripQuoted(email.bodyText)).eventLike) continue; // an invitation to an event is not candidacy traffic, whoever sends it
     const sender = parseSender(email.from);
+    const threadAnchor = byThread.get(email.threadId);
+    const contactAnchor = threadAnchor ? undefined : reason === "no_recruiting_language" ? byContact.get(sender.email) : undefined;
+    const anchor = threadAnchor ?? contactAnchor;
+    if (!anchor) continue;
     events.push({
       gmailMessageId: email.id,
       gmailThreadId: email.threadId,
@@ -278,10 +304,11 @@ export function extractAll(emails: RecruitingEmail[]): ExtractedEvent[] {
       eventDate: null,
       eventDateHasTime: false,
       dateKind: null,
-      confidence: 0.6,
-      fieldConfidence: { type: 0.5, company: Math.round((anchor.fieldConfidence?.company ?? anchor.confidence) * 0.9 * 100) / 100, role: anchor.fieldConfidence?.role ?? 0 },
-      reviewReasons: [],
-      signals: ["reply-in-recruiting-thread"],
+      confidence: contactAnchor ? 0.5 : 0.6,
+      // Continuity by contact is weaker than continuity by thread: flag the type for review.
+      fieldConfidence: { type: contactAnchor ? 0.4 : 0.5, company: Math.round((anchor.fieldConfidence?.company ?? anchor.confidence) * 0.9 * 100) / 100, role: anchor.fieldConfidence?.role ?? 0 },
+      reviewReasons: contactAnchor ? ["type: only linked by sender to an earlier candidacy message"] : [],
+      signals: [contactAnchor ? "known-contact-continuity" : "reply-in-recruiting-thread"],
     });
   }
 

@@ -169,3 +169,13 @@ test("correction rate counts corrected shown predictions, ignoring other sources
   const r = correctionRate(["m1", "m2", "m3", "m4"], corr);
   assert.deepEqual([r.k, r.n], [1, 4]);
 });
+
+test("naming an employer the labeler could not is counted as overreach; the label set has a stable fingerprint", () => {
+  const withOver = evaluate({ ...input, predictions: [...predictions.filter((p) => p.gmailMessageId !== "m7"), pred("m7", "t7", { type: "offer", company: "Invented Inc" })] });
+  assert.deepEqual([withOver.company.overreach.k, withOver.company.overreach.n], [1, 1]);
+  assert.deepEqual([evaluate(input).company.overreach.k, evaluate(input).company.overreach.n], [0, 1]); // m7 has no prediction: nothing was named
+  const a = evaluate(input).labelSetHash;
+  assert.equal(evaluate({ ...input, labels: [...labels].reverse() }).labelSetHash, a); // order-independent
+  assert.notEqual(evaluate({ ...input, labels: [...labels, lab("m9", "is_recruiting", false, "dev_human", new Date("2026-03-02T00:00:00Z"))] }).labelSetHash, a);
+  assert.match(formatReport(evaluate(input)), /label set [0-9a-f]{16}/);
+});
