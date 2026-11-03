@@ -24,7 +24,9 @@ export type Manifest = {
   contextIds: string[];
   /** Members that could not be fetched. They stay in the dataset's definition: failures are never replaced. */
   missing: string[];
-  sampling: { method: "random" | "curated"; seed: string | null; universeSize: number | null; universeQuery: string | null; universeHash: string | null } | null;
+  sampling: { method: "random" | "curated"; seed: string | null; universeSize: number | null; universeQuery: string | null; universeHash: string | null;
+    /** Datasets whose messages (members and thread context) were removed from the universe before sampling, so the sets cannot overlap. */
+    excludedDatasets?: string[]; excludedCount?: number } | null;
 };
 
 type StoredMessage = Omit<RecruitingEmail, "receivedAt"> & { receivedAt: string; role: "member" | "context" };

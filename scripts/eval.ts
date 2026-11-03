@@ -90,7 +90,17 @@ async function main() {
       if (await datasetRow(name)) fail(`dataset "${name}" already exists`);
       const token = await accessTokenFor();
       const query = "newer_than:365d -in:spam -in:trash -in:drafts -in:sent";
-      const universe = await listMessageIds(token, 20000, query);
+      const all = await listMessageIds(token, 20000, query);
+      // --exclude <dataset[,dataset]>: remove every message those snapshots hold (members and thread context) BEFORE sampling,
+      // so a validation set is disjoint from a development set by construction rather than by replacement.
+      const excluded = (flag("exclude") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+      const drop = new Set<string>();
+      for (const other of excluded) {
+        if (!(await datasetRow(other))) fail(`--exclude: dataset "${other}" is not registered`);
+        const m = readSnapshot(other).manifest;
+        for (const id of [...m.memberIds, ...m.contextIds]) drop.add(id);
+      }
+      const universe = all.filter((id) => !drop.has(id));
       const seed = flag("seed") ?? `${name}:${new Date().toISOString()}`;
       const picked = sampleIds(universe, n, seed);
       const { emails, missing } = await fetchEmailsById(token, picked);
@@ -101,7 +111,7 @@ async function main() {
         name, kind, createdAt: new Date().toISOString(), frozenAt: null, manifestHash: null,
         asOf: floating(new Date()).toISOString(), account: flag("account") ?? (kind === "blind" ? "blind-1" : "dev-mailbox"),
         memberIds: picked, contextIds: [...new Set(context.map((c) => c.id))], missing: picked.filter((id) => !have.has(id)).concat(missing),
-        sampling: { method: "random", seed, universeSize: universe.length, universeQuery: query, universeHash: manifestHash(universe) },
+        sampling: { method: "random", seed, universeSize: universe.length, universeQuery: query, universeHash: manifestHash(universe), ...(excluded.length ? { excludedDatasets: excluded, excludedCount: all.length - universe.length } : {}) },
       };
       writeSnapshot(manifest, members, context);
       await createDataset(manifest, new Map(emails.map((e) => [e.id, e.threadId])));
