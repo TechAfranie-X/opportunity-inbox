@@ -69,3 +69,35 @@ Saving an edit, "Not recruiting", "Looks right" or "Undo my edits" in the produc
 - They are not fresh human ground truth (the person saw the prediction), so they never count toward DEV-RANDOM or BLIND headline metrics.
 
 `npm run eval -- migrate-legacy-corrections [--dataset <dev-challenge>]` converts corrections made before this existed into `legacy_reconstructed` labels (idempotent). Their original prediction cannot be proven, so they are regression and DEV-CHALLENGE material only.
+
+## Milestone log: generalization 1 (extractor 2026.11.1-generalization)
+
+**Label revision `semantics-rev-1`.** After the baseline, the product definitions were fixed (clear rejection → rejection; a
+confirmed interview with a specific time → interview_scheduled; a clear offer letter → offer; generic hackathons, webinars,
+bootcamps, newsletters, training programs and ads are not recruiting; automatic out-of-office replies are context). Labels that
+contradicted those definitions were **superseded, not edited**: new `dev_human` rows with labeler `semantics-rev-1`, newest wins,
+the originals stay in the table. 8 messages changed: 2 rejections typed `offer`, 1 confirmed-time interview typed `interview_invite`,
+1 offer letter typed `status_update`, 1 type withdrawn to `unknown` (no definition decides it), and 3 messages turned into
+`is_recruiting = false` (an out-of-office reply and two training-program ads). The revision was made after the baseline predictions
+had been seen, so dev-random-1 is no longer a hidden-prediction set for these 8 messages. The label-set fingerprint printed with
+every report (`label set …`) tells you which revision a number was scored on. Compare runs only when it matches.
+
+**How to read the numbers.** The recorded baseline (label set before the revision) is not directly comparable to a run on the
+revised labels. The "re-scored baseline" row is the *old* extractor on the *new* labels, so the extractor's own change is the
+difference between that row and the new one. The failure analysis that shaped this change used dev-random-1, so the new
+numbers are optimistic by construction. Only BLIND measures generalization.
+
+**Design decisions** (each is a general invariant with a test in `lib/recruiting/generalization.test.ts`):
+- The company is chosen by the evidence resolver alone (the old rule-based guess no longer decides it). Invariants I7–I11 in
+  `entity/resolve.ts`: a domain is an identity key and the fuller name the message uses wins; a name the sender block asserts but the
+  text never mentions is weaker; an intermediary's own brand is never the employer; a programme descriptor is not part of the employer;
+  infrastructure hostnames are not tenants. Vendor learning now uses strong content evidence only.
+- A rejection is detected structurally (negation × progression verb × a decision about the candidacy) instead of by phrase list.
+  The earlier "polite opener outranks the rejection" hypothesis was wrong: tiers already put terminal language first; the wording
+  simply was not covered.
+- Weak hiring vocabulary needs a hiring process behind it; an event/course registration without a candidacy is rejected as
+  `non_hiring_event`; automatic replies are rejected as `auto_reply` (subject or body).
+- Later mail from a named person at an employer who already wrote about a candidacy is linked as a flagged `status_update`
+  (`known-contact-continuity`); bulk/role mailboxes and event invitations never are.
+- Role falls back to a labelled field ("Requisition:", "Position:") and then a programme name when there is no job title.
+- Evaluator additions: employer **overreach** (naming an employer the labeler could not tell) and the label-set fingerprint.
