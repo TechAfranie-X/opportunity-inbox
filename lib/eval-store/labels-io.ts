@@ -12,18 +12,18 @@ export type LabelInput = { gmailMessageId: string; field: LabelField; value: unk
 const ALLOWED_KEYS = new Set(["gmailMessageId", "field", "value", "labeler", "source", "createdAt"]);
 const isNonEmpty = (v: unknown, max: number): v is string => typeof v === "string" && v.trim().length > 0 && v.length <= max;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
-const withUnknown = (list: readonly string[]) => (v: unknown) => typeof v === "string" && (v === UNKNOWN || list.includes(v));
+const withUnknown = (list: readonly string[]) => (v: unknown) => typeof v === "string" && (v === UNKNOWN || v === NOT_APPLICABLE || list.includes(v));
 
 const VALUE_RULES: Record<LabelField, (v: unknown) => boolean> = {
   is_recruiting: (v) => typeof v === "boolean",
   type: withUnknown(EVENT_TYPES),
-  company: (v) => v === UNKNOWN || isNonEmpty(v, 120),
+  company: (v) => v === UNKNOWN || v === NOT_APPLICABLE || isNonEmpty(v, 120),
   role: (v) => v === UNKNOWN || v === NOT_APPLICABLE || isNonEmpty(v, 160),
-  opportunity_ref: (v) => isNonEmpty(v, 64),
+  opportunity_ref: (v) => v === NOT_APPLICABLE || isNonEmpty(v, 64),
   stage: withUnknown(STAGES),
   event_date: (v) => v === UNKNOWN || v === NOT_APPLICABLE || (typeof v === "string" && ISO_DATE.test(v) && !Number.isNaN(Date.parse(v))),
-  actionable: (v) => typeof v === "boolean",
-  urgency: (v) => v === "today" || v === "soon" || v === "none",
+  actionable: (v) => typeof v === "boolean" || v === NOT_APPLICABLE,
+  urgency: (v) => v === "today" || v === "soon" || v === "none" || v === NOT_APPLICABLE,
 };
 
 export type ParseResult = { rows: LabelInput[]; errors: string[] };

@@ -1,5 +1,7 @@
 import { EVENT_TYPES, STAGES, type RecruitingEmail } from "../recruiting/types.ts";
+import { cleanDisplayLine, cleanDisplayText } from "./display-text.ts";
 import { parseLabelsJsonl, type LabelInput } from "./labels-io.ts";
+import { NOT_APPLICABLE } from "../recruiting/ground-truth.ts";
 import type { DatasetKind } from "../recruiting/ground-truth.ts";
 
 /**
@@ -38,24 +40,28 @@ export function renderPage(opts: {
   token: string; index: number; total: number; labeled: number; dataset: string; kind: DatasetKind; asOf: string;
   message: RecruitingEmail; thread: ThreadItem[]; existing: Existing; refs: string[]; error?: string;
 }) {
-  const { message: m, existing: e } = opts;
+  const { message: m } = opts;
+  let e = opts.existing;
   const rec = e.is_recruiting === true ? "yes" : e.is_recruiting === false ? "no" : "";
+  const na = (v: unknown) => (v === NOT_APPLICABLE ? undefined : v);
+  e = { ...e, type: na(e.type), company: na(e.company), opportunity_ref: na(e.opportunity_ref), stage: na(e.stage), urgency: na(e.urgency), actionable: na(e.actionable), role: e.is_recruiting === false ? undefined : e.role, event_date: e.is_recruiting === false ? undefined : e.event_date };
   const company = typeof e.company === "string" ? e.company : "";
   const roleVal = typeof e.role === "string" ? e.role : "";
   const roleMode = e.role === "unknown" ? "unknown" : e.role === "not_applicable" ? "na" : roleVal ? "value" : "";
   const dateVal = typeof e.event_date === "string" && /^\d{4}-\d{2}-\d{2}/.test(e.event_date) ? e.event_date.slice(0, 10) : "";
   const dateMode = e.event_date === "unknown" ? "unknown" : e.event_date === "not_applicable" ? "na" : dateVal ? "value" : "";
-  const body = m.bodyText.length > 20000 ? `${m.bodyText.slice(0, 20000)}\n\n[truncated for display]` : m.bodyText;
+  const cleaned = cleanDisplayText(m.bodyText);
+  const body = cleaned.length > 20000 ? `${cleaned.slice(0, 20000)}\n\n[truncated for display]` : cleaned;
   const thread = opts.thread
-    .map((t) => `<details><summary>${t.outbound ? "You" : esc(t.from)} · ${esc(t.subject)} · ${esc(t.receivedAt.toISOString().slice(0, 10))}</summary><pre>${esc(t.outbound ? "(your reply; text not kept)" : t.bodyText.slice(0, 4000))}</pre></details>`)
+    .map((t) => `<details><summary>${t.outbound ? "You" : esc(cleanDisplayLine(t.from))} · ${esc(cleanDisplayLine(t.subject))} · ${esc(t.receivedAt.toISOString().slice(0, 10))}</summary><pre>${esc(t.outbound ? "(your reply; text not kept)" : cleanDisplayText(t.bodyText).slice(0, 4000))}</pre></details>`)
     .join("");
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Label ${opts.index + 1} of ${opts.total}</title><style>${STYLE}</style>
 <main>
 <section>
   <div class="bar"><span>${esc(opts.dataset)} (${esc(opts.kind)}) · message ${opts.index + 1} of ${opts.total} · ${opts.labeled} labeled</span><span>
     ${opts.index > 0 ? `<a href="/m/${opts.index - 1}?t=${opts.token}">prev</a> · ` : ""}${opts.index + 1 < opts.total ? `<a href="/m/${opts.index + 1}?t=${opts.token}">skip</a>` : ""}</span></div>
-  <h1>${esc(m.subject || "(no subject)")}</h1>
-  <div class="meta">From ${esc(m.from)} · ${esc(m.receivedAt.toISOString().replace("T", " ").slice(0, 16))} UTC</div>
+  <h1>${esc(cleanDisplayLine(m.subject) || "(no subject)")}</h1>
+  <div class="meta">From ${esc(cleanDisplayLine(m.from))} · ${esc(m.receivedAt.toISOString().replace("T", " ").slice(0, 16))} UTC</div>
   <pre>${esc(body)}</pre>
   ${thread ? `<div class="ctx">Other messages in this thread (context only, not labeled):${thread}</div>` : ""}
 </section>
@@ -78,12 +84,18 @@ export function renderPage(opts: {
     <label class="f" style="margin-top:8px">How soon, as of ${esc(opts.asOf.slice(0, 10))}</label><select name="urgency"><option value="">choose…</option>${opt(["today", "soon", "none"], e.urgency)}</select></fieldset>
   </div>
   <div class="row"><button type="submit">Save and next unlabeled</button><button type="submit" class="alt" name="skip" value="1" formnovalidate>Skip for now</button></div>
-  <div class="note">No predictions are loaded in this tool. Leave anything you genuinely cannot determine as “cannot tell”.</div>
+  <div class="note">No predictions are loaded in this tool. Leave anything you genuinely cannot determine as “cannot tell”. Keys: Y / N set recruiting activity, ⌘/Ctrl+Enter saves.</div>
 </form>
 </main>
 <script>
 const f=document.querySelector("form"),d=document.getElementById("detail");
-function sync(){const v=f.recruiting.value;d.style.display=v==="no"?"none":"block"}f.addEventListener("change",sync);sync();
+function sync(){const no=f.recruiting.value==="no";d.style.display=no?"none":"block";d.querySelectorAll("input,select").forEach(function(el){el.disabled=no})}
+f.addEventListener("change",sync);sync();
+document.addEventListener("keydown",function(ev){
+  var t=ev.target&&ev.target.tagName;if(t==="INPUT"&&ev.target.type!=="radio"||t==="SELECT"||ev.metaKey||ev.ctrlKey||ev.altKey)return;
+  if(ev.key==="n"||ev.key==="N"){f.recruiting.value="no";sync()}else if(ev.key==="y"||ev.key==="Y"){f.recruiting.value="yes";sync()}
+});
+f.addEventListener("keydown",function(ev){if((ev.metaKey||ev.ctrlKey)&&ev.key==="Enter")f.requestSubmit()});
 </script></html>`;
 }
 
@@ -96,7 +108,10 @@ export function formToLabels(
   const rec = form.get("recruiting");
   if (rec !== "yes" && rec !== "no") return { error: "Choose whether this is recruiting activity." };
   const out: Array<{ field: string; value: unknown }> = [{ field: "is_recruiting", value: rec === "yes" }];
-  if (rec === "yes") {
+  if (rec === "no") {
+    // One decision plus Save: nothing recruiting-specific applies to a message that is not recruiting activity.
+    for (const field of ["type", "company", "role", "opportunity_ref", "stage", "event_date", "actionable", "urgency"]) out.push({ field, value: NOT_APPLICABLE });
+  } else {
     const type = form.get("type") ?? "";
     if (!type) return { error: "Choose an event type (or “unknown”)." };
     out.push({ field: "type", value: type });

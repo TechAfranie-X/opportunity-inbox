@@ -13,7 +13,7 @@ test("hostile email text is escaped, never executed", () => {
   const html = page(msg({ subject: '<script>alert(1)</script>', bodyText: '"><img src=x onerror=alert(1)>', from: "<b>x</b>" }));
   assert.ok(!html.includes("<script>alert(1)"));
   assert.ok(!html.includes("<img src=x"));
-  assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
+  assert.ok(!html.includes("alert(1)</script>")); // markup is flattened to text before display; whatever remains is escaped
   assert.equal(esc(`&<>"'`), "&amp;&lt;&gt;&quot;&#39;");
 });
 
@@ -33,9 +33,34 @@ test("a complete recruiting form becomes validated, dataset-sourced label rows",
   assert.ok(r.rows.every((x) => x.source === "dev_human" && x.labeler === "me"));
 });
 
-test("'not recruiting' needs only that one answer", () => {
+test("'not recruiting' is one decision: every recruiting-only field is saved as not_applicable", () => {
   const r = formToLabels(form({ recruiting: "no" }), ctx);
-  assert.ok("rows" in r && r.rows.length === 1 && r.rows[0].field === "is_recruiting" && r.rows[0].value === false);
+  assert.ok("rows" in r);
+  if (!("rows" in r)) return;
+  const by = Object.fromEntries(r.rows.map((x) => [x.field, x.value]));
+  assert.equal(by.is_recruiting, false);
+  for (const f of ["type", "company", "role", "opportunity_ref", "stage", "event_date", "actionable", "urgency"]) assert.equal(by[f], "not_applicable", f);
+  assert.equal(r.rows.length, 9);
+  // stray recruiting fields in the same submission cannot sneak in beside a No
+  const r2 = formToLabels(form({ recruiting: "no", type: "offer", company: "Acme" }), ctx);
+  assert.ok("rows" in r2 && r2.rows.find((x) => x.field === "company")?.value === "not_applicable");
+});
+
+test("re-selecting Yes after a No shows empty recruiting fields, not the string 'not_applicable'", () => {
+  const html = page(msg(), { is_recruiting: false, type: "not_applicable", company: "not_applicable", opportunity_ref: "not_applicable", urgency: "not_applicable", actionable: "not_applicable" });
+  assert.ok(!html.includes('value="not_applicable"'));
+  assert.ok(!/<option value="not_applicable"/.test(html));
+  assert.match(html, /name="recruiting" value="no" checked/);
+});
+
+test("the page shows cleaned text (entities decoded, invisible junk gone) for body, subject, sender and thread context", () => {
+  const html = renderPage({ token: "t", index: 0, total: 1, labeled: 0, dataset: "d", kind: "dev_random", asOf: "2026-03-01T09:00:00.000Z",
+    message: msg({ subject: "Your&nbsp;assessment&zwnj;", from: "Acme &lt;jobs@acme.com&gt;", bodyText: "Hello &#847;&zwnj;&#8199;&#65279; due March&nbsp;5" }),
+    thread: [{ from: "Acme", subject: "Re:&nbsp;Hi", receivedAt: new Date("2026-03-01T10:00:00Z"), outbound: false, bodyText: "Earlier&nbsp;note &#65279;" }], existing: {}, refs: [] });
+  assert.ok(html.includes("Hello") && html.includes("due March 5"));
+  assert.ok(!/&amp;#\d+;|&amp;zwnj;|&amp;nbsp;/.test(html), "entities must not show literally");
+  assert.ok(html.includes("Your assessment") && html.includes("Earlier note"));
+  assert.ok(html.includes("Acme &lt;jobs@acme.com&gt;")); // decoded, then re-escaped for display
 });
 
 test("explicit unknown / not-applicable choices are recorded, not left blank", () => {
@@ -69,7 +94,7 @@ test("a BLIND dataset's labels are tagged blind_human", () => {
 
 // The anchoring guarantee: the labeling tool must be structurally unable to see predictions.
 test("the labeling tool cannot read predictions: no extractor, prediction, evaluator or product imports", () => {
-  const sources = ["scripts/label-server.ts", "lib/eval-store/label-page.ts", "lib/eval-store/labels-io.ts"].map((p) => [p, readFileSync(new URL(`../../${p}`, import.meta.url), "utf8")] as const);
+  const sources = ["scripts/label-server.ts", "lib/eval-store/label-page.ts", "lib/eval-store/labels-io.ts", "lib/eval-store/display-text.ts"].map((p) => [p, readFileSync(new URL(`../../${p}`, import.meta.url), "utf8")] as const);
   const forbiddenImports = /from\s+"[^"]*\/(extract|predictions|company|opportunity|product|actions|briefing|history|store|sync|dates|eval|metrics)(\.ts)?"/;
   // evaluator.ts is allowed ONLY for resolveLabels/LabelRow (label arithmetic); it must not be used to score here
   const forbiddenTables = /\b(eventPredictions|recruitingEvents|evalRuns)\b/;
