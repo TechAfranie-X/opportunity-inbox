@@ -96,15 +96,20 @@ function toEmail(message: GmailMessage, includeBody: boolean): RecruitingEmail |
 
 /** Message ids matching a Gmail query (default: the recruiting-looking first filter). */
 export async function listMessageIds(accessToken: string, max: number, query: string = RECRUITING_QUERY) {
-  const ids: string[] = [];
+  return (await listMessageRefs(accessToken, max, query)).map((m) => m.id);
+}
+
+/** Message and thread ids matching a Gmail query. The thread id lets a sampler keep whole conversations out of a set. */
+export async function listMessageRefs(accessToken: string, max: number, query: string = RECRUITING_QUERY) {
+  const ids: Array<{ id: string; threadId: string }> = [];
   let pageToken: string | undefined;
   while (ids.length < max) {
     const url = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
     url.searchParams.set("q", query);
     url.searchParams.set("maxResults", String(Math.min(500, max - ids.length)));
     if (pageToken) url.searchParams.set("pageToken", pageToken);
-    const page = await gmailGet<{ messages?: Array<{ id?: string }>; nextPageToken?: string }>(accessToken, url);
-    ids.push(...(page.messages ?? []).flatMap((m) => (m.id ? [m.id] : [])));
+    const page = await gmailGet<{ messages?: Array<{ id?: string; threadId?: string }>; nextPageToken?: string }>(accessToken, url);
+    ids.push(...(page.messages ?? []).flatMap((m) => (m.id ? [{ id: m.id, threadId: m.threadId ?? "" }] : [])));
     pageToken = page.nextPageToken;
     if (!pageToken) break;
   }

@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { getDb } from "../lib/db/index.ts";
 import { evalDatasetItems, evalDatasets, evalRuns, gmailConnections, labels as labelsTable, recruitingEvents } from "../lib/db/schema.ts";
-import { fetchEmailsById, fetchThreadMessages, listMessageIds } from "../lib/gmail/recruiting-source.ts";
+import { fetchEmailsById, fetchThreadMessages, listMessageRefs } from "../lib/gmail/recruiting-source.ts";
 import { getGmailRefreshToken } from "../lib/gmail/credentials.ts";
 import { refreshGmailAccessToken } from "../lib/gmail/oauth.ts";
 import { evalDir, listDatasets, modeOf, purgeLocal, writePrivateFile } from "../lib/eval-store/private-fs.ts";
@@ -90,17 +90,22 @@ async function main() {
       if (await datasetRow(name)) fail(`dataset "${name}" already exists`);
       const token = await accessTokenFor();
       const query = "newer_than:365d -in:spam -in:trash -in:drafts -in:sent";
-      const all = await listMessageIds(token, 20000, query);
-      // --exclude <dataset[,dataset]>: remove every message those snapshots hold (members and thread context) BEFORE sampling,
-      // so a validation set is disjoint from a development set by construction rather than by replacement.
+      const refs = await listMessageRefs(token, 20000, query);
+      // --exclude <dataset[,dataset]>: remove every message those snapshots hold (members and thread context) AND every other
+      // message in their threads BEFORE sampling, so a validation set is disjoint from a development set by construction,
+      // at message and conversation level, rather than by replacement.
       const excluded = (flag("exclude") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
-      const drop = new Set<string>();
+      const dropIds = new Set<string>();
+      const dropThreads = new Set<string>();
       for (const other of excluded) {
         if (!(await datasetRow(other))) fail(`--exclude: dataset "${other}" is not registered`);
-        const m = readSnapshot(other).manifest;
-        for (const id of [...m.memberIds, ...m.contextIds]) drop.add(id);
+        const snap = readSnapshot(other);
+        for (const id of [...snap.manifest.memberIds, ...snap.manifest.contextIds]) dropIds.add(id);
+        for (const e of [...snap.members, ...snap.context]) if (e.threadId) dropThreads.add(e.threadId);
       }
-      const universe = all.filter((id) => !drop.has(id));
+      const kept = refs.filter((r) => !dropIds.has(r.id) && !(r.threadId && dropThreads.has(r.threadId)));
+      const all = refs.map((r) => r.id);
+      const universe = kept.map((r) => r.id);
       const seed = flag("seed") ?? `${name}:${new Date().toISOString()}`;
       const picked = sampleIds(universe, n, seed);
       const { emails, missing } = await fetchEmailsById(token, picked);
