@@ -1,4 +1,5 @@
 import { parseSender } from "../opportunities/normalize.ts";
+import { roleFromFrames } from "./role.ts";
 
 /** Applicant-tracking / assessment / job-board senders: the sender is NOT the company. */
 export const PLATFORM_DOMAINS = [
@@ -331,6 +332,9 @@ export function inferRole(subject: string, body: string, company: string | null 
     const cleaned = cleanRole(labelled[1].replace(/\s+/g, " ").trim(), company);
     if (cleaned) return cleaned;
   }
+  // What the message says the application/offer/interview is FOR: subject first (shortest, least noisy), then the body.
+  const framed = roleFromFrames(subject, company) ?? roleFromFrames(body.slice(0, 2000), company);
+  if (framed) return framed;
   const titled = inferJobTitle(subject, body, company);
   if (titled) return titled;
   for (const text of [subject, body.slice(0, 1500)]) {

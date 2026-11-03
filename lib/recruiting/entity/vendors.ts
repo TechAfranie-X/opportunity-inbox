@@ -14,6 +14,9 @@ const JOB_BOARD = ["linkedin.com", "indeed.com", "handshake.com", "joinhandshake
 const SCHEDULER = ["calendly.com", "goodtime.io", "modernloop.io", "gem.com", "metaview.ai"];
 const FREEMAIL = ["gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "yahoo.com", "icloud.com", "me.com", "proton.me", "protonmail.com", "aol.com"];
 
+/** Platforms that collect applications for programs, prizes, scholarships and faculty searches: the sender says nothing about employment. */
+const APPLICATION_PORTALS = ["submittable.com", "smapply.net", "slate.org", "technolutions.com", "formstack.com", "typeform.com", "jotform.com", "emailmeform.com", "linklings.com", "fillout.com", "formassembly.com", "zeffy.com", "interfolio.com"];
+
 const inList = (domain: string, list: string[]) => list.some((d) => domain === d || domain.endsWith(`.${d}`));
 
 /** Classify a sender domain. `learnedVendors` are domains this mailbox itself showed to serve several employers. */
@@ -40,6 +43,8 @@ const INTERMEDIARY_KEYS = new Set<string>([
   ...INTERMEDIARY_LISTS.flatMap((list) => list.map((d) => flat(d.split(".")[0]).replace(/^the/, "")).concat(list.map((d) => flat(d.split(".")[0])))),
 ]);
 export const isIntermediaryBrand = (name: string) => INTERMEDIARY_KEYS.has(flat(name));
+
+export const isApplicationPortal = (domain: string) => inList(domain, APPLICATION_PORTALS);
 
 export const canSupplyEmployer = (kind: SenderKind) => kind === "employer";
 

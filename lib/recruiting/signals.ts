@@ -49,18 +49,38 @@ export function isAutoReply(subject: string, body: string): boolean {
 // ---------------------------------------------------------------------------------------------------------------
 // Is this about the reader's hiring process?
 // Weak language ("thank you for your interest", "I'd like to chat", "pick a time") is shared by hiring mail,
-// event registrations, bootcamp promotions and marketplace messages. It only counts as recruiting when the message
-// also shows that a hiring process is involved.
+// event registrations, bootcamp promotions, prize nominations, receipts and marketplace messages. It only counts as
+// recruiting when the message also shows that *employment* is the object: a job, role, position, internship or
+// candidacy, or a sender whose business is hiring. The word "application" alone proves nothing (prizes, scholarships,
+// faculty searches and conference slots all have applications).
 // ---------------------------------------------------------------------------------------------------------------
-const HIRING_ANCHOR = /\b(?:applica(?:tion|nt)s?|appl(?:y|ied|ying)|candidate|candidacy|interview(?:s|ing|er)?|recruit(?:er|ers|ing|ment)|hiring|talent acquisition|requisition|position|role|internships?|interns?|externship|co-?op|fellowship|assessment|offer letter|job (?:opening|posting|listing|description))\b/i;
+const EMPLOYMENT_OBJECT = /\b(?:jobs?|roles?|positions?|internships?|interns?|externships?|co-?op|requisitions?|employment|employer|candidates?|candidacy|hiring|recruit(?:er|ers|ing|ment)|talent acquisition|offer letter|full-time|part-time|apprenticeship|fellowship|interview(?:s|ing|er)?|assessment)\b/i;
 /** Language that ties the message to a specific candidacy rather than to a program or event. */
 const CANDIDACY_ANCHOR = /\b(?:your (?:job |internship )?application (?:for|to|at|with)|you (?:have )?applied (?:for|to)|your candidacy|requisition|job (?:id|number|req)|(?:the |this )?(?:[\w-]+ ){0,3}(?:position|role) (?:of|at|for)|hiring (?:manager|team)|talent acquisition|interview with|recruiter)\b/i;
 /** A registration, event, course or promotion: shared vocabulary of programs that are not a hiring process. */
-const EVENT_CONTEXT = /\b(?:hackathon|webinar|workshop|conference|summit|boot ?camp|info(?:rmation)? session|open house|networking event|career fair|register(?:ed|ing)?|registration|enroll(?:ed|ment|ing)?|tuition|cohorts?|attend(?:ance|ing)?|rsvp|newsletter|discount|coupon|promo(?:tion)?)\b/i;
+const EVENT_CONTEXT = /\b(?:hackathon|webinar|workshop|conference|summit|boot ?camp|info(?:rmation)? session|open house|networking event|career fair|register(?:ed|ing)?|registration|enroll(?:ed|ment|ing)?|tuition|cohorts?|attend(?:ance|ing)?|rsvp|newsletter|discount|coupon|promo(?:tion)?|prize|nominee|nomination|scholarship)\b/i;
+/** Receipts and invoices quote money next to a transaction word; hiring mail does not. */
+const TRANSACTION = /\$\s?\d[\d,]*(?:\.\d{2})\b/;
+const TRANSACTION_WORD = /\b(?:receipt|invoice|subtotal|total|fare|payment|charged|order|trip|refund)\b/i;
+/** "Applications will open on …", "applications are now live": a broadcast about a programme, unless it is written to the reader. */
+const OPENING_ANNOUNCEMENT = /\bapplications?\b[^.\n]{0,90}\b(?:will open|opens?|opening|(?:are|is) (?:now )?(?:open|live)|go(?:es)? live)\b/i;
+const PERSONAL_OUTREACH = /\b(?:reach(?:ing)? out|invite you|we noticed you|you(?:'ve| have) (?:previously )?(?:connected|applied|expressed|started)|your (?:profile|background|resume))\b/i;
 
-export type ProcessEvidence = { anchored: boolean; eventLike: boolean; candidacy: boolean };
+export type Sender = { employment: boolean; employer: boolean };
+export type ProcessEvidence = { anchored: boolean; employment: boolean; eventLike: boolean; candidacy: boolean; transactional: boolean; broadcast: boolean };
 
-export function processEvidence(subject: string, body: string): ProcessEvidence {
+export function processEvidence(subject: string, body: string, sender: Sender = { employment: false, employer: false }): ProcessEvidence {
   const text = `${subject}\n${body.slice(0, 1500)}`;
-  return { anchored: HIRING_ANCHOR.test(text), eventLike: EVENT_CONTEXT.test(`${subject}\n${body.slice(0, 1200)}`), candidacy: CANDIDACY_ANCHOR.test(text) };
+  const head = `${subject}\n${body.slice(0, 600)}`;
+  const employment = EMPLOYMENT_OBJECT.test(text);
+  const candidacy = CANDIDACY_ANCHOR.test(text);
+  return {
+    // an employer's own "application" is about a job; a portal's or a stranger's is not
+    anchored: employment || sender.employment || (sender.employer && /\bapplications?\b/i.test(text)),
+    employment: employment || sender.employment,
+    eventLike: EVENT_CONTEXT.test(`${subject}\n${body.slice(0, 1200)}`),
+    candidacy,
+    transactional: TRANSACTION.test(head) && TRANSACTION_WORD.test(head),
+    broadcast: OPENING_ANNOUNCEMENT.test(head) && !PERSONAL_OUTREACH.test(head) && !candidacy,
+  };
 }

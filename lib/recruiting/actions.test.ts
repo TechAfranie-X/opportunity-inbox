@@ -30,14 +30,14 @@ test("an assessment just past its deadline is still flagged (extension window)",
   assert.equal(a[0]?.bucket, "overdue");
 });
 
-test("an expiry notice is read as the deadline, so it stops nagging", () => {
+test("an expiry notice is a status line, not a task: nothing is left to nag about", () => {
   const email: RecruitingEmail = {
     id: "x", threadId: "tx", from: "CodeSignal <noreply@codesignal.com>", subject: "Request from Acme has expired.",
     receivedAt: new Date(Date.UTC(2026, 8, 1)), outbound: false, bodyText: "Your CodeSignal assessment link has expired.",
   };
   const e = extractEvent(email)!;
-  assert.equal(e.type, "assessment");
-  assert.ok(e.eventDate, "expiry date recorded");
+  assert.equal(e.type, "status_update");
+  assert.equal(e.eventDate, null);
   assert.equal(run([{ ...e, id: "i", corrected: false }]).length, 0);
 });
 

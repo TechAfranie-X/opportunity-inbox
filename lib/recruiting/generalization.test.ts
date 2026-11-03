@@ -48,7 +48,7 @@ test("automatic replies are context, never lifecycle events, whatever recruiting
 });
 
 test("an event registration or course promotion is not a hiring process unless a candidacy is attached", () => {
-  assert.equal(type({ subject: "Registration update", bodyText: "Thank you for your interest in Acme. We have received your registration for the 2026 Code Hackathon. This does not confirm your attendance." }).reason, "non_hiring_event");
+  assert.equal(type({ subject: "Registration update", bodyText: "Thank you for applying to attend the Acme 2026 Code Hackathon. We have received your registration. This does not confirm your attendance." }).reason, "non_hiring_event");
   assert.equal(type({ subject: "Enroll before the deadline", bodyText: "Cohorts are filling. Pick a time to schedule an enrollment call with an advisor." }).reason, "non_hiring_event");
   // the same words with a real candidacy stay recruiting
   assert.equal(type({ subject: "Thank you for applying", bodyText: "We received your application for the Software Engineer Intern position. Registration for the optional info session is open." }).event?.type, "applied");
