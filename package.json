@@ -14,7 +14,8 @@
     "db:migrate": "drizzle-kit migrate",
     "eval": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/eval.ts",
     "eval:purge": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/eval.ts purge",
-    "eval:label": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/label-server.ts"
+    "eval:label": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/label-server.ts",
+    "eval:audit": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/label-audit.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.3",

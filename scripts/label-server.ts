@@ -1,7 +1,10 @@
-// Local labeling tool: npm run eval:label -- --dataset <name> [--labeler <tag>] [--port 4747]
+// Local labeling tool: npm run eval:label -- --dataset <name> [--labeler <tag>] [--port 4747] [--only <ids file>]
+// --only opens REVIEW mode: just those messages, in id order, starting at the first (not the first unlabeled). Saving writes a
+// newer label row that supersedes the old one; nothing is changed unless you press save.
 // Deliberately isolated: it never imports the extractor, predictions or evaluator, and reads only the local snapshot
 // and the `labels` table, so a labeler cannot see (and cannot be anchored by) what the system predicted.
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { asc, eq } from "drizzle-orm";
 import { getDb } from "../lib/db/index.ts";
@@ -28,7 +31,11 @@ const { manifest, members, context } = readSnapshot(datasetName);
 const items = await db.select({ id: evalDatasetItems.gmailMessageId }).from(evalDatasetItems).where(eq(evalDatasetItems.datasetId, row.id));
 const memberSet = new Set(items.map((i) => i.id));
 // Stable, content-independent order: by id hash-free sort, so no one's picks depend on how a message "looks".
-const ordered = members.filter((m) => memberSet.has(m.id)).sort((a, b) => (a.id < b.id ? -1 : 1));
+const onlyFile = args.get("only");
+const only = onlyFile ? new Set(readFileSync(onlyFile, "utf8").split("\n").map((l) => l.trim()).filter(Boolean)) : null;
+if (only) for (const id of only) if (!memberSet.has(id)) { console.error("error: --only lists a message that is not a member of this dataset"); process.exit(1); }
+const ordered = members.filter((m) => memberSet.has(m.id) && (!only || only.has(m.id))).sort((a, b) => (a.id < b.id ? -1 : 1));
+const review = only !== null;
 const token = randomBytes(18).toString("hex");
 
 async function myLabels() {
@@ -68,8 +75,10 @@ const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", `http://${host}`);
     if (url.searchParams.get("t") !== token) return html(res, 403, "forbidden");
     const match = /^\/m\/(\d+)$/.exec(url.pathname);
+    if (url.pathname === "/done") return html(res, 200, `<p style="font:16px system-ui;padding:32px">Review finished: all ${ordered.length} messages shown. Close this tab.</p>`);
 
     if (!match) {
+      if (review) return redirect(res, `/m/0?t=${token}`);
       const { index } = await nextUnlabeled();
       return index < 0 ? html(res, 200, `<p style="font:16px system-ui;padding:32px">All ${ordered.length} messages in ${esc(datasetName)} are labeled. You can close this tab.</p>`) : redirect(res, `/m/${index}?t=${token}`);
     }
@@ -85,9 +94,15 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST") {
       const form = new URLSearchParams(await readBody(req));
       const result = formToLabels(form, { kind, messageId: message.id, labeler });
+      const afterReview = () => redirect(res, index + 1 < ordered.length ? `/m/${index + 1}?t=${token}` : `/done?t=${token}`);
+      if (review && url.pathname.startsWith("/m/") && "skip" in result) return afterReview();
       if ("skip" in result) { const n = await nextUnlabeled(index + 1); return redirect(res, n.index < 0 ? `/?t=${token}` : `/m/${n.index}?t=${token}`); }
       if ("error" in result) return html(res, 422, page(result.error));
-      await db.insert(labelsTable).values(result.rows.map((r) => ({ datasetId: row.id, gmailMessageId: r.gmailMessageId, field: r.field, value: r.value as never, source: r.source, labeler: r.labeler })));
+      // In review, pressing save on a label you agree with must not write anything: only genuine changes supersede.
+      const before = mine.get(message.id) ?? {};
+      const changed = review ? result.rows.filter((r) => JSON.stringify((before as Record<string, unknown>)[r.field]) !== JSON.stringify(r.value)) : result.rows;
+      if (changed.length > 0) await db.insert(labelsTable).values(changed.map((r) => ({ datasetId: row.id, gmailMessageId: r.gmailMessageId, field: r.field, value: r.value as never, source: r.source, labeler: r.labeler })));
+      if (review) return afterReview();
       const n = await nextUnlabeled(index + 1);
       return redirect(res, n.index < 0 ? `/?t=${token}` : `/m/${n.index}?t=${token}`);
     }
@@ -99,7 +114,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(port, "127.0.0.1", () => {
-  console.log(`Labeling ${datasetName} (${kind}) as "${labeler}", ${ordered.length} messages. Predictions are not loaded in this process.`);
+  console.log(`${review ? "REVIEW mode: " : ""}Labeling ${datasetName} (${kind}) as "${labeler}", ${ordered.length} messages. Predictions are not loaded in this process.`);
   console.log(`Open: http://127.0.0.1:${port}/?t=${token}`);
   console.log("Press Ctrl+C when done. Labels are saved as you go (append-only).");
 });

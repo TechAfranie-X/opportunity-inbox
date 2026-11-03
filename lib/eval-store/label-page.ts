@@ -83,7 +83,7 @@ export function renderPage(opts: {
   <fieldset><legend>Does this message need the reader to act?</legend><div class="row">${radio("actionable", [["yes", "Yes"], ["no", "No"]], e.actionable === true ? "yes" : e.actionable === false ? "no" : "")}</div>
     <label class="f" style="margin-top:8px">How soon, as of ${esc(opts.asOf.slice(0, 10))}</label><select name="urgency"><option value="">choose…</option>${opt(["today", "soon", "none"], e.urgency)}</select></fieldset>
   </div>
-  <div class="row"><button type="submit">Save and next unlabeled</button><button type="submit" class="alt" name="skip" value="1" formnovalidate>Skip for now</button></div>
+  <div class="row"><button type="submit">Save and next</button><button type="submit" class="alt" name="skip" value="1" formnovalidate>Skip for now</button></div>
   <div class="note">No predictions are loaded in this tool. Leave anything you genuinely cannot determine as “cannot tell”. Keys: Y / N set recruiting activity, ⌘/Ctrl+Enter saves.</div>
 </form>
 </main>
