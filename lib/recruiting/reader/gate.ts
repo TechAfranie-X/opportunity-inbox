@@ -5,7 +5,7 @@ import type { RecruitingEmail } from "../types.ts";
  * while spending fewer calls. A message the rules already call recruiting always passes, so the model can always
  * second-guess a rules "yes".
  */
-export type GateId = "G0-loose" | "G1-process" | "G2-process-unbulk";
+export type GateId = "G0-loose" | "G1-process" | "G2-process-unbulk" | "G-all";
 
 const ATS = /(greenhouse|lever\.co|ashbyhq|icims|myworkday|workday|smartrecruiters|jobvite|taleo|successfactors|handshake|interfolio|modernloop|hackerrank|codesignal|hirevue|12twenty|oraclecloud|brassring|breezy|workable|bamboohr)/i;
 
@@ -18,7 +18,7 @@ const PROCESS = /\b(your (application|candidacy|submission|interview|assessment|
 const PERSONAL = /\b(your (application|candidacy|submission|interview|assessment)|you (applied|have applied|started|submitted)|thank you for (applying|your application)|we received your)\b/i;
 
 export function passGate(id: GateId, email: Pick<RecruitingEmail, "from" | "subject" | "bodyText">, rulesYes: boolean): boolean {
-  if (rulesYes) return true;
+  if (rulesYes || id === "G-all") return true; // G-all: reference reads for architecture research only, never a production gate
   const ats = ATS.test(email.from);
   switch (id) {
     case "G0-loose":

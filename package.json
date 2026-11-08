@@ -16,7 +16,8 @@
     "eval:purge": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/eval.ts purge",
     "eval:label": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/label-server.ts",
     "eval:audit": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/label-audit.ts",
-    "reader": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/reader-shadow.ts"
+    "reader": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/reader-shadow.ts",
+    "arch": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/arch-lab.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.3",
