@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { signOut } from "@/auth";
 import { fromInputValue } from "@/lib/recruiting/format";
@@ -18,7 +17,6 @@ import {
   setOpportunityStatus,
 } from "@/lib/recruiting/store";
 import { isSyncLocked } from "@/app/sync-lock";
-import { readShadowConfig } from "@/lib/recruiting/shadow/config";
 import { syncRecruitingMail } from "@/lib/recruiting/sync";
 import { EVENT_TYPES, type EventType } from "@/lib/recruiting/types";
 
@@ -32,22 +30,8 @@ const SYNC_ERRORS = {
   temporary_error: "Couldn't reach Gmail. Try again in a minute.",
 } as const;
 
-/**
- * Architecture v2 shadow mode (READER_V2_SHADOW=1; off by default). Runs AFTER the response, so it can neither slow nor
- * fail the user's sync, and it only writes the shadow_reads table, which nothing in the product reads. Loaded lazily so a
- * disabled flag costs nothing. Errors are reduced to a type name: no message content is ever logged.
- */
-function scheduleShadowCollection(sub: string) {
-  if (!readShadowConfig().enabled) return;
-  after(async () => {
-    try {
-      const { collectShadow } = await import("@/lib/recruiting/shadow/collect");
-      await collectShadow(sub);
-    } catch (error) {
-      console.error("shadow collection failed:", error instanceof Error ? error.name : "unknown");
-    }
-  });
-}
+// Evaluation evidence (shadow_reads) is collected only by the guarded CLI run from the frozen checkout on main
+// (`npm run shadow -- collect`). The product never collects it: this branch is not byte-identical to the evaluated candidate.
 
 export async function syncAction(): Promise<SyncState> {
   const sub = await requireUserSub();
@@ -56,7 +40,6 @@ export async function syncAction(): Promise<SyncState> {
   const result = await syncRecruitingMail(sub);
   if (!result.ok) return { status: "error", message: SYNC_ERRORS[result.reason], reconnect: result.reason === "reconnect_required" };
   await recordUsage(sub, "sync");
-  scheduleShadowCollection(sub);
   revalidatePath("/", "layout");
   return { status: "idle", remaining: result.remaining, fetched: result.fetched, events: result.events };
 }

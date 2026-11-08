@@ -43,3 +43,10 @@ test("pressing Looks right (confirmed) settles an item without changing any valu
   assert.equal(unchanged.company, target.company);
   assert.equal(unchanged.type, target.type);
 });
+
+import { plainReason } from "./review.ts";
+test("reasons shown to the person are sentences, not extractor labels", () => {
+  assert.match(plainReason("company: sender is ats: not used as the employer"), /could not tell which employer/);
+  assert.match(plainReason("company: weak evidence (sender_domain, display_name)"), /not confident about the company/);
+  for (const r of ["type: low", "role: odd", "something else"]) assert.doesNotMatch(plainReason(r), /^(company|type|role):/);
+});
