@@ -39,3 +39,8 @@ cd ~/Projects/opportunity-inbox && npm run shadow -- collect --user <mailbox has
 
 ## Ending the freeze
 After the single analysis has been recorded, the owner may merge `mvp` into `main` (`FREEZE_OVERRIDE=1`). Until then, never.
+
+## Do not merge `mvp` into `main` until the evaluation analysis is done
+`mvp` changes `lib/recruiting`, `lib/gmail` and other frozen paths, so merging it (or tagging it) before the single analysis would
+end the prospective evaluation, and the push hook on `main` will refuse it. Ship the product from `mvp` until then. The product
+never collects evaluation evidence (`lib/product-isolation.test.ts`); that stays a guarded CLI job on the frozen checkout.
