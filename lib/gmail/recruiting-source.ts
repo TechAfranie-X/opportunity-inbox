@@ -12,7 +12,7 @@ import type { RecruitingEmail } from "@/lib/recruiting/types";
  * cheap first filter — the extractor decides what is actually recruiting.
  * Scope stays gmail.readonly; nothing is modified in the mailbox.
  */
-const RECRUITING_QUERY = [
+export const RECRUITING_QUERY = [
   "newer_than:365d",
   "-in:spam -in:trash -in:sent -in:drafts",
   "(",
@@ -196,4 +196,24 @@ export async function fetchOutboundInThreads(accessToken: string, threadIds: str
       return email?.outbound ? [email] : [];
     }),
   );
+}
+
+/**
+ * Sender and arrival time only (format=metadata, one header). No body is requested. Used by shadow mode to record that a
+ * sampled message exists without reading it.
+ */
+export async function fetchMessageMetadata(accessToken: string, ids: string[]): Promise<Array<{ id: string; threadId: string; from: string; receivedAt: Date }>> {
+  const found = await inBatches(ids, 3, async (id) => {
+    const url = new URL(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}`);
+    url.searchParams.set("format", "metadata");
+    url.searchParams.append("metadataHeaders", "From");
+    try {
+      const email = toEmail(await gmailGet<GmailMessage>(accessToken, url), false);
+      return email ? [{ id: email.id, threadId: email.threadId, from: email.from, receivedAt: email.receivedAt }] : [];
+    } catch (error) {
+      if (error instanceof GmailAccessError && error.reason === "reconnect_required") throw error;
+      return [];
+    }
+  });
+  return found.flat();
 }

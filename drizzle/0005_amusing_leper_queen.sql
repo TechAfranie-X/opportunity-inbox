@@ -1,0 +1,1 @@
+ALTER TABLE "shadow_reads" ADD COLUMN "legacy_query_match" boolean;

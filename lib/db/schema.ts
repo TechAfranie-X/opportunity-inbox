@@ -248,3 +248,69 @@ export const evalRuns = pgTable(
     uniqueIndex("eval_runs_one_official_per_dataset").on(table.datasetId).where(sql`${table.official}`),
   ],
 );
+
+/**
+ * Architecture v2 SHADOW reads: what the v2 pipeline decided for a message, kept for old-vs-new comparison and a future
+ * human-review workflow. Never read by the product UI. By construction there is no column for a body, subject, snippet
+ * or model quote (a test enforces this); the model's evidence is a hash plus an offset, as in the reader cache.
+ * `cohort`, `uniform_arm` and `arrived_at` are fixed at ingestion, before any model output exists, so a prospective
+ * evaluation cannot be steered by what the system said (docs/prospective-evaluation-protocol.md).
+ */
+export const shadowReads = pgTable(
+  "shadow_reads",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userGoogleSub: text("user_google_sub").notNull(),
+    gmailMessageId: text("gmail_message_id").notNull(),
+    gmailThreadId: text("gmail_thread_id").notNull(),
+    readerVersion: text("reader_version").notNull(),
+    pipelineVersion: text("pipeline_version").notNull(),
+    extractorVersion: text("extractor_version").notNull(),
+    arrivedAt: timestamp("arrived_at", { withTimezone: true }).notNull(),
+    senderDomain: text("sender_domain").notNull(),
+    /** 'historical' (arrived before the prospective cutoff, or no cutoff set) or 'prospective'. */
+    cohort: text("cohort").notNull(),
+    /** Deterministic uniform-sample arm, assigned from a hash of (user, message) at ingestion. */
+    uniformArm: boolean("uniform_arm").notNull(),
+    /** Routing: did the candidate query match, and will the model read it. */
+    isCandidate: boolean("is_candidate").notNull(),
+    /** Would the CURRENT product's keyword query have fetched this message? Null: not recorded (rows from before the column existed). */
+    legacyQueryMatch: boolean("legacy_query_match"),
+    plannedRead: boolean("planned_read").notNull(),
+    planReason: text("plan_reason").notNull(),
+    // Rules reader (the frozen extractor)
+    rulesRecruiting: boolean("rules_recruiting").notNull(),
+    rulesType: text("rules_type"),
+    rulesCompany: text("rules_company"),
+    rulesRole: text("rules_role"),
+    // Model reader, after deterministic verification. Null until a worker output is imported.
+    modelStatus: text("model_status"),
+    modelRecruiting: boolean("model_recruiting"),
+    modelType: text("model_type"),
+    modelStage: text("model_stage"),
+    modelCompany: text("model_company"),
+    modelRole: text("model_role"),
+    modelCertainty: text("model_certainty"),
+    modelEvidenceHash: text("model_evidence_hash"),
+    modelRejections: jsonb("model_rejections").$type<string[]>(),
+    modelReadAt: timestamp("model_read_at", { withTimezone: true }),
+    // Resolution (consensus-and-review)
+    state: text("state").notNull(),
+    reviewReason: text("review_reason"),
+    modelSuggests: text("model_suggests"),
+    typeReview: boolean("type_review").notNull().default(false),
+    companyReview: boolean("company_review").notNull().default(false),
+    roleReview: boolean("role_review").notNull().default(false),
+    finalType: text("final_type"),
+    finalCompany: text("final_company"),
+    finalRole: text("final_role"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("shadow_reads_user_message_version_unique").on(table.userGoogleSub, table.gmailMessageId, table.readerVersion),
+    index("shadow_reads_user_state_idx").on(table.userGoogleSub, table.state),
+    check("shadow_reads_state_check", sql`${table.state} in ('recruiting', 'not_recruiting', 'review')`),
+    check("shadow_reads_cohort_check", sql`${table.cohort} in ('historical', 'prospective')`),
+  ],
+);
