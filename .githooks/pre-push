@@ -1,0 +1,24 @@
+#!/bin/sh
+# Refuse to (1) push a main whose evaluation-critical paths differ from the freeze tag, or (2) move or delete a freeze tag.
+# Override: FREEZE_OVERRIDE=1.
+[ "$FREEZE_OVERRIDE" = "1" ] && exit 0
+TAG=arch-v2-shadow-candidate-2
+zero=0000000000000000000000000000000000000000
+while read local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/tags/arch-v2-shadow-candidate-*)
+      if [ "$remote_sha" != "$zero" ] && [ "$local_sha" != "$remote_sha" ]; then
+        echo "refusing to move or delete the freeze tag ${remote_ref#refs/tags/}" >&2; exit 1
+      fi ;;
+    refs/heads/main)
+      [ "$local_sha" = "$zero" ] && continue
+      changed=$(git diff --name-only "$TAG" "$local_sha" -- lib app drizzle auth.ts next.config.ts scripts/shadow.ts scripts/prospective.ts scripts/loader 2>/dev/null)
+      if [ -n "$changed" ]; then
+        echo "refusing to push main: these paths differ from $TAG (the frozen evaluation environment):" >&2
+        echo "$changed" | sed 's/^/  - /' >&2
+        echo "Product work belongs on the mvp branch. See docs/development-workflow.md." >&2
+        exit 1
+      fi ;;
+  esac
+done
+exit 0

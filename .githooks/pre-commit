@@ -1,0 +1,14 @@
+#!/bin/sh
+# Evaluation seatbelt (docs/development-workflow.md). On the `main` branch only documentation and the guard tooling may change;
+# everything else is the frozen evaluation environment. Product work belongs on the `mvp` branch. Override: FREEZE_OVERRIDE=1.
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+[ "$branch" = "main" ] || exit 0
+[ "$FREEZE_OVERRIDE" = "1" ] && exit 0
+bad=$(git diff --cached --name-only | grep -v -E '^(docs/|\.githooks/|scripts/freeze-guard|README\.md$|package\.json$|\.gitignore$)')
+if [ -n "$bad" ]; then
+  echo "refusing to commit to main: these paths belong to the frozen evaluation environment:" >&2
+  echo "$bad" | sed 's/^/  - /' >&2
+  echo "Do product work on the mvp branch (separate worktree). See docs/development-workflow.md." >&2
+  exit 1
+fi
+exit 0
