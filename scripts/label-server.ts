@@ -11,7 +11,7 @@ import { getDb } from "../lib/db/index.ts";
 import { evalDatasetItems, evalDatasets, labels as labelsTable } from "../lib/db/schema.ts";
 import { formToLabels, renderPage, esc } from "../lib/eval-store/label-page.ts";
 import { readSnapshot } from "../lib/eval-store/snapshot.ts";
-import { resolveLabels, type LabelRow } from "../lib/recruiting/evaluator.ts";
+import { resolveLabels, type LabelRow } from "../lib/eval-store/resolve-labels.ts";
 import { DATASET_KINDS, SOURCE_FOR_DATASET, type DatasetKind } from "../lib/recruiting/ground-truth.ts";
 
 const args = new Map<string, string>();

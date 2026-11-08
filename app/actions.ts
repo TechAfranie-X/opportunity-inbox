@@ -16,6 +16,7 @@ import {
   recordUsage,
   setOpportunityStatus,
 } from "@/lib/recruiting/store";
+import { isSyncLocked } from "@/app/sync-lock";
 import { syncRecruitingMail } from "@/lib/recruiting/sync";
 import { EVENT_TYPES, type EventType } from "@/lib/recruiting/types";
 
@@ -31,6 +32,8 @@ const SYNC_ERRORS = {
 
 export async function syncAction(): Promise<SyncState> {
   const sub = await requireUserSub();
+  // Checked before any Gmail, extractor or database work. See app/sync-lock.ts.
+  if (isSyncLocked()) return { status: "error", message: "Sync is disabled during BLIND setup.", reconnect: false };
   const result = await syncRecruitingMail(sub);
   if (!result.ok) return { status: "error", message: SYNC_ERRORS[result.reason], reconnect: result.reason === "reconnect_required" };
   await recordUsage(sub, "sync");
