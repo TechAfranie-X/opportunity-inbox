@@ -30,7 +30,9 @@ const cmd = argv[0];
 const args = new Map<string, string>();
 for (let i = 1; i < argv.length; i += 1) if (argv[i].startsWith("--")) args.set(argv[i].slice(2), argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[++i] : "true");
 const selfNames = (args.get("self-names") ?? process.env.READER_SELF_NAMES ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-const DATASETS = ["dev-random-1", "validation-1", "validation-2"];
+const DATASETS = (args.get("datasets") ?? "dev-random-1,validation-1,validation-2").split(",").map((x) => x.trim()).filter(Boolean);
+// Non-decisional sensitivity analyses only: message ids (one per line) removed from every metric.
+const EXCL = new Set(args.get("exclude-ids") ? readFileSync(args.get("exclude-ids")!, "utf8").split("\n").map((x) => x.trim()).filter(Boolean) : []);
 const GATES: GateId[] = ["G0-loose", "G1-process", "G2-process-unbulk"];
 
 type Row = {
@@ -76,7 +78,7 @@ const wil = (k: number, n: number) => {
 const isYes = (r: Row) => r.label.is_recruiting === true;
 const f1 = (tp: number, fp: number, fn: number) => { const p = tp / (tp + fp || 1), rc = tp / (tp + fn || 1); return `P ${(100 * p).toFixed(1)} R ${(100 * rc).toFixed(1)} F1 ${((2 * p * rc) / (p + rc || 1)).toFixed(3)}  TP/FP/FN/TN`; };
 
-const rows = await load();
+const rows = (await load()).filter((r) => !EXCL.has(r.id));
 
 if (cmd === "gate-report") {
   console.log(`gate report · ${rows.length} messages · ${rows.filter(isYes).length} labeled recruiting (development data: gate choices below are fitted to it)`);
@@ -175,7 +177,7 @@ if (cmd === "report") {
       if (lt && lt !== "unknown" && lt !== "not_applicable") { bump("type_n"); if (typeShown === lt) bump("type_ok"); }
       const lc = r.label.company;
       const compShown = who === "recon" ? rec.company : reading.recruiting ? reading.company : null;
-      if (typeof lc === "string" && lc !== "unknown" && lc !== "not_applicable") { bump("co_n"); if (compShown && sameOrg(compShown, lc)) bump("co_ok"); if (compShown && !sameOrg(compShown, lc)) bump("co_wrong"); if (!compShown) bump("co_abstain"); }
+      if (typeof lc === "string" && lc !== "unknown" && lc !== "not_applicable") { bump("co_n"); if (compShown && compShown.trim().toLowerCase() === lc.trim().toLowerCase()) bump("co_exact"); if (compShown && sameOrg(compShown, lc)) bump("co_ok"); if (compShown && !sameOrg(compShown, lc)) bump("co_wrong"); if (!compShown) bump("co_abstain"); }
       const lr = labelViewRole(r.label.role);
       const roleShown = who === "recon" ? rec.role : reading.recruiting ? reading.role : null;
       if (lr !== "unknown") { bump("role_n"); if (lr === "not_applicable" ? !roleShown : !!roleShown && sameOrg(roleShown, lr)) bump("role_ok"); }
@@ -272,6 +274,36 @@ if (cmd === "report") {
     let recDiff = 0;
     for (const r of rows) { const a = reconcile(r.rules, get(r, runA)).state, b = reconcile(r.rules, get(r, runB)).state; if (a !== b) recDiff += 1; }
     console.log(`reconciled state (recruiting / not_recruiting / review) differs for ${wil(recDiff, rows.length)} of all messages`);
+  }
+
+  if (args.get("bars") === "true") {
+    // Pass-bar table for the reconciled (confident-region) result, with intervals. Definitions are the report's own, unchanged.
+    const a = score(rows, "recon", runA);
+    const tp = a.TP ?? 0, fp = a.FP ?? 0, fn = a.FN ?? 0, tn = a.TN ?? 0, revPos = a.revPos ?? 0, revNeg = a.revNeg ?? 0;
+    const prec = tp / (tp + fp || 1), rec = tp / (tp + fn || 1), f1v = (2 * prec * rec) / (prec + rec || 1);
+    // Percentile bootstrap over messages for F1 (fixed seed), because the positives are few and Wilson has no F1 form.
+    let st = 20261108; const rnd = () => { st = (st + 0x6d2b79f5) | 0; let t = Math.imul(st ^ (st >>> 15), 1 | st); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const cls = rows.map((r) => { const rc = reconcile(r.rules, get(r, runA)); return rc.state === "review" ? 0 : (rc.state === "recruiting") === isYes(r) ? (isYes(r) ? 1 : 0) : isYes(r) ? 3 : 2; }); // 1 TP, 2 FP, 3 FN
+    const f1s: number[] = [];
+    for (let b = 0; b < 2000; b += 1) { let T = 0, F = 0, N = 0; for (let i = 0; i < cls.length; i += 1) { const c = cls[Math.floor(rnd() * cls.length)]; if (c === 1) T += 1; else if (c === 2) F += 1; else if (c === 3) N += 1; } f1s.push((2 * T) / (2 * T + F + N || 1)); }
+    f1s.sort((x, y) => x - y);
+    const ci = (k: number, n: number) => { if (!n) return [NaN, NaN]; const z = 1.96, p = k / n, d = 1 + (z * z) / n, c = p + (z * z) / (2 * n), m = z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n)); return [(c - m) / d, (c + m) / d]; };
+    const pct = (x: number) => (Number.isFinite(x) ? (100 * x).toFixed(1) : "n/a");
+    const ver = (v: number, bar: number, upper = false) => (upper ? v <= bar : v >= bar) ? "PASS" : "FAIL";
+    const row = (label: string, k: number, n: number, bar: number, upper = false) => { const [lo, hi] = ci(k, n); const v = n ? k / n : NaN; const barOk = n ? ver(v, bar, upper) : "n/a"; const clear = n ? (upper ? hi <= bar : lo >= bar) : false; return `${label.padEnd(34)} ${pct(v).padStart(6)}%  [${pct(lo)}-${pct(hi)}]  (${k}/${n})  bar ${upper ? "<=" : ">="} ${pct(bar)}%  point: ${barOk}  interval clears bar: ${clear ? "yes" : "NO"}`; };
+    console.log(`\n== PASS-BAR TABLE (reconciled, confident region; ${rows.length} messages, ${rows.filter(isYes).length} labeled recruiting; Wilson 95%)`);
+    console.log(`reconciled TP/FP/FN/TN ${tp}/${fp}/${fn}/${tn}; in review: ${revPos} labeled-Yes, ${revNeg} labeled-No`);
+    console.log(row("1 recruiting precision", tp, tp + fp, 0.8));
+    console.log(row("2 recruiting recall", tp, tp + fn, 0.8));
+    console.log(`${"3 recruiting F1".padEnd(34)} ${pct(f1v).padStart(6)}   [${pct(f1s[Math.floor(0.025 * f1s.length)])}-${pct(f1s[Math.floor(0.975 * f1s.length)])}] (bootstrap)  bar >= 85.0  point: ${f1v >= 0.85 ? "PASS" : "FAIL"}  interval clears bar: ${f1s[Math.floor(0.025 * f1s.length)] >= 0.85 ? "yes" : "NO"}`);
+    console.log(row("4 event-type accuracy", a.type_ok ?? 0, a.type_n ?? 0, 0.8));
+    console.log(row("5 company normalized accuracy", a.co_ok ?? 0, a.co_n ?? 0, 0.8));
+    console.log(row("6 role accuracy", a.role_ok ?? 0, a.role_n ?? 0, 0.7));
+    console.log(row("7 error when readers agree", agreeWrong, agree, 0.02, true));
+    console.log(row("8 review / disagreement rate", review, rows.length, 0.08, true));
+    console.log(`${"9 ungrounded values surviving".padEnd(34)} ${String(survivors).padStart(6)}   bar = 0  point: ${survivors === 0 ? "PASS" : "FAIL"}`);
+    console.log(`context (not a bar): company EXACT (case-insensitive string equality) ${a.co_exact ?? 0}/${a.co_n ?? 0}; company wrong ${a.co_wrong ?? 0}, abstained ${a.co_abstain ?? 0}`);
+    console.log(`context (not a bar): recall counting review-routed labeled-Yes as misses = ${tp}/${tp + fn + revPos} (${pct(tp / (tp + fn + revPos || 1))}%); review-routed labeled-Yes: ${revPos}`);
   }
   process.exit(0);
 }

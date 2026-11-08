@@ -19,6 +19,8 @@ The 133 processed messages and their threads are **not excluded** from sampling.
 
 Universe query (same as every other dataset): `newer_than:365d -in:spam -in:trash -in:drafts -in:sent`. No `--exclude`.
 
+Outcome: see `docs/blind-1-amended-result.md` (formal pre-registered result: FAIL; low statistical confidence).
+
 ## Sampling (declared before running)
 - Dataset name: `blind-1-amended`, kind `blind` (the only kind with the one-official-run protection), account tag `blind-1-amended`.
 - n = 600 (fewer only if the universe is smaller). Seed: `blind-1-amended:2026-11-08`.
