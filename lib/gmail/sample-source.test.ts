@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runSync } from "../recruiting/sync-engine.ts";
 import { sampleMailSource } from "./sample-source.ts";
 import { isSampleLoginEnabled, isSampleUser } from "./sample.ts";
 

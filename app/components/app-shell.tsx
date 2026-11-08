@@ -9,9 +9,10 @@ import { SearchButton } from "@/app/components/search-button";
 import { SyncControl } from "@/app/components/sync-control";
 import { ThemeControl } from "@/app/components/theme-control";
 import { WorkspaceProvider } from "@/app/components/workspace";
+import { buildReviewQueue } from "@/lib/recruiting/review";
 import type { Opportunity } from "@/lib/recruiting/types";
 
-type NavId = "today" | "pipeline" | "activity";
+type NavId = "today" | "pipeline" | "activity" | "review";
 
 const NAV: Array<{ id: NavId; label: string; href: string; demoHref: string }> = [
   { id: "today", label: "Today", href: "/today", demoHref: "/demo" },
@@ -49,6 +50,8 @@ export function AppShell({
   now: Date;
   children: ReactNode;
 }) {
+  const reviewCount = demo ? 0 : buildReviewQueue(opportunities).length;
+  const nav = reviewCount > 0 || active === "review" ? [...NAV, { id: "review" as NavId, label: reviewCount > 0 ? `Check ${reviewCount}` : "Check", href: "/review", demoHref: "/demo" }] : NAV;
   const hrefOf = (item: (typeof NAV)[number]) => (demo ? item.demoHref : item.href);
   const initial = firstName(user?.name, user?.email).charAt(0);
 
@@ -62,7 +65,7 @@ export function AppShell({
               <span className="max-sm:hidden">Opportunity Inbox</span>
             </Link>
             <nav className="flex items-center gap-1 max-md:hidden" aria-label="Primary">
-              {NAV.map((item) => (
+              {nav.map((item) => (
                 <Link key={item.id} href={hrefOf(item)} className="nav-link" aria-current={item.id === active ? "page" : undefined}>
                   {item.label}
                 </Link>
@@ -120,7 +123,7 @@ export function AppShell({
       </div>
 
       <nav className="tabbar glass" aria-label="Primary">
-        {NAV.map((item) => (
+        {nav.map((item) => (
           <Link key={item.id} href={hrefOf(item)} aria-current={item.id === active ? "page" : undefined}>
             {item.label}
           </Link>

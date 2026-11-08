@@ -413,7 +413,7 @@ export function ActivityStream({ opportunities, now }: { opportunities: Opportun
 
 /* --------------------------------------------------------- Opportunity page */
 
-function EventEditor({ event }: { event: EffectiveEvent }) {
+export function EventEditor({ event }: { event: EffectiveEvent }) {
   return (
     <form action={editEventAction} className="grid gap-4 pb-1 pt-5 sm:grid-cols-2">
       <input type="hidden" name="eventId" value={event.id} />
