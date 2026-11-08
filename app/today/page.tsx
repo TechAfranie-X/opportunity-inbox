@@ -10,6 +10,10 @@ import { toFloating } from "@/lib/recruiting/actions";
 import { buildBriefing } from "@/lib/recruiting/briefing";
 import { loadWorkspace, recordUsage } from "@/lib/recruiting/store";
 
+/** A read older than this is refreshed when the user opens Today (throttled in the browser). */
+const STALE_AFTER_MS = 6 * 3_600_000;
+const syncIsStale = (last: Date | null, now: Date) => last !== null && now.getTime() - last.getTime() > STALE_AFTER_MS;
+
 export const metadata = { title: "Today · Opportunity Inbox" };
 
 export default async function TodayPage() {
@@ -29,7 +33,7 @@ export default async function TodayPage() {
   const updated = workspace.lastSyncedAt?.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
   return (
-    <AppShell active="today" user={session?.user} updated={updated} autoSync={neverSynced && !isSyncLocked()}opportunities={workspace.opportunities} now={now}>
+    <AppShell active="today" user={session?.user} updated={updated} autoSync={isSyncLocked() ? false : neverSynced ? "first" : syncIsStale(workspace.lastSyncedAt, real) ? "stale" : false}opportunities={workspace.opportunities} now={now}>
       <Greeting name={name} hour={real.getHours()} needsYou={needs}>
         <span>{today}</span>
       </Greeting>

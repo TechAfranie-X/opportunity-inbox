@@ -309,6 +309,38 @@ const BULK_LOCALPART = /^(?:no-?reply|do-?not-?reply|notifications?|newsletter|m
  * a thread that already has an inbound recruiting event — that is how we learn
  * the user replied, without ingesting the rest of their sent mail.
  */
+/** What a reply needs from the recruiting event that anchors its thread. */
+export type ThreadAnchor = Pick<ExtractedEvent, "gmailThreadId" | "company" | "role" | "confidence" | "fieldConfidence">;
+
+/**
+ * The event for one of the user's own messages in a thread we know is recruiting. Shared by the full extraction and by the
+ * incremental sync's reply refresh, so a reply is described identically however it was found. Outbound bodies are never read
+ * (metadata only), so withdrawal and follow-up detection use the subject.
+ */
+export function outboundEvent(email: RecruitingEmail, anchor: ThreadAnchor): ExtractedEvent {
+  const withdrawn = WITHDRAW.test(`${email.subject} ${email.bodyText.slice(0, 1000)}`);
+  const followUp = RULES.find((r) => r.type === "follow_up")!.pattern.test(`${email.subject} ${email.bodyText.slice(0, 600)}`);
+  return {
+    gmailMessageId: email.id,
+    gmailThreadId: email.threadId,
+    occurredAt: email.receivedAt,
+    outbound: true,
+    senderName: "You",
+    senderDomain: "",
+    subject: email.subject.trim(),
+    type: withdrawn ? "withdrawn" : followUp ? "follow_up" : "user_reply",
+    company: anchor.company,
+    role: anchor.role,
+    eventDate: null,
+    eventDateHasTime: false,
+    dateKind: null,
+    confidence: 0.9,
+    fieldConfidence: { type: 0.9, company: anchor.fieldConfidence?.company ?? anchor.confidence, role: anchor.fieldConfidence?.role ?? 0 },
+    reviewReasons: [],
+    signals: ["outbound-in-recruiting-thread"],
+  };
+}
+
 export function extractAll(emails: RecruitingEmail[]): ExtractedEvent[] {
   const events: ExtractedEvent[] = [];
   const byThread = new Map<string, ExtractedEvent>();
@@ -367,28 +399,7 @@ export function extractAll(emails: RecruitingEmail[]): ExtractedEvent[] {
 
   for (const email of emails.filter((e) => e.outbound)) {
     const anchor = byThread.get(email.threadId);
-    if (!anchor) continue;
-    const withdrawn = WITHDRAW.test(`${email.subject} ${email.bodyText.slice(0, 1000)}`);
-    const followUp = RULES.find((r) => r.type === "follow_up")!.pattern.test(`${email.subject} ${email.bodyText.slice(0, 600)}`);
-    events.push({
-      gmailMessageId: email.id,
-      gmailThreadId: email.threadId,
-      occurredAt: email.receivedAt,
-      outbound: true,
-      senderName: "You",
-      senderDomain: "",
-      subject: email.subject.trim(),
-      type: withdrawn ? "withdrawn" : followUp ? "follow_up" : "user_reply",
-      company: anchor.company,
-      role: anchor.role,
-      eventDate: null,
-      eventDateHasTime: false,
-      dateKind: null,
-      confidence: 0.9,
-      fieldConfidence: { type: 0.9, company: anchor.fieldConfidence?.company ?? anchor.confidence, role: anchor.fieldConfidence?.role ?? 0 },
-      reviewReasons: [],
-      signals: ["outbound-in-recruiting-thread"],
-    });
+    if (anchor) events.push(outboundEvent(email, anchor));
   }
 
   inheritRoles(events);
@@ -401,7 +412,8 @@ export function extractAll(emails: RecruitingEmail[]): ExtractedEvent[] {
  * only when there is exactly one (two roles at one employer is ambiguous, so nothing is guessed). Inherited roles are
  * low-confidence by construction.
  */
-function inheritRoles(events: ExtractedEvent[]) {
+/** Fill a missing role from the same thread, or from the one role a company shows within 90 days. Idempotent: only empty roles change. */
+export function inheritRoles(events: ExtractedEvent[]) {
   const threadRole = new Map<string, string>();
   const withRole = events.filter((e) => !e.outbound && e.role);
   for (const e of withRole) if (!threadRole.has(e.gmailThreadId)) threadRole.set(e.gmailThreadId, e.role!);

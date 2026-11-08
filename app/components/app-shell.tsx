@@ -34,7 +34,7 @@ export function AppShell({
   demo = false,
   user,
   updated,
-  autoSync = false,
+  autoSync = false as false | "first" | "stale",
   opportunities,
   now,
   children,
@@ -44,7 +44,7 @@ export function AppShell({
   user?: { name?: string | null; email?: string | null };
   /** Preformatted time of the last sync. */
   updated?: string;
-  autoSync?: boolean;
+  autoSync?: false | "first" | "stale";
   opportunities: Opportunity[];
   now: Date;
   children: ReactNode;

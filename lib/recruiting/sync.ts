@@ -1,47 +1,58 @@
 import "server-only";
 
-import { getGmailRefreshToken } from "@/lib/gmail/credentials";
-import { GmailAccessError, refreshGmailAccessToken } from "@/lib/gmail/oauth";
-import { fetchInboundCandidates, fetchOutboundInThreads } from "@/lib/gmail/recruiting-source";
-import { extractAll } from "@/lib/recruiting/extract";
+import { GmailAccessError } from "@/lib/gmail/oauth";
+import { embargoBefore } from "@/lib/gmail/embargo";
+import { mailSourceFor } from "@/lib/gmail/source";
+import { outboundEvent, extractAll } from "@/lib/recruiting/extract";
 import { buildPredictions } from "@/lib/recruiting/predictions";
-import { markSynced, pruneReclassified, saveExtractedEvents, savePredictions } from "@/lib/recruiting/store";
+import { countEvents, evaluatedMessageIds, inheritStoredRoles, markSynced, pruneReclassified, recentThreadAnchors, saveExtractedEvents, savePredictions } from "@/lib/recruiting/store";
+import { runSync, type EngineResult, type SyncStore } from "@/lib/recruiting/sync-engine";
 
 export type SyncResult =
-  | { ok: true; scanned: number; events: number }
+  | ({ ok: true } & EngineResult)
   | { ok: false; reason: "not_connected" | "reconnect_required" | "temporary_error" };
 
+/** One request reads at most this long, then reports what is left and lets the caller continue. */
+const BUDGET_MS = 150_000;
+const MAX_CANDIDATES = 600;
+const THREADS_PER_CHUNK = 20;
+const RECENT_DAYS = 30;
+
+const storeFor = (sub: string): SyncStore => ({
+  evaluatedIds: (ids) => evaluatedMessageIds(sub, ids),
+  saveEvents: (events) => saveExtractedEvents(sub, events),
+  savePredictions: async (p) => { await savePredictions(sub, p); },
+  prune: async (scanned, kept) => { await pruneReclassified(sub, scanned, kept); },
+  recentAnchors: (days) => recentThreadAnchors(sub, days),
+  inheritRoles: async () => { await inheritStoredRoles(sub); },
+  finish: async (scanned) => {
+    const events = await countEvents(sub);
+    await markSynced(sub, scanned, events);
+    return { events };
+  },
+});
+
 /**
- * Gmail -> structured events -> Postgres.
+ * Gmail -> structured events -> Postgres, incrementally (see lib/recruiting/sync-engine.ts for the rules).
  *
- * Privacy contract: message bodies live only inside this function's call stack.
- * Only `ExtractedEvent` fields (no body text) reach the database.
+ * Privacy contract: message bodies live only inside the engine's call stack. Only `ExtractedEvent` fields (no body text)
+ * reach the database.
  */
 export async function syncRecruitingMail(userGoogleSub: string): Promise<SyncResult> {
   try {
-    const refreshToken = await getGmailRefreshToken(userGoogleSub);
-    if (!refreshToken) return { ok: false, reason: "not_connected" };
-
-    const accessToken = await refreshGmailAccessToken(refreshToken);
-    const inbound = await fetchInboundCandidates(accessToken);
-    const inboundEvents = extractAll(inbound.emails);
-    const outbound = await fetchOutboundInThreads(accessToken, inboundEvents.map((e) => e.gmailThreadId));
-    const events = extractAll([...inbound.emails, ...outbound]);
-
-    await saveExtractedEvents(userGoogleSub, events);
-    try {
-      await savePredictions(userGoogleSub, buildPredictions([...inbound.emails, ...outbound]));
-    } catch {
-      // The prediction log is evaluation evidence, not product function: never fail a sync over it, and never log content.
-      console.error("prediction log failed");
-    }
-    await pruneReclassified(
-      userGoogleSub,
-      inbound.emails.map((e) => e.id),
-      events.map((e) => e.gmailMessageId),
-    );
-    await markSynced(userGoogleSub, inbound.scanned, events.length);
-    return { ok: true, scanned: inbound.scanned, events: events.length };
+    const source = await mailSourceFor(userGoogleSub);
+    if (!source) return { ok: false, reason: "not_connected" };
+    const result = await runSync(source, storeFor(userGoogleSub), {
+      maxCandidates: MAX_CANDIDATES,
+      threadsPerChunk: THREADS_PER_CHUNK,
+      budgetMs: BUDGET_MS,
+      recentDays: RECENT_DAYS,
+      embargoBefore: embargoBefore(),
+      extract: extractAll,
+      predict: buildPredictions,
+      outboundEvent,
+    });
+    return { ok: true, ...result };
   } catch (error) {
     if (error instanceof GmailAccessError) {
       return { ok: false, reason: error.reason === "reconnect_required" ? "reconnect_required" : "temporary_error" };

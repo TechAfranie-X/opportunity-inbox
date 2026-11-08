@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   actionDismissals,
@@ -32,6 +32,8 @@ import {
   type OpportunityOverride,
 } from "@/lib/recruiting/opportunity";
 import type { Prediction } from "@/lib/recruiting/predictions";
+import { inheritRoles, type ThreadAnchor } from "@/lib/recruiting/extract";
+import { EXTRACTOR_VERSION } from "@/lib/recruiting/version";
 import type {
   ActionItem,
   EffectiveEvent,
@@ -356,4 +358,64 @@ export async function resetEvent(userGoogleSub: string, eventId: string) {
     await appendUserLabels(tx, userGoogleSub, row, draftsFromReset(predictedValues(row), await priorUserLabels(tx, userGoogleSub, row.gmailMessageId)));
     await tx.update(recruitingEvents).set({ correction: null }).where(eq(recruitingEvents.id, eventId));
   });
+}
+
+/** Which of these messages the CURRENT extractor has already evaluated (recruiting or not): they need no second read. */
+export async function evaluatedMessageIds(userGoogleSub: string, ids: string[], extractorVersion = EXTRACTOR_VERSION): Promise<Set<string>> {
+  const found = new Set<string>();
+  const db = getDb();
+  for (let i = 0; i < ids.length; i += 500) {
+    const rows = await db
+      .select({ id: eventPredictions.gmailMessageId })
+      .from(eventPredictions)
+      .where(and(eq(eventPredictions.userGoogleSub, userGoogleSub), eq(eventPredictions.extractorVersion, extractorVersion), inArray(eventPredictions.gmailMessageId, ids.slice(i, i + 500))));
+    for (const r of rows) found.add(r.id);
+  }
+  return found;
+}
+
+/** One anchor per thread with activity in the last `days`: the earliest inbound event, preferring one that names a company. */
+export async function recentThreadAnchors(userGoogleSub: string, days: number, now = new Date()): Promise<ThreadAnchor[]> {
+  const db = getDb();
+  const since = new Date(now.getTime() - days * 86_400_000);
+  const recent = await db.select({ t: recruitingEvents.gmailThreadId }).from(recruitingEvents).where(and(eq(recruitingEvents.userGoogleSub, userGoogleSub), gte(recruitingEvents.occurredAt, since)));
+  const threads = [...new Set(recent.map((r) => r.t))];
+  const anchors = new Map<string, ThreadAnchor>();
+  for (let i = 0; i < threads.length; i += 500) {
+    const rows = await db
+      .select({ t: recruitingEvents.gmailThreadId, company: recruitingEvents.company, role: recruitingEvents.role, confidence: recruitingEvents.confidence, fieldConfidence: recruitingEvents.fieldConfidence })
+      .from(recruitingEvents)
+      .where(and(eq(recruitingEvents.userGoogleSub, userGoogleSub), inArray(recruitingEvents.gmailThreadId, threads.slice(i, i + 500)), eq(recruitingEvents.outbound, false)))
+      .orderBy(asc(recruitingEvents.occurredAt));
+    for (const r of rows) {
+      const current = anchors.get(r.t);
+      if (!current || (!current.company && r.company)) anchors.set(r.t, { gmailThreadId: r.t, company: r.company, role: r.role, confidence: r.confidence, fieldConfidence: r.fieldConfidence ?? undefined });
+    }
+  }
+  return [...anchors.values()];
+}
+
+export async function countEvents(userGoogleSub: string): Promise<number> {
+  const [row] = await getDb().select({ n: count() }).from(recruitingEvents).where(eq(recruitingEvents.userGoogleSub, userGoogleSub));
+  return Number(row?.n ?? 0);
+}
+
+/**
+ * Apply the extractor's role-inheritance rule across every stored event of this user. A single full extraction does this over the
+ * whole batch; a sync split into chunks (or run incrementally) must do it over what is stored, or events in different chunks
+ * would lose roles they would have inherited. Idempotent: it only fills roles that are empty.
+ */
+export async function inheritStoredRoles(userGoogleSub: string): Promise<number> {
+  const db = getDb();
+  const rows = await db.select().from(recruitingEvents).where(eq(recruitingEvents.userGoogleSub, userGoogleSub));
+  const events = rows.map(rowToExtracted);
+  const before = new Map(events.map((e) => [e.id, e.role]));
+  inheritRoles(events);
+  let changed = 0;
+  for (const e of events) {
+    if (e.role === before.get(e.id)) continue;
+    await db.update(recruitingEvents).set({ role: e.role, fieldConfidence: e.fieldConfidence ?? null, signals: e.signals }).where(and(eq(recruitingEvents.id, e.id), eq(recruitingEvents.userGoogleSub, userGoogleSub)));
+    changed += 1;
+  }
+  return changed;
 }

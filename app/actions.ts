@@ -23,7 +23,7 @@ import { syncRecruitingMail } from "@/lib/recruiting/sync";
 import { EVENT_TYPES, type EventType } from "@/lib/recruiting/types";
 
 export type SyncState =
-  | { status: "idle" }
+  | { status: "idle"; /** Unread candidate mail left by this request; when above zero the client continues automatically. */ remaining?: number; fetched?: number; events?: number }
   | { status: "error"; message: string; reconnect: boolean };
 
 const SYNC_ERRORS = {
@@ -58,7 +58,7 @@ export async function syncAction(): Promise<SyncState> {
   await recordUsage(sub, "sync");
   scheduleShadowCollection(sub);
   revalidatePath("/", "layout");
-  return { status: "idle" };
+  return { status: "idle", remaining: result.remaining, fetched: result.fetched, events: result.events };
 }
 
 function text(form: FormData, name: string, max = 160) {
