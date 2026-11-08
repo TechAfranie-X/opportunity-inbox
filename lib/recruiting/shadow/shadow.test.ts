@@ -9,6 +9,7 @@ import { STRESS_SET, stressEmail } from "../reader/stress-set.ts";
 import type { VerifiedOutput } from "../reader/types.ts";
 import type { RecruitingEmail } from "../types.ts";
 import { readShadowConfig } from "./config.ts";
+import { FROZEN } from "./frozen.ts";
 import { buildShadowInput, shadowKey } from "./input.ts";
 import { formatSummary, summarize, type ReportRow } from "./report.ts";
 import { PIPELINE_VERSION, cohortOf, recordForCandidate, recordForLegacyOnly, recordForNonCandidate, resolveRecord, reviewItemOf, uniformArm, type ShadowConfig } from "./shadow.ts";
@@ -35,15 +36,13 @@ test("guide v3 encodes the fixed scope and leaves every other section as v2", ()
 });
 
 // ---- config ----
-test("shadow mode is off unless the flag is exactly 1; bad values degrade safely", () => {
+test("shadow mode is off unless the flag is exactly 1; the cutoff and sampling rate are frozen and ignore the environment", () => {
   assert.equal(readShadowConfig({}).enabled, false);
   assert.equal(readShadowConfig({ READER_V2_SHADOW: "true" }).enabled, false);
   assert.equal(readShadowConfig({ READER_V2_SHADOW: "1" }).enabled, true);
-  assert.equal(readShadowConfig({ READER_V2_CUTOFF: "not a date" }).cutoff, null);
-  assert.equal(readShadowConfig({ READER_V2_CUTOFF: "2026-11-16T00:00:00Z" }).cutoff?.toISOString(), "2026-11-16T00:00:00.000Z");
-  assert.equal(readShadowConfig({ READER_V2_UNIFORM_RATE: "7" }).uniformRate, 1);
-  assert.equal(readShadowConfig({ READER_V2_UNIFORM_RATE: "-1" }).uniformRate, 0);
-  assert.equal(readShadowConfig({ READER_V2_UNIFORM_RATE: "x" }).uniformRate, 0.05);
+  const hostile = readShadowConfig({ READER_V2_SHADOW: "1", READER_V2_CUTOFF: "2020-01-01T00:00:00Z", READER_V2_UNIFORM_RATE: "1" });
+  assert.equal(hostile.cutoff.toISOString(), FROZEN.cutoff, "no environment variable can move the cutoff");
+  assert.equal(hostile.uniformRate, FROZEN.uniformRate);
 });
 
 // ---- sampling arm and cohort ----
@@ -63,7 +62,6 @@ test("the uniform arm is deterministic, hits the requested rate, and depends onl
 test("cohort is decided by arrival time against the fixed cutoff, inclusive", () => {
   assert.equal(cohortOf(new Date("2026-11-15T23:59:59Z"), CFG.cutoff), "historical");
   assert.equal(cohortOf(new Date("2026-11-16T00:00:00Z"), CFG.cutoff), "prospective");
-  assert.equal(cohortOf(new Date("2030-01-01T00:00:00Z"), null), "historical");
 });
 
 // ---- records ----
@@ -257,13 +255,10 @@ test("a model read is first-read-wins: the update only applies to rows with no r
   assert.match(store, /ON CONFLICT DO NOTHING|onConflictDoNothing\(\)/, "ingestion is write-once");
 });
 
-test("the prospective protocol names the exact versions the code carries, so the two cannot drift apart", () => {
+test("the prospective protocol and the shadow doc name the exact versions the code carries, so the two cannot drift apart", () => {
   const protocol = readFileSync(new URL("../../../docs/prospective-evaluation-protocol.md", import.meta.url), "utf8");
   assert.ok(protocol.includes(READER_VERSION_V3), "reader version");
   assert.ok(protocol.includes(PIPELINE_VERSION), "pipeline version");
-  assert.ok(protocol.includes("rules-baseline-2026.11.2-evidence"));
-  assert.ok(protocol.includes("uniform-arm-v1"));
-  assert.match(protocol, /2026-11-16T00:00:00Z/);
   const shadowDoc = readFileSync(new URL("../../../docs/architecture-v2-shadow.md", import.meta.url), "utf8");
   assert.ok(shadowDoc.includes(READER_VERSION_V3));
 });

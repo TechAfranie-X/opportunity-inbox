@@ -9,6 +9,7 @@ import type { ReaderType, VerifiedOutput } from "../reader/types.ts";
 import type { RecruitingEmail } from "../types.ts";
 import { EXTRACTOR_VERSION } from "../version.ts";
 import { readShadowConfig, type ShadowConfig } from "./config.ts";
+import { FROZEN } from "./frozen.ts";
 
 export { readShadowConfig, type ShadowConfig };
 
@@ -19,7 +20,7 @@ export { readShadowConfig, type ShadowConfig };
  * Privacy contract: a ShadowRecord has no field for message text, subject or quotes. Structured values (company, role,
  * type) are the same kind the product already stores in recruiting_events.
  */
-export const PIPELINE_VERSION = "arch-v2.0";
+export const PIPELINE_VERSION: string = FROZEN.pipelineVersion;
 
 /**
  * Deterministic uniform-sample membership, fixed by a hash of (user, message) alone. It cannot depend on content or on
@@ -30,8 +31,8 @@ export function uniformArm(userSub: string, messageId: string, rate: number): bo
   return h.readUInt32BE(0) / 0x1_0000_0000 < rate;
 }
 
-export const cohortOf = (arrivedAt: Date, cutoff: Date | null): "historical" | "prospective" =>
-  cutoff && arrivedAt.getTime() >= cutoff.getTime() ? "prospective" : "historical";
+export const cohortOf = (arrivedAt: Date, cutoff: Date): "historical" | "prospective" =>
+  arrivedAt.getTime() >= cutoff.getTime() ? "prospective" : "historical";
 
 export type PlanReason = ReadPlan["reason"] | "not_candidate";
 export type ReviewReason = "reader_disagreement" | "model_abstained" | "pending_model";
@@ -66,6 +67,8 @@ export type ShadowRecord = {
   modelCertainty: string | null;
   modelEvidenceHash: string | null;
   modelRejections: string[] | null;
+  /** Structured values the independent grounding audit could not trace to the model input, counted at import. Null: not read. */
+  modelUngrounded: number | null;
   modelReadAt: Date | null;
   state: "recruiting" | "not_recruiting" | "review";
   reviewReason: ReviewReason | null;
@@ -91,7 +94,7 @@ const base = (userSub: string, id: string, threadId: string, from: string, arriv
   uniformArm: uniformArm(userSub, id, cfg.uniformRate),
 });
 
-const EMPTY_MODEL = { modelStatus: null, modelRecruiting: null, modelType: null, modelStage: null, modelCompany: null, modelRole: null, modelCertainty: null, modelEvidenceHash: null, modelRejections: null, modelReadAt: null };
+const EMPTY_MODEL = { modelStatus: null, modelRecruiting: null, modelType: null, modelStage: null, modelCompany: null, modelRole: null, modelCertainty: null, modelEvidenceHash: null, modelRejections: null, modelUngrounded: null, modelReadAt: null };
 const EMPTY_RESOLUTION = { reviewReason: null, modelSuggests: null, typeReview: false, companyReview: false, roleReview: false, finalType: null, finalCompany: null, finalRole: null };
 
 /** The frozen rules' reading of one message, in the reader taxonomy. */
@@ -167,7 +170,7 @@ export const rulesOf = (rec: ShadowRecord): Reading => ({ recruiting: rec.rulesR
  * Re-resolves a record from its stored routing, its stored rules reading and a (possibly missing) verified model output.
  * Pure, so importing a worker output never needs the message again.
  */
-export function resolveRecord(rec: ShadowRecord, model: VerifiedOutput | null, readAt: Date | null = null): ShadowRecord {
+export function resolveRecord(rec: ShadowRecord, model: VerifiedOutput | null, readAt: Date | null = null, ungrounded: number | null = null): ShadowRecord {
   const plan: ReadPlan = { read: rec.plannedRead, reason: rec.planReason === "not_candidate" ? "unclassified" : rec.planReason };
   const r = settle(plan, rulesOf(rec), model);
   const reviewReason: ReviewReason | null = r.state !== "review" ? null : !model ? "pending_model" : r.reason === "model_abstained" ? "model_abstained" : "reader_disagreement";
@@ -182,6 +185,7 @@ export function resolveRecord(rec: ShadowRecord, model: VerifiedOutput | null, r
     modelCertainty: model?.certainty ?? null,
     modelEvidenceHash: model?.evidence?.hash ?? null,
     modelRejections: model ? model.rejections : null,
+    modelUngrounded: model ? ungrounded : null,
     modelReadAt: model ? readAt : null,
     state: r.state,
     reviewReason,

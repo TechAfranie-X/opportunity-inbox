@@ -293,6 +293,8 @@ export const shadowReads = pgTable(
     modelCertainty: text("model_certainty"),
     modelEvidenceHash: text("model_evidence_hash"),
     modelRejections: jsonb("model_rejections").$type<string[]>(),
+    /** Values the independent grounding audit could not trace to the model input (counted at import). Null until read. */
+    modelUngrounded: integer("model_ungrounded"),
     modelReadAt: timestamp("model_read_at", { withTimezone: true }),
     // Resolution (consensus-and-review)
     state: text("state").notNull(),
@@ -312,5 +314,8 @@ export const shadowReads = pgTable(
     index("shadow_reads_user_state_idx").on(table.userGoogleSub, table.state),
     check("shadow_reads_state_check", sql`${table.state} in ('recruiting', 'not_recruiting', 'review')`),
     check("shadow_reads_cohort_check", sql`${table.cohort} in ('historical', 'prospective')`),
+    // Mirrors FROZEN.cutoff (lib/recruiting/shadow/frozen.ts). Makes it impossible, at the database, for a historical message
+    // to be stored as prospective or for an eligible message to be stored as historical.
+    check("shadow_reads_cohort_matches_cutoff", sql`(${table.cohort} = 'prospective') = (${table.arrivedAt} >= '2026-12-01T00:00:00Z'::timestamptz)`),
   ],
 );

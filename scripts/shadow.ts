@@ -20,7 +20,7 @@ import { writePrivateFile } from "../lib/eval-store/private-fs.ts";
 import { OUTPUT_SPEC } from "../lib/recruiting/reader/guide.ts";
 import { GUIDE_V3, READER_VERSION_V3 } from "../lib/recruiting/reader/guide3.ts";
 import type { ReaderInput } from "../lib/recruiting/reader/types.ts";
-import { verifyOutput } from "../lib/recruiting/reader/verify.ts";
+import { auditGrounding, verifyOutput } from "../lib/recruiting/reader/verify.ts";
 import { collectShadow } from "../lib/recruiting/shadow/collect.ts";
 import { buildShadowInput, shadowKey } from "../lib/recruiting/shadow/input.ts";
 import { formatSummary, summarize } from "../lib/recruiting/shadow/report.ts";
@@ -43,8 +43,21 @@ async function resolveUser(v: string): Promise<string> {
 
 if (cmd === "collect") {
   const sub = await resolveUser(need("user"));
-  const s = await collectShadow(sub, { limit: Number(args.get("limit") ?? 150) });
+  const dryRun = args.get("dry-run") === "true";
+  const assume = args.get("assume-cutoff");
+  if (assume && !dryRun) fail("--assume-cutoff is only allowed with --dry-run");
+  if (assume && Number.isNaN(new Date(assume).getTime())) fail("--assume-cutoff must be an ISO date");
+  const before = dryRun ? (await reportRows(sub)).length : 0;
+  const s = await collectShadow(sub, { limit: Number(args.get("limit") ?? 150), dryRun, assumeCutoff: assume ? new Date(assume) : undefined });
   console.log(`mailbox ${label(sub)}: ${JSON.stringify(s)}`);
+  if (dryRun) console.log(`DRY RUN: nothing was written (shadow rows before ${before}, after ${(await reportRows(sub)).length}).`);
+  process.exit(0);
+}
+
+// Prospective-evaluation tooling lives in scripts/prospective.ts (status, label-set, analyze, synthetic-run, power, freeze-check).
+if (["status", "label-set", "analyze", "synthetic-run", "power", "freeze-check"].includes(cmd ?? "")) {
+  const mod = await import("./prospective.ts");
+  await mod.run(cmd!, args, { resolveUser, label });
   process.exit(0);
 }
 
@@ -89,7 +102,7 @@ if (cmd === "import") {
     seen.add(key);
     if (v.status === "ok") stat.ok += 1; else if (v.status === "invalid") stat.invalid += 1; else stat.unsupportedYes += 1;
     for (const x of v.rejections) rejections[x] = (rejections[x] ?? 0) + 1;
-    if (!(await saveResolution(resolveRecord(rec, v, now)))) stat.alreadyRead += 1; // first read wins; never overwritten
+    if (!(await saveResolution(resolveRecord(rec, v, now, auditGrounding(v, input).length)))) stat.alreadyRead += 1; // first read wins; never overwritten
   }
   console.log(`import: ${JSON.stringify(stat)} · expected ${Object.keys(map.keys).length}, no output ${Object.keys(map.keys).filter((k) => !seen.has(k)).length}`);
   console.log(`verification rejections: ${JSON.stringify(rejections)}`);

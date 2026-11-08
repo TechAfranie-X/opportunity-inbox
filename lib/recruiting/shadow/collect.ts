@@ -10,6 +10,10 @@ import { recordForCandidate, recordForLegacyOnly, recordForNonCandidate, uniform
 
 export type CollectSummary = {
   skipped?: "not_connected";
+  /** True when nothing was written: the summary describes what a real run WOULD store. */
+  dryRun?: boolean;
+  cohorts?: { historical: number; prospective: number };
+  inSamplingArm?: number;
   candidatesListed: number;
   newCandidates: number;
   legacyOnly: number;
@@ -26,8 +30,12 @@ export type CollectSummary = {
  *
  * `limit` bounds the work per run; the newest unseen candidates go first, so repeated runs backfill progressively.
  */
-export async function collectShadow(userSub: string, opts: { limit?: number; maxList?: number } = {}): Promise<CollectSummary> {
-  const cfg = readShadowConfig();
+export async function collectShadow(userSub: string, opts: { limit?: number; maxList?: number; dryRun?: boolean; assumeCutoff?: Date } = {}): Promise<CollectSummary> {
+  // A dry run fetches and classifies exactly like a real run but never writes. Only a dry run may pretend the cutoff is
+  // elsewhere (to exercise the prospective path on today's mail); a real run always uses the frozen cutoff.
+  if (opts.assumeCutoff && !opts.dryRun) throw new Error("assumeCutoff is only allowed in a dry run");
+  const base = readShadowConfig();
+  const cfg = opts.assumeCutoff ? { ...base, cutoff: opts.assumeCutoff } : base;
   const refresh = await getGmailRefreshToken(userSub);
   if (!refresh) return { skipped: "not_connected", candidatesListed: 0, newCandidates: 0, legacyOnly: 0, stored: 0, plannedReads: 0, vetoed: 0, universeSampled: 0 };
   const token = await refreshGmailAccessToken(refresh);
@@ -55,15 +63,20 @@ export async function collectShadow(userSub: string, opts: { limit?: number; max
     universeSampled = wanted.length;
   }
 
-  const stored = await insertShadowReads(records);
+  const stored = opts.dryRun ? 0 : await insertShadowReads(records);
   const cand = records.filter((r) => r.isCandidate);
   return {
     candidatesListed: candidates.length,
     newCandidates: records.filter((r) => r.isCandidate).length,
-    legacyOnly: records.filter((r) => !r.isCandidate).length,
+    legacyOnly: records.filter((r) => !r.isCandidate && r.legacyQueryMatch === true).length,
     stored,
     plannedReads: cand.filter((r) => r.plannedRead).length,
     vetoed: cand.filter((r) => !r.plannedRead).length,
     universeSampled,
+    ...(opts.dryRun ? {
+      dryRun: true,
+      cohorts: { historical: records.filter((r) => r.cohort === "historical").length, prospective: records.filter((r) => r.cohort === "prospective").length },
+      inSamplingArm: records.filter((r) => r.uniformArm).length,
+    } : {}),
   };
 }

@@ -10,7 +10,7 @@ import type { VerifiedOutput } from "./types.ts";
  *   2. Which messages the model reads depends on the MESSAGE ALONE (veto-only triage). It no longer depends on what the
  *      rules decided and no longer selects on hiring vocabulary, so a kind of mail nobody anticipated is read, not dropped.
  *   3. The two readers stay independent. Disagreement is not resolved by a default winner (neither reader is reliably
- *      right) and not by a third model read (tried and rejected: see adjudicate.ts); it is surfaced as review, with the
+ *      right) and not by a third model read (tried and rejected on development data: see docs/architecture-milestone-2.md); it is surfaced as review, with the
  *      model's suggestion attached.
  *   4. Deterministic verification of every model-supplied value is unchanged.
  */

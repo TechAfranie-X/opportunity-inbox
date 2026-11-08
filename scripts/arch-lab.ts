@@ -265,10 +265,8 @@ if (process.argv[2] === "triage-eval") {
 // ---- stress set rows + export/import plumbing for the first-pass and adjudication reads ----
 import { mkdirSync, readdirSync, readFileSync as rf } from "node:fs";
 import { join as pj } from "node:path";
-import { ADJUDICATION_GUIDE, ADJUDICATION_OUTPUT_SPEC, ADJUDICATION_VERSION, buildAdjudicationInput, buildClaims, getAdjudication, putAdjudication, verifyAdjudication, type AdjudicationInput } from "../lib/recruiting/reader/adjudicate.ts";
 import { putCached } from "../lib/recruiting/reader/cache.ts";
 import { GUIDE_V2, OUTPUT_SPEC } from "../lib/recruiting/reader/guide.ts";
-import { needsAdjudication } from "../lib/recruiting/reader/resolve.ts";
 import { triage } from "../lib/recruiting/reader/triage.ts";
 import { verifyOutput } from "../lib/recruiting/reader/verify.ts";
 import { toReaderType } from "../lib/recruiting/reader/taxonomy.ts";
@@ -290,14 +288,8 @@ export async function loadStress(): Promise<Row[]> {
   });
 }
 
-const adjInputFor = (r: Row): AdjudicationInput => buildAdjudicationInput(r.email, r.key, r.threadMates, buildClaims(r.key, { recruiting: r.rulesYes, type: r.rulesType, signals: r.rulesSignals }, r.modelAll), r.ds === "stress" ? ["Sam"] : SELF);
 const rulesReading = (r: Row) => ({ recruiting: r.rulesYes, type: toReaderType(r.rulesType as never), company: null, role: null });
 
-async function candidateRows(): Promise<Row[]> {
-  const labels: Record<string, string[] | null> = JSON.parse(rf(`${process.env.HOME}/.opportunity-inbox/eval/dev-gmail-labels.json`, "utf8"));
-  const rows = await loadDev();
-  return rows.filter((r) => { const c = (labels[`${r.ds}|${r.id}`] ?? []).find((x) => x.startsWith("CATEGORY_")); return !["CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS"].includes(c ?? "") && triage(r.email).pass; });
-}
 
 const arg = (k: string) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : undefined; };
 
@@ -322,33 +314,8 @@ if (process.argv[2] === "import-first-stress") {
   console.log(`stress first-pass import: ${ok} ok, ${bad} invalid/unknown`);
   process.exit(0);
 }
-if (process.argv[2] === "export-adj") {
-  const set = arg("set")!; const out = arg("out")!; if (out.startsWith(process.cwd())) throw new Error("--out must be outside the repository");
-  const rows = (set === "stress" ? await loadStress() : await candidateRows()).filter((r) => r.modelAll && needsAdjudication({ recruiting: r.rulesYes, type: null, company: null, role: null }, r.modelAll));
-  const todo = rows.map((r) => ({ r, i: adjInputFor(r) })).filter(({ i }) => !getAdjudication(i));
-  mkdirSync(out, { recursive: true, mode: 0o700 });
-  const per = 20; const map: Record<string, string> = {};
-  for (let b = 0; b * per < todo.length; b++) { const sl = todo.slice(b * per, (b + 1) * per); sl.forEach(({ r }) => (map[r.key] = `${r.ds}|${r.id}`)); writePrivateFile(pj(out, `batch-${b}.jsonl`), sl.map(({ i }) => JSON.stringify(i)).join("\n") + "\n"); }
-  writePrivateFile(pj(out, "map.json"), JSON.stringify(map));
-  writePrivateFile(pj(out, "guide.md"), `${ADJUDICATION_GUIDE}\n## Input\nEach input line is a JSON object: the email (from, subject, body, received), a short "thread" of other messages in the same conversation, and the two earlier readers' "claims".\n\n## Output format\n${ADJUDICATION_OUTPUT_SPEC}\n`);
-  console.log(`exported ${todo.length} messages to adjudicate (${rows.length - todo.length} cached) · ${ADJUDICATION_VERSION} · set ${set}`);
-  process.exit(0);
-}
-if (process.argv[2] === "import-adj") {
-  const set = arg("set")!; const dir = arg("dir")!;
-  const rows = set === "stress" ? await loadStress() : await candidateRows(); const byKey = new Map(rows.map((r) => [r.key, r]));
-  const st: Record<string, number> = {}; const rej: Record<string, number> = {}; let lines = 0;
-  for (const f of readdirSync(dir).filter((x) => /^out-\d+\.jsonl$/.test(x))) for (const line of rf(pj(dir, f), "utf8").split("\n").filter(Boolean)) {
-    lines++; let raw: unknown; try { raw = JSON.parse(line); } catch { bump(st, "notJson"); continue; }
-    const row = byKey.get((raw as { key?: string })?.key ?? ""); if (!row) { bump(st, "unknownKey"); continue; }
-    const i = adjInputFor(row); const v = verifyAdjudication(raw, i); putAdjudication(i, v); bump(st, v.status); for (const x of v.rejections) bump(rej, x);
-  }
-  console.log(`adjudication import (${set}): ${lines} lines · ${JSON.stringify(st)} · rejections ${JSON.stringify(rej)}`);
-  process.exit(0);
-}
 
 // ---- the comparison: frozen vs variants vs new architecture ----
-import { resolve as resolveV2 } from "../lib/recruiting/reader/resolve.ts";
 if (process.argv[2] === "compare") {
   const labels: Record<string, string[] | null> = JSON.parse(rf(`${process.env.HOME}/.opportunity-inbox/eval/dev-gmail-labels.json`, "utf8"));
   const rows = await loadDev();
@@ -359,14 +326,10 @@ if (process.argv[2] === "compare") {
   const inV2 = (r: Row) => !["CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS"].includes(cat(r)) && triage(r.email).pass;
   const dec = (state: string): Dec => (state === "recruiting" ? "yes" : state === "not_recruiting" ? "no" : "review");
   const rr = (r: Row) => rulesReading(r);
-  const adjOf = (r: Row) => (r.modelAll ? getAdjudication(adjInputFor(r)) : null);
   const designs: Record<string, (r: Row) => Dec> = {
     "D1 frozen, reader level (all 1000; the pre-registered view)": (r) => dec(reconcile(rr(r), r.model).state),
     "D1e frozen end-to-end (production query -> G1 -> reconcile)": (r) => (inQuery(r) ? dec(reconcile(rr(r), r.model).state) : "no"),
-    "D2 + category candidates, read all candidates (no adjudication)": (r) => (inV2(r) ? dec(reconcile(rr(r), r.modelAll).state) : "no"),
-    "D3 frozen gate + adjudication (reader level)": (r) => dec(resolveV2(rr(r), r.model, r.model ? adjOf(r) : null).state),
-    "D4 NEW: category candidates + triage + adjudication": (r) => (inV2(r) ? dec(resolveV2(rr(r), r.modelAll, adjOf(r)).state) : "no"),
-    "D4r NEW at reader level (all 1000 read, adjudicated)": (r) => dec(resolveV2(rr(r), r.modelAll, adjOf(r)).state),
+    "D2 v2: category candidates + triage, read all, consensus/review": (r) => (inV2(r) ? dec(reconcile(rr(r), r.modelAll).state) : "no"),
   };
   const f = (x: number) => (100 * x).toFixed(1);
   for (const scope of [...DEV, "POOLED"]) {
@@ -374,32 +337,10 @@ if (process.argv[2] === "compare") {
     console.log(`\n== ${scope} (n=${rs.length}, positives ${rs.filter((r) => r.yes).length})`);
     for (const [name, fn] of Object.entries(designs)) { const s = scorePolicy(rs, fn); console.log(`${name.padEnd(64)} P ${f(s.P).padStart(5)} R ${f(s.R).padStart(5)} F1 ${s.F1.toFixed(3)} strictR ${f(s.strictR).padStart(5)} review ${f(s.review).padStart(4)}% err ${String(s.errors).padStart(2)} (${s.tp}/${s.fp}/${s.fn}/${s.tn} +${s.revPos}/-${s.revNeg})`); }
   }
-  // adjudication quality on the dev disagreement set
-  const set = (await candidateRows()).filter((r) => r.modelAll && needsAdjudication({ recruiting: r.rulesYes, type: null, company: null, role: null }, r.modelAll));
-  let right = 0, wrong = 0, unsure = 0, missing = 0; const byReason: Record<string, number> = {};
-  for (const r of set) { const a = adjOf(r); if (!a) { missing++; continue; } if (a.status !== "ok" || a.verdict === "unsure" || a.certainty === "low") { unsure++; continue; } (a.verdict === "yes") === r.yes ? right++ : wrong++; bump(byReason, `${a.verdict}:${a.reason}`); }
-  console.log(`\nadjudication on the ${set.length} dev messages that needed it: decided right ${right}, decided wrong ${wrong}, left in review ${unsure}, not adjudicated ${missing}`);
-  console.log(`  verdicts: ${top(byReason, 10)}`);
-  const fp = set.filter((r) => { const a = adjOf(r); return a && a.status === "ok" && a.verdict !== "unsure" && a.certainty !== "low" && (a.verdict === "yes") !== r.yes; });
-  console.log(`  wrong verdicts by label: ${fp.filter((r) => r.yes).length} labeled-Yes called no, ${fp.filter((r) => !r.yes).length} labeled-No called yes`);
-  // volume
-  console.log(`\nmodel reads: frozen G1 ${rows.filter((r) => r.gateG1).length}; new ${rows.filter(inV2).length}; adjudications ${set.length} (${(set.length / 10).toFixed(1)}% of mailbox)`);
+  console.log(`\nmodel reads: frozen G1 ${rows.filter((r) => r.gateG1).length}; v2 ${rows.filter(inV2).length} (of ${rows.length})`);
   process.exit(0);
 }
 
-if (process.argv[2] === "adj-wrong") {
-  const set = (await candidateRows()).filter((r) => r.modelAll && needsAdjudication({ recruiting: r.rulesYes, type: null, company: null, role: null }, r.modelAll));
-  const rows: string[] = [];
-  for (const r of set) {
-    const a = getAdjudication(adjInputFor(r)); if (!a || a.status !== "ok" || a.verdict === "unsure" || a.certainty === "low") continue;
-    const right = (a.verdict === "yes") === r.yes; if (right) continue;
-    rows.push(`${r.ds.slice(0, 6)} ${r.domain.padEnd(30)} label=${r.yes ? "YES" : "no "} adj=${a.verdict}/${a.reason}/${a.certainty}  rules=${r.rulesYes ? "Y" : "n"} model=${r.modelAll!.status !== "ok" || r.modelAll!.certainty === "low" ? "abst" : r.modelAll!.recruiting ? "Y" : "n"} labelType=${String(r.label.type)} stage=${String(r.label.stage)}`);
-  }
-  console.log(rows.join("\n"));
-  const right = set.filter((r) => { const a = getAdjudication(adjInputFor(r)); return a && a.status === "ok" && a.verdict !== "unsure" && a.certainty !== "low" && (a.verdict === "yes") === r.yes; });
-  console.log(`\nright: ${right.length}; by who they contradicted: adj sided with rules ${right.filter((r) => (getAdjudication(adjInputFor(r))!.verdict === "yes") === r.rulesYes).length}, with model ${right.filter((r) => (getAdjudication(adjInputFor(r))!.verdict === "yes") === r.modelAll!.recruiting).length}`);
-  process.exit(0);
-}
 
 if (process.argv[2] === "stress-compare") {
   const { STRESS_SET } = await import("../lib/recruiting/reader/stress-set.ts");
@@ -409,7 +350,6 @@ if (process.argv[2] === "stress-compare") {
     "model only (reads everything)": (r) => (modelYes(r.modelAll) ? "yes" : "no"),
     "frozen: G1 gate + consensus/review": (r) => dec2(reconcile(rulesReading(r), r.model).state),
     "D2: read all + consensus/review": (r) => dec2(reconcile(rulesReading(r), r.modelAll).state),
-    "D4: read all + adjudication": (r) => dec2(resolveV2(rulesReading(r), r.modelAll, r.modelAll ? getAdjudication(adjInputFor(r)) : null).state),
   };
   function dec2(s: string): Dec { return s === "recruiting" ? "yes" : s === "not_recruiting" ? "no" : "review"; }
   const classes = ["program", "postoffer", "employed", "market", "core"];

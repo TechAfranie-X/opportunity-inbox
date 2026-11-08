@@ -1,0 +1,2 @@
+ALTER TABLE "shadow_reads" ADD COLUMN "model_ungrounded" integer;--> statement-breakpoint
+ALTER TABLE "shadow_reads" ADD CONSTRAINT "shadow_reads_cohort_matches_cutoff" CHECK (("shadow_reads"."cohort" = 'prospective') = ("shadow_reads"."arrived_at" >= '2026-12-01T00:00:00Z'::timestamptz));

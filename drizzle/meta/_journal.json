@@ -43,6 +43,13 @@
       "when": 1794120066004,
       "tag": "0005_amusing_leper_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794121361108,
+      "tag": "0006_furry_sebastian_shaw",
+      "breakpoints": true
     }
   ]
 }

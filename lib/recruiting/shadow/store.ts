@@ -4,6 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { shadowReads } from "@/lib/db/schema";
 import { READER_VERSION_V3 } from "@/lib/recruiting/reader/guide3";
+import { INGESTION_COLUMNS, type IngestionFacts } from "./labelset";
 import type { ReportRow } from "./report";
 import { reviewItemOf, type ReviewItem, type ShadowRecord } from "./shadow";
 
@@ -17,7 +18,7 @@ const toRecord = (r: Row): ShadowRecord => ({
   planReason: r.planReason as ShadowRecord["planReason"], rulesRecruiting: r.rulesRecruiting, rulesType: r.rulesType as ShadowRecord["rulesType"],
   rulesCompany: r.rulesCompany, rulesRole: r.rulesRole, modelStatus: r.modelStatus, modelRecruiting: r.modelRecruiting, modelType: r.modelType,
   modelStage: r.modelStage, modelCompany: r.modelCompany, modelRole: r.modelRole, modelCertainty: r.modelCertainty,
-  modelEvidenceHash: r.modelEvidenceHash, modelRejections: r.modelRejections, modelReadAt: r.modelReadAt,
+  modelEvidenceHash: r.modelEvidenceHash, modelRejections: r.modelRejections, modelUngrounded: r.modelUngrounded, modelReadAt: r.modelReadAt,
   state: r.state as ShadowRecord["state"], reviewReason: r.reviewReason as ShadowRecord["reviewReason"],
   modelSuggests: r.modelSuggests as ShadowRecord["modelSuggests"], typeReview: r.typeReview, companyReview: r.companyReview,
   roleReview: r.roleReview, finalType: r.finalType, finalCompany: r.finalCompany, finalRole: r.finalRole,
@@ -62,7 +63,7 @@ export async function getShadowRecord(userSub: string, messageId: string): Promi
 export async function saveResolution(rec: ShadowRecord): Promise<boolean> {
   const res = await getDb().update(shadowReads).set({
     modelStatus: rec.modelStatus, modelRecruiting: rec.modelRecruiting, modelType: rec.modelType, modelStage: rec.modelStage, modelCompany: rec.modelCompany,
-    modelRole: rec.modelRole, modelCertainty: rec.modelCertainty, modelEvidenceHash: rec.modelEvidenceHash, modelRejections: rec.modelRejections, modelReadAt: rec.modelReadAt,
+    modelRole: rec.modelRole, modelCertainty: rec.modelCertainty, modelEvidenceHash: rec.modelEvidenceHash, modelRejections: rec.modelRejections, modelUngrounded: rec.modelUngrounded, modelReadAt: rec.modelReadAt,
     state: rec.state, reviewReason: rec.reviewReason, modelSuggests: rec.modelSuggests, typeReview: rec.typeReview, companyReview: rec.companyReview,
     roleReview: rec.roleReview, finalType: rec.finalType, finalCompany: rec.finalCompany, finalRole: rec.finalRole, updatedAt: new Date(),
   }).where(and(eq(shadowReads.userGoogleSub, rec.userGoogleSub), eq(shadowReads.gmailMessageId, rec.gmailMessageId), eq(shadowReads.readerVersion, rec.readerVersion), isNull(shadowReads.modelStatus))).returning({ id: shadowReads.id });
@@ -77,4 +78,20 @@ export async function reportRows(userSub: string | null): Promise<Array<ReportRo
 export async function reviewItems(userSub: string, actionableOnly = true): Promise<ReviewItem[]> {
   const rows = await getDb().select().from(shadowReads).where(and(eq(shadowReads.userGoogleSub, userSub), eq(shadowReads.readerVersion, READER_VERSION_V3), eq(shadowReads.state, "review")));
   return rows.map((r) => reviewItemOf(toRecord(r))).filter((x): x is ReviewItem => !!x && (!actionableOnly || x.actionable));
+}
+
+/**
+ * The label-set query. It selects ONLY the ingestion-time columns (INGESTION_COLUMNS), so what a reader decided is never
+ * loaded into the process that decides what to label.
+ */
+export async function ingestionFacts(userSub: string | null): Promise<IngestionFacts[]> {
+  const cols = Object.fromEntries(INGESTION_COLUMNS.map((c) => [c, shadowReads[c]])) as { [K in (typeof INGESTION_COLUMNS)[number]]: (typeof shadowReads)[K] };
+  const where = userSub ? and(eq(shadowReads.readerVersion, READER_VERSION_V3), eq(shadowReads.userGoogleSub, userSub)) : eq(shadowReads.readerVersion, READER_VERSION_V3);
+  return (await getDb().select(cols).from(shadowReads).where(where)) as IngestionFacts[];
+}
+
+/** Every column, for the analysis stage only (after labels exist). */
+export async function allRecords(userSub: string | null): Promise<ShadowRecord[]> {
+  const where = userSub ? and(eq(shadowReads.readerVersion, READER_VERSION_V3), eq(shadowReads.userGoogleSub, userSub)) : eq(shadowReads.readerVersion, READER_VERSION_V3);
+  return (await getDb().select().from(shadowReads).where(where)).map(toRecord);
 }
