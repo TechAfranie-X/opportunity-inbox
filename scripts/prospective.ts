@@ -206,6 +206,7 @@ async function analyze(args: Map<string, string>) {
     `PROSPECTIVE EVALUATION RESULT · ${FROZEN.protocol} · ${now.toISOString()}`,
     `tooling: scripts/prospective.ts sha256 ${toolingHash}; ${toolingNote}`,
     SCRATCH ? `candidate: ${FROZEN.freezeTag} (not checked in a scratch rehearsal)` : `candidate: tag ${FROZEN.freezeTag} @ ${tryGit("rev-parse", FROZEN.freezeTag)} · lib/recruiting ${tagTree} · lib/opportunities ${tagOpp}`,
+    `supersedes ${FROZEN.supersedes.tag} (${FROZEN.supersedes.commit.slice(0, 7)}), replaced ${FROZEN.supersedes.date} before any prospective evidence existed`,
     `reader ${READER_VERSION_V3} · pipeline ${PIPELINE_VERSION} · extractor ${EXTRACTOR_VERSION}`,
     `window: ${FROZEN.cutoff} to ${through.toISOString()} (hard stop ${FROZEN.hardStop}${hardStopReached ? ", reached" : ""})`,
     `datasets: ${sets.map((s) => s.name).sort().join(", ")}`,
@@ -299,6 +300,7 @@ async function freezeCheck() {
   const head = tryGit("rev-parse", "HEAD"), remote = tryGit("rev-parse", "origin/main");
   check(!!head && head === remote, "HEAD is pushed (equals origin/main)", `${head?.slice(0, 7)} vs ${remote?.slice(0, 7)}`);
   check(!tryGit("rev-parse", "--verify", "--quiet", `refs/tags/${FROZEN.freezeTag}`), `tag ${FROZEN.freezeTag} does not exist yet`);
+  check(tryGit("rev-parse", `${FROZEN.supersedes.tag}^{commit}`) === FROZEN.supersedes.commit, `superseded tag ${FROZEN.supersedes.tag} still points at the recorded commit`);
   check(now <= new Date(FROZEN.tagDeadline), "tag deadline not passed", `now ${now.toISOString()} <= ${FROZEN.tagDeadline}`);
   const daysAhead = (cutoff.getTime() - now.getTime()) / DAY;
   check(daysAhead >= FROZEN.minDaysTagBeforeCutoff, `cutoff is at least ${FROZEN.minDaysTagBeforeCutoff} days after the tag`, `${daysAhead.toFixed(1)} days`);

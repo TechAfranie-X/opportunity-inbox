@@ -1,6 +1,6 @@
 # Prospective evaluation protocol for architecture v2 (prospective-1)
 
-Status: **FROZEN by the annotated tag `arch-v2-shadow-candidate-1`** (created by `npm run shadow -- freeze-check` followed by the tag command in section 12; the tag deadline is 2026-11-24 00:00 UTC). Written 2026-11-08, before any prospective message exists. Nothing below may change after the tag. The implementation is `lib/recruiting/shadow/` and `scripts/prospective.ts`; a test fails if this document and the code disagree.
+Status: **FROZEN by the annotated freeze tag named in section 1.** The tag is created only after `npm run shadow -- freeze-check` has passed (section 12). Written 2026-11-08, before any prospective message exists. Nothing below may change after the tag. This is the second freeze candidate; the first was superseded before any evidence existed (section 13). The implementation is `lib/recruiting/shadow/` and `scripts/prospective.ts`; a test fails if this document and the code disagree.
 
 **Purpose.** Gather genuinely untouched evidence about architecture v2 without another Gmail account, by evaluating only mail that arrives after a fixed future cutoff. Historical mail from either mailbox is spent: it was seen, labeled, fitted or used for engineering, and can never be evidence for v2.
 
@@ -12,7 +12,7 @@ Status: **FROZEN by the annotated tag `arch-v2-shadow-candidate-1`** (created by
 | Cutoff (eligible mail arrives at or after) | 2026-12-01T00:00:00Z |
 | Eligible-through (mail arriving before) | 2027-03-15T00:00:00Z |
 | Hard stop (analysis runs whatever evidence exists) | 2027-03-29T00:00:00Z |
-| Freeze tag | `arch-v2-shadow-candidate-1`, created before 2026-11-24 00:00 UTC, which is exactly 7 days before the cutoff |
+| Freeze tag | `arch-v2-shadow-candidate-2`, created before 2026-11-24 00:00 UTC, which is exactly 7 days before the cutoff |
 | Minimum time before the analysis (unless the hard stop is reached) | 8 weeks since the cutoff |
 | Reader version (guide v3) | `reader-s1-gb56d5132a955` |
 | Pipeline version | `arch-v2.0` |
@@ -114,5 +114,11 @@ At a combined positive prevalence near 3.8% (the volume-weighted blend of the tw
 
 ## 12. Freeze procedure
 1. `npm run shadow -- freeze-check` must print `ALL PRECONDITIONS SATISFIED`. It verifies mechanically: clean working tree; HEAD pushed; tag absent; tag deadline and the 7-day gap; frozen versions equal the code's; this document states every frozen parameter and is not marked provisional; minimum evidence equals the recomputed power analysis; product sync locked; the database constraint exists; no prospective rows and no prospective datasets exist; the synthetic workflow behaves (a good system is supported, a poor one is not, the label set is independent of reader behavior).
-2. Create the annotated tag `arch-v2-shadow-candidate-1` on that commit with the `lib/recruiting` and `lib/opportunities` tree hashes in its message, and push it.
+2. Create the annotated freeze tag named in section 1 on that commit, with the `lib/recruiting` and `lib/opportunities` tree hashes and the supersession note (section 13) in its message, and push it.
 3. From the cutoff, run `collect` for each mailbox on the section 3 schedule.
+
+## 13. Freeze history
+- **`arch-v2-shadow-candidate-1`** (commit `aa9c0c0a3da2cfbd7d2654cf4f77b1c83e7fabcd`, 2026-11-08) was **superseded the same day, before any prospective evidence existed**: the database held zero prospective rows and zero prospective label datasets, and the window opens at the cutoff in section 1.
+- Why: a freeze-integrity audit found inconsistencies inside the frozen tree. A test fixture still carried a competing cutoff and a competing sampling rate; the status line misdescribed how the tag is created; and the consistency test only checked that strings appeared somewhere in this document rather than binding each table row to its constant.
+- What changed: test fixtures (now derived from the canonical constants), this document's wording and its history, the tag name, a supersession record in `frozen.ts`, and row-by-row consistency tests. **Nothing else changed:** not the architecture, thresholds, statistics, sampling design, cutoff, evidence minima, or privacy policy.
+- candidate-1 remains in the repository as an immutable record and is never used: the analysis compares the code with the tag named in section 1 only.

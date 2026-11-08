@@ -120,3 +120,127 @@ test("REHEARSAL: the clock and tag-check overrides exist only behind a scratch_ 
   const freezeCheck = prospective.slice(prospective.indexOf("async function freezeCheck"));
   assert.doesNotMatch(freezeCheck, /clock\(\)|PROSPECTIVE_NOW|SCRATCH/, "freeze-check always uses the real clock and the real database");
 });
+
+// ======================= freeze-integrity audit: one canonical value per frozen parameter =======================
+import { PLANNING } from "./power.ts";
+
+const protocolDoc = () => read("docs/prospective-evaluation-protocol.md");
+const iso = (s: string) => s.replace(".000Z", "Z");
+const pc = (x: number) => `${Math.round(x * 100)}%`;
+/** The single table row that mentions `label`, within the numbered section starting at `## <n>.` */
+function rowIn(doc: string, section: number, label: string): string {
+  const start = doc.indexOf(`\n## ${section}. `);
+  const end = doc.indexOf("\n## ", start + 5);
+  const body = doc.slice(start, end < 0 ? undefined : end);
+  const rows = body.split("\n").filter((l) => l.startsWith("|") && l.includes(label));
+  assert.equal(rows.length, 1, `section ${section} should have exactly one row mentioning "${label}", found ${rows.length}`);
+  return rows[0];
+}
+
+test("AUDIT: the protocol has exactly one title and unique, sequentially numbered sections", () => {
+  const doc = protocolDoc();
+  const heads = doc.split("\n").filter((l) => l.startsWith("#"));
+  assert.equal(heads.filter((h) => h.startsWith("# ")).length, 1);
+  const sections = heads.filter((h) => h.startsWith("## "));
+  assert.deepEqual(sections.map((h) => Number(h.match(/^## (\d+)\./)?.[1])), Array.from({ length: sections.length }, (_, i) => i + 1), "numbered 1..N once each, in order");
+  assert.equal(new Set(sections).size, sections.length, "no duplicated heading");
+  assert.equal(sections.length, 13);
+});
+
+test("AUDIT section 1: every row of the frozen-parameters table equals its constant", () => {
+  const doc = protocolDoc();
+  assert.ok(rowIn(doc, 1, "Cutoff").includes(iso(FROZEN.cutoff)));
+  assert.ok(rowIn(doc, 1, "Eligible-through").includes(iso(FROZEN.eligibleThrough)));
+  assert.ok(rowIn(doc, 1, "Hard stop").includes(iso(FROZEN.hardStop)));
+  const tag = rowIn(doc, 1, "Freeze tag");
+  assert.ok(tag.includes(`\`${FROZEN.freezeTag}\``) && tag.includes(FROZEN.tagDeadline.slice(0, 10)));
+  assert.ok(rowIn(doc, 1, "Minimum time").includes(`${FROZEN.minWeeksAfterCutoff} weeks`));
+  assert.ok(rowIn(doc, 1, "Reader version").includes(FROZEN.readerVersion));
+  assert.ok(rowIn(doc, 1, "Pipeline version").includes(FROZEN.pipelineVersion));
+  assert.ok(rowIn(doc, 1, "Rules extractor").includes(FROZEN.extractorVersion));
+  const sampling = rowIn(doc, 1, "Sampling rate");
+  assert.ok(sampling.includes(pc(FROZEN.uniformRate)) && sampling.includes(`weight ${FROZEN.s2Weight}`) && sampling.includes(FROZEN.armHash));
+  const intervals = rowIn(doc, 1, "Intervals");
+  assert.ok(intervals.includes(FROZEN.bootstrap.resamples.toLocaleString("en-US")) && intervals.includes(String(FROZEN.bootstrap.seed)));
+  assert.ok(rowIn(doc, 1, "Label datasets").includes(FROZEN.datasetPrefix));
+});
+
+test("AUDIT section 6: every claim row carries exactly its own thresholds", () => {
+  const doc = protocolDoc();
+  const c = FROZEN.claims;
+  const atLeast = (r: { target: number; lowerMin: number }) => [`point >= ${pc(r.target)} and lower bound >= ${pc(r.lowerMin)}`, `point < ${pc(r.target)}`];
+  const checks: Array<[string, string[]]> = [
+    ["| 1 |", [`lower 95% bound of the difference > ${c.improvement.lowerAbove}`, `point difference <= ${c.improvement.lowerAbove}`]],
+    ["| 2 |", atLeast(c.strictRecall)],
+    ["| 3 |", atLeast(c.precision)],
+    ["| 4 |", atLeast(c.typeAccuracy)],
+    ["| 5 |", [`point <= ${pc(c.agreementError.target)} and upper bound <= ${pc(c.agreementError.upperMax)}`, `point > ${pc(c.agreementError.target)}`]],
+    ["| 6 |", [`point <= ${pc(c.reviewRate.target)} and upper bound <= ${pc(c.reviewRate.upperMax)}`, `point > ${pc(c.reviewRate.target)}`]],
+    ["| 7 |", [`count = ${c.ungrounded.max}`]],
+  ];
+  for (const [label, expected] of checks) {
+    const row = rowIn(doc, 6, label);
+    for (const e of expected) assert.ok(row.includes(e), `claim row "${label}" must contain "${e}"; got: ${row}`);
+  }
+  assert.ok(doc.includes(`The review upper bound of ${pc(c.reviewRate.upperMax)}`));
+});
+
+test("AUDIT section 7: every minimum-evidence row carries exactly its own number", () => {
+  const doc = protocolDoc(), m = FROZEN.minimumEvidence;
+  assert.ok(rowIn(doc, 7, "recall, improvement").includes(`${m.recallPositives} effective positives`));
+  assert.ok(rowIn(doc, 7, "(precision)").includes(`${m.precisionDecisions} effective decisions`));
+  assert.ok(rowIn(doc, 7, "(event type)").includes(`${m.typeDecisions} effective type decisions`));
+  assert.ok(rowIn(doc, 7, "(agreement error)").includes(`${m.agreementRows} agreement-region rows`));
+  assert.ok(rowIn(doc, 7, "(review rate)").includes(`${m.reviewReads} model reads`));
+  assert.ok(doc.includes(`${FROZEN.labelWithinDays} days to read and label`));
+});
+
+test("AUDIT: the only calendar instants the current documents may state are the frozen ones and the freeze-history dates", () => {
+  const allowed = new Set([iso(FROZEN.cutoff), iso(FROZEN.eligibleThrough), iso(FROZEN.hardStop), FROZEN.tagDeadline.slice(0, 10), FROZEN.supersedes.date]);
+  const allowedDates = new Set([...allowed].map((a) => a.slice(0, 10)));
+  for (const f of ["docs/prospective-evaluation-protocol.md", "docs/prospective-power-analysis.md", "docs/architecture-v2-shadow.md"]) {
+    for (const m of read(f).match(/\d{4}-\d{2}-\d{2}(?:T[\d:.]+Z)?/g) ?? []) {
+      assert.ok(allowed.has(m) || allowedDates.has(m), `${f} states an unexpected date/instant: ${m}`);
+    }
+  }
+});
+
+test("AUDIT: stale values from the superseded draft appear nowhere in current documents, code, tests or configuration", () => {
+  const stale: Array<[RegExp, string]> = [
+    [/2026-11-16/, "the old cutoff"], [/\bweight 10\b/, "the old S2 weight"], [/uniformRate:\s*0\.05/, "the old sampling rate"],
+    [/READER_V2_(CUTOFF|UNIFORM_RATE)\s*=/, "an environment override that no longer exists"], [/at least 50 labeled/i, "the old 50-positive rule"],
+    [/Fifty S1/i, "the old 50-positive rule"], [/\bPROPOSED\b/, "provisional wording"], [/Owner checklist/i, "the old owner checklist"],
+    [/extended once|one extension/i, "the removed extension"], [/\bDRAFT\b/, "provisional wording"],
+  ];
+  const docs = ["docs/prospective-evaluation-protocol.md", "docs/prospective-power-analysis.md", "docs/architecture-v2-shadow.md"];
+  const files = [...docs, ".env.example", "scripts/prospective.ts", "scripts/shadow.ts", ...walk("lib/recruiting/shadow")].filter((f) => f !== "lib/recruiting/shadow/protocol.test.ts");
+  // The words DRAFT/PROPOSED legitimately appear in code that CHECKS for them (freeze-check), so they are policed in documents only.
+  const docsOnly = new Set(["provisional wording"]);
+  for (const f of files) for (const [re, why] of stale) if (!docsOnly.has(why) || docs.includes(f)) assert.doesNotMatch(read(f), re, `${f} contains ${why}`);
+});
+
+test("AUDIT: no code outside frozen.ts restates a frozen date or the sampling rate", () => {
+  const files = [...walk("lib/recruiting/shadow"), "scripts/prospective.ts", "scripts/shadow.ts"].filter((f) => !f.endsWith(".test.ts") && !f.endsWith("frozen.ts"));
+  for (const f of files) {
+    const src = read(f).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    assert.doesNotMatch(src, /20(26|27)-\d{2}-\d{2}/, `${f} restates a calendar date`);
+    assert.doesNotMatch(src, /uniformRate:\s*0\./, `${f} restates the sampling rate`);
+    assert.doesNotMatch(src, /s2Weight:\s*\d/, `${f} restates the S2 weight`);
+  }
+});
+
+test("AUDIT: the freeze tag is named once, and the superseded tag only in the freeze history", () => {
+  const doc = protocolDoc();
+  assert.equal(doc.split(FROZEN.freezeTag).length - 1, 1, "the current tag is stated in exactly one place (section 1)");
+  const history = doc.slice(doc.indexOf("\n## 13. Freeze history"));
+  assert.ok(history.includes(FROZEN.supersedes.tag) && history.includes(FROZEN.supersedes.commit));
+  assert.equal(doc.split(FROZEN.supersedes.tag).length - 1, 1, "the superseded tag appears only once, in the history");
+  assert.ok(history.includes("before any prospective evidence existed"));
+  assert.notEqual(FROZEN.freezeTag, FROZEN.supersedes.tag);
+  assert.match(FROZEN.supersedes.commit, /^[0-9a-f]{40}$/);
+});
+
+test("AUDIT: the planning assumption for the eligible window cannot drift from the frozen dates", () => {
+  const weeks = (new Date(FROZEN.eligibleThrough).getTime() - new Date(FROZEN.cutoff).getTime()) / (7 * 86400000);
+  assert.ok(Math.abs(PLANNING.weeks - weeks) < 0.1, `${PLANNING.weeks} vs ${weeks}`);
+});

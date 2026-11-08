@@ -14,8 +14,11 @@ import { buildShadowInput, shadowKey } from "./input.ts";
 import { formatSummary, summarize, type ReportRow } from "./report.ts";
 import { PIPELINE_VERSION, cohortOf, recordForCandidate, recordForLegacyOnly, recordForNonCandidate, resolveRecord, reviewItemOf, uniformArm, type ShadowConfig } from "./shadow.ts";
 
-const CFG: ShadowConfig = { enabled: true, cutoff: new Date("2026-11-16T00:00:00Z"), uniformRate: 0.05 };
-const mail = (over: Partial<RecruitingEmail> = {}): RecruitingEmail => ({ id: "m1", threadId: "t1", from: "Acme Recruiting <jobs@acme.example>", subject: "Your application to Acme", receivedAt: new Date("2026-11-17T10:00:00Z"), outbound: false, bodyText: "Thank you for applying to the Software Engineer Intern position. We will be in touch.", ...over });
+const CUTOFF_MS = new Date(FROZEN.cutoff).getTime();
+/** An instant a given number of days after the frozen cutoff (negative: before it). Tests never restate a calendar date for a frozen parameter. */
+const AT = (days: number) => new Date(CUTOFF_MS + days * 86400000);
+const CFG: ShadowConfig = { enabled: true, cutoff: new Date(FROZEN.cutoff), uniformRate: FROZEN.uniformRate };
+const mail = (over: Partial<RecruitingEmail> = {}): RecruitingEmail => ({ id: "m1", threadId: "t1", from: "Acme Recruiting <jobs@acme.example>", subject: "Your application to Acme", receivedAt: AT(16), outbound: false, bodyText: "Thank you for applying to the Software Engineer Intern position. We will be in touch.", ...over });
 const model = (over: Partial<VerifiedOutput> = {}): VerifiedOutput => ({ key: "k", status: "ok", recruiting: true, type: "applied", stage: "applied", company: "Acme", companySource: "candidate", role: "Software Engineer Intern", dateText: null, certainty: "high", evidence: { hash: "abc123", offset: 4 }, rejections: [], ...over });
 
 // ---- guide v3 / frozen v2 ----
@@ -47,21 +50,21 @@ test("shadow mode is off unless the flag is exactly 1; the cutoff and sampling r
 
 // ---- sampling arm and cohort ----
 test("the uniform arm is deterministic, hits the requested rate, and depends only on (user, message)", () => {
-  assert.equal(uniformArm("u", "m1", 0.05), uniformArm("u", "m1", 0.05));
+  assert.equal(uniformArm("u", "m1", FROZEN.uniformRate), uniformArm("u", "m1", FROZEN.uniformRate));
   let hits = 0;
   const N = 20000;
-  for (let i = 0; i < N; i += 1) if (uniformArm("user-a", `msg-${i}`, 0.05)) hits += 1;
-  assert.ok(Math.abs(hits / N - 0.05) < 0.006, `rate ${hits / N}`);
+  for (let i = 0; i < N; i += 1) if (uniformArm("user-a", `msg-${i}`, FROZEN.uniformRate)) hits += 1;
+  assert.ok(Math.abs(hits / N - FROZEN.uniformRate) < 0.015, `rate ${hits / N}`);
   assert.equal(uniformArm("u", "x", 0), false);
   assert.equal(uniformArm("u", "x", 1), true);
   // Monotone in the rate: raising the rate never drops a message, so an arm can be widened but never reshuffled.
-  for (let i = 0; i < 500; i += 1) if (uniformArm("u", `m${i}`, 0.05)) assert.equal(uniformArm("u", `m${i}`, 0.2), true);
-  assert.notEqual(Array.from({ length: 200 }, (_, i) => uniformArm("user-a", `m${i}`, 0.5)).join(), Array.from({ length: 200 }, (_, i) => uniformArm("user-b", `m${i}`, 0.5)).join());
+  for (let i = 0; i < 500; i += 1) if (uniformArm("u", `m${i}`, FROZEN.uniformRate)) assert.equal(uniformArm("u", `m${i}`, FROZEN.uniformRate * 2), true);
+  assert.notEqual(Array.from({ length: 200 }, (_, i) => uniformArm("user-a", `m${i}`, FROZEN.uniformRate * 2)).join(), Array.from({ length: 200 }, (_, i) => uniformArm("user-b", `m${i}`, FROZEN.uniformRate * 2)).join());
 });
 
 test("cohort is decided by arrival time against the fixed cutoff, inclusive", () => {
-  assert.equal(cohortOf(new Date("2026-11-15T23:59:59Z"), CFG.cutoff), "historical");
-  assert.equal(cohortOf(new Date("2026-11-16T00:00:00Z"), CFG.cutoff), "prospective");
+  assert.equal(cohortOf(new Date(CUTOFF_MS - 1000), CFG.cutoff), "historical");
+  assert.equal(cohortOf(new Date(CUTOFF_MS), CFG.cutoff), "prospective");
 });
 
 // ---- records ----
@@ -75,7 +78,7 @@ test("a hiring candidate is planned for a model read and waits in review until t
   assert.equal(r.readerVersion, READER_VERSION_V3);
   assert.equal(r.pipelineVersion, PIPELINE_VERSION);
   assert.equal(r.senderDomain, "acme.example");
-  assert.equal(r.uniformArm, uniformArm("u1", "m1", 0.05));
+  assert.equal(r.uniformArm, uniformArm("u1", "m1", FROZEN.uniformRate));
 });
 
 test("provable noise is vetoed: never read, final immediately, never a review item", () => {
@@ -93,7 +96,7 @@ test("mail phrased without application vocabulary is still planned for a read (t
 });
 
 test("a sampled non-candidate is metadata only: not read, not recruiting, rules not applied", () => {
-  const r = recordForNonCandidate("u1", { id: "z9", threadId: "tz", from: "Someone <a@b.example>", receivedAt: new Date("2026-11-20T00:00:00Z") }, CFG);
+  const r = recordForNonCandidate("u1", { id: "z9", threadId: "tz", from: "Someone <a@b.example>", receivedAt: AT(20) }, CFG);
   assert.equal(r.isCandidate, false);
   assert.equal(r.plannedRead, false);
   assert.equal(r.planReason, "not_candidate");
@@ -121,13 +124,13 @@ test("PRIVACY: the table has no column that could hold text, a subject, a snippe
 test("readers that agree are accepted; fields come from the frozen reconcile and the model read is recorded", () => {
   const rules = recordForCandidate("u1", mail(), CFG, true);
   const forced = { ...rules, rulesRecruiting: true, rulesType: "applied" as const, rulesCompany: "Acme", rulesRole: "Software Engineer Intern" };
-  const r = resolveRecord(forced, model(), new Date("2026-11-18T00:00:00Z"));
+  const r = resolveRecord(forced, model(), AT(17));
   assert.equal(r.state, "recruiting");
   assert.equal(r.reviewReason, null);
   assert.equal(r.modelStatus, "ok");
   assert.equal(r.modelEvidenceHash, "abc123");
   assert.equal(r.finalCompany, "Acme");
-  assert.equal(r.modelReadAt?.toISOString(), "2026-11-18T00:00:00.000Z");
+  assert.equal(r.modelReadAt?.toISOString(), AT(17).toISOString());
 });
 
 test("disagreement becomes a review item carrying the model's suggestion, in both directions", () => {

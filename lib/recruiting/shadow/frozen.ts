@@ -7,7 +7,13 @@
  */
 export const FROZEN = {
   protocol: "prospective-1",
-  freezeTag: "arch-v2-shadow-candidate-1",
+  freezeTag: "arch-v2-shadow-candidate-2",
+  /**
+   * candidate-1 was created and then superseded the same day, BEFORE any prospective evidence existed, after a freeze-integrity
+   * audit found competing literals in a test fixture and inaccurate wording in the protocol (no change to the architecture,
+   * thresholds, statistics, sampling design, cutoff or privacy policy). It is kept as an immutable record and is never used.
+   */
+  supersedes: { tag: "arch-v2-shadow-candidate-1", commit: "aa9c0c0a3da2cfbd7d2654cf4f77b1c83e7fabcd", date: "2026-11-08" },
 
   /** Mail arriving at or after this instant is eligible. Fixed; it is also a CHECK constraint in the database. */
   cutoff: "2026-12-01T00:00:00.000Z",

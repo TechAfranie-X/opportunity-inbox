@@ -35,6 +35,9 @@ export function protocolTokens(): Array<[string, string]> {
     ["min evidence: agreement rows", `${m.agreementRows} agreement-region rows`],
     ["min evidence: review reads", `${m.reviewReads} model reads`],
     ["dataset prefix", FROZEN.datasetPrefix],
+    ["labeling window", `within ${FROZEN.labelWithinDays} days`],
+    ["superseded tag", FROZEN.supersedes.tag],
+    ["superseded commit", FROZEN.supersedes.commit.slice(0, 7)],
   ];
 }
 

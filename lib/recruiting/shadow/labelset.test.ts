@@ -6,7 +6,7 @@ import { INGESTION_COLUMNS, classify, isoWeek, selectLabelSet, type IngestionFac
 import { uniformArm } from "./shadow.ts";
 
 const facts = (over: Partial<IngestionFacts> = {}): IngestionFacts => ({
-  userGoogleSub: "u1", gmailMessageId: "m1", gmailThreadId: "t1", arrivedAt: new Date("2026-12-10T12:00:00Z"),
+  userGoogleSub: "u1", gmailMessageId: "m1", gmailThreadId: "t1", arrivedAt: new Date(new Date(FROZEN.cutoff).getTime() + 9.5 * 86400000),
   readerVersion: FROZEN.readerVersion, pipelineVersion: FROZEN.pipelineVersion, extractorVersion: FROZEN.extractorVersion,
   cohort: "prospective", uniformArm: false, isCandidate: true, plannedRead: true, ...over,
 });
@@ -37,7 +37,7 @@ test("eligibility boundaries: the cutoff is inclusive, the window end is exclusi
 });
 
 test("historical mail can never be selected, whatever else is true of it", () => {
-  const old = facts({ arrivedAt: new Date("2026-11-30T23:59:59Z"), cohort: "historical", uniformArm: true });
+  const old = facts({ arrivedAt: new Date(new Date(FROZEN.cutoff).getTime() - 1000), cohort: "historical", uniformArm: true });
   assert.equal(selectLabelSet([old, { ...old, cohort: "prospective" }]).length, 0);
 });
 
@@ -76,7 +76,7 @@ test("the sampling arm is deterministic, near the frozen rate, and monotone, so 
   const N = 20000;
   for (let i = 0; i < N; i += 1) if (uniformArm("user-x", `msg-${i}`, FROZEN.uniformRate)) hits += 1;
   assert.ok(Math.abs(hits / N - FROZEN.uniformRate) < 0.01, `rate ${hits / N}`);
-  for (let i = 0; i < 300; i += 1) assert.equal(uniformArm("user-x", `m${i}`, 0.25), uniformArm("user-x", `m${i}`, 0.25));
+  for (let i = 0; i < 300; i += 1) assert.equal(uniformArm("user-x", `m${i}`, FROZEN.uniformRate), uniformArm("user-x", `m${i}`, FROZEN.uniformRate));
 });
 
 test("ISO week names are stable across year boundaries", () => {

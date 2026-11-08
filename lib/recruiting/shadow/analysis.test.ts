@@ -179,7 +179,7 @@ import { recordForNonCandidate } from "./shadow.ts";
 
 test("PRIVACY: a result never carries the account identifier; mailboxes appear as opaque labels", () => {
   const sub = "100000000000000000001"; // a fake account id: real identifiers never belong in the repository
-  const rec = recordForNonCandidate(sub, { id: "z1", threadId: "t1", from: "a@b.example", receivedAt: new Date("2026-12-05T00:00:00Z") }, { enabled: true, cutoff: new Date("2026-12-01T00:00:00Z"), uniformRate: 0.25 });
+  const rec = recordForNonCandidate(sub, { id: "z1", threadId: "t1", from: "a@b.example", receivedAt: new Date(new Date(FROZEN.cutoff).getTime() + 4 * 86400000) }, { enabled: true, cutoff: new Date(FROZEN.cutoff), uniformRate: FROZEN.uniformRate });
   const row = toAnalysisRow(rec, { stratum: "S2", weight: 4 }, labelFactsFrom({ is_recruiting: false })!);
   assert.equal(row.mailbox, mailboxLabel(sub));
   assert.ok(!row.mailbox.includes(sub));
