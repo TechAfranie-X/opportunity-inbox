@@ -1,6 +1,8 @@
 import "server-only";
 
-import { getGmailRefreshToken } from "@/lib/gmail/credentials";
+import { findGmailConnection, getGmailRefreshToken } from "@/lib/gmail/credentials";
+import { isSampleUser } from "@/lib/gmail/sample";
+import { sampleMailSource } from "@/lib/gmail/sample-source";
 import { applyEmbargo } from "@/lib/gmail/embargo";
 import { refreshGmailAccessToken } from "@/lib/gmail/oauth";
 import { RECRUITING_QUERY, fetchEmailsById, fetchOutboundInThreads, listMessageRefs } from "@/lib/gmail/recruiting-source";
@@ -20,6 +22,11 @@ export function gmailMailSource(accessToken: string): MailSource {
 
 /** The mail source for a signed-in user, or null when no mailbox is connected. */
 export async function mailSourceFor(userGoogleSub: string): Promise<MailSource | null> {
+  if (isSampleUser(userGoogleSub)) {
+    // Sample users never reach Google: their mailbox is synthetic, anchored at when the sample was started.
+    const connection = await findGmailConnection(userGoogleSub);
+    return connection ? sampleMailSource(connection.connectedAt) : null;
+  }
   const refresh = await getGmailRefreshToken(userGoogleSub);
   if (!refresh) return null;
   return gmailMailSource(await refreshGmailAccessToken(refresh));

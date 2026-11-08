@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/auth";
 import { isDatabaseConfigured } from "@/lib/db";
-import { findGmailConnection } from "@/lib/gmail/credentials";
+import { findGmailConnection, saveGmailConnection } from "@/lib/gmail/credentials";
+import { SAMPLE_EMAIL, SAMPLE_SUB, isSampleLoginEnabled } from "@/lib/gmail/sample";
 
 const GMAIL_ERRORS: Record<string, string> = {
   missing_refresh_token: "Google did not grant offline access. Gmail was not connected.",
@@ -57,6 +58,20 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             </form>
           )}
         </div>
+        {isSampleLoginEnabled() && !session?.user ? (
+          <form
+            className="mt-5"
+            action={async () => {
+              "use server";
+              if (!isSampleLoginEnabled()) return;
+              // Seed a sample connection (a placeholder secret, never used) so the app treats the sample user as connected.
+              await saveGmailConnection({ userGoogleSub: SAMPLE_SUB, gmailEmail: SAMPLE_EMAIL, refreshToken: "sample", scope: "sample" });
+              await signIn("sample", { redirectTo: "/today" });
+            }}
+          >
+            <button type="submit" className="link-quiet">Try with a sample mailbox (development)</button>
+          </form>
+        ) : null}
         {gmailError ? (
           <p className="t-meta mt-4 text-signal" role="alert">
             {gmailError}
