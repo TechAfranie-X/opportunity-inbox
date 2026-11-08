@@ -19,7 +19,8 @@
     "reader": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/reader-shadow.ts",
     "arch": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/arch-lab.ts",
     "shadow": "node --env-file=.env.local --import ./scripts/freeze-guard-preload.mjs --import ./scripts/loader/register.mjs scripts/shadow.ts",
-    "test:guard": "node --test scripts/freeze-guard.test.mjs"
+    "test:guard": "node --test scripts/freeze-guard.test.mjs",
+    "e2e:sample": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/e2e-sample.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.3",

@@ -7,6 +7,7 @@ import { isSyncLocked } from "@/app/sync-lock";
 import { isDatabaseConfigured } from "@/lib/db";
 import Link from "next/link";
 import { embargoHidingMail, EMBARGO_CUTOFF } from "@/lib/gmail/embargo";
+import { isSampleUser } from "@/lib/gmail/sample";
 import { findGmailConnection } from "@/lib/gmail/credentials";
 import { buildReviewQueue } from "@/lib/recruiting/review";
 import { toFloating } from "@/lib/recruiting/actions";
@@ -36,7 +37,7 @@ export default async function TodayPage() {
   const updated = workspace.lastSyncedAt?.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
   const toCheck = neverSynced ? 0 : buildReviewQueue(workspace.opportunities).length;
-  const hiding = embargoHidingMail(real);
+  const hiding = !isSampleUser(sub) && embargoHidingMail(real);
 
   return (
     <AppShell active="today" user={session?.user} updated={updated} autoSync={isSyncLocked() ? false : neverSynced ? "first" : syncIsStale(workspace.lastSyncedAt, real) ? "stale" : false}opportunities={workspace.opportunities} now={now}>

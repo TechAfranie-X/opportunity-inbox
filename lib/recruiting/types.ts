@@ -96,6 +96,8 @@ export type EffectiveEvent = ExtractedEvent & {
   /** Persisted row id (undefined for demo/fixture events). */
   id: string;
   corrected: boolean;
+  /** The person pressed "Looks right" on this event. */
+  confirmed?: boolean;
 };
 
 export type Opportunity = {

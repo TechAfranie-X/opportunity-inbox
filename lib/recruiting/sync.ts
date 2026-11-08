@@ -2,6 +2,7 @@ import "server-only";
 
 import { GmailAccessError } from "@/lib/gmail/oauth";
 import { embargoBefore } from "@/lib/gmail/embargo";
+import { isSampleUser } from "@/lib/gmail/sample";
 import { mailSourceFor } from "@/lib/gmail/source";
 import { outboundEvent, extractAll } from "@/lib/recruiting/extract";
 import { buildPredictions } from "@/lib/recruiting/predictions";
@@ -47,7 +48,8 @@ export async function syncRecruitingMail(userGoogleSub: string): Promise<SyncRes
       threadsPerChunk: THREADS_PER_CHUNK,
       budgetMs: BUDGET_MS,
       recentDays: RECENT_DAYS,
-      embargoBefore: embargoBefore(),
+      // The embargo protects real evaluation mail; the synthetic sample mailbox is not evaluation mail and must keep working after the cutoff.
+      embargoBefore: isSampleUser(userGoogleSub) ? null : embargoBefore(),
       extract: extractAll,
       predict: buildPredictions,
       outboundEvent,

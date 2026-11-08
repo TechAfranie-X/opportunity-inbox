@@ -24,7 +24,7 @@ export function buildReviewQueue(opportunities: Opportunity[], policy: Policy = 
   for (const o of opportunities) {
     for (const event of o.events) {
       // An event with no employer at all is always worth a look: it sits under "Unknown company" until someone names it.
-      const unnamed = !event.company && !event.corrected;
+      const unnamed = !event.company && !event.corrected && !event.confirmed;
       if (event.outbound || !(unnamed || eventNeedsReview(event, policy))) continue;
       const reasons = event.reviewReasons?.length ? event.reviewReasons : [!event.company ? "We could not tell which company this is from." : FALLBACK];
       items.push({ event, opportunityKey: o.key, company: o.company, role: o.role, reasons });

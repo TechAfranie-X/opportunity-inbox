@@ -334,7 +334,7 @@ export async function ignoreEvent(userGoogleSub: string, eventId: string) {
   });
 }
 
-/** "Looks right": an explicit confirmation of what is shown. Changes nothing the person sees. */
+/** "Looks right": an explicit confirmation of what is shown. Changes no value; it only settles the doubt. */
 export async function confirmEvent(userGoogleSub: string, eventId: string) {
   await getDb().transaction(async (tx) => {
     const row = await loadRow(tx, userGoogleSub, eventId);
@@ -347,6 +347,8 @@ export async function confirmEvent(userGoogleSub: string, eventId: string) {
       eventDate: correction?.eventDate !== undefined ? correction.eventDate : row.eventDate,
     };
     await appendUserLabels(tx, userGoogleSub, row, draftsFromConfirmation(shown, await priorUserLabels(tx, userGoogleSub, row.gmailMessageId)));
+    // Remember the confirmation on the event itself, so it stops being offered for review (values are unchanged).
+    await tx.update(recruitingEvents).set({ correction: serializeCorrection({ ...correction, confirmed: true }) }).where(eq(recruitingEvents.id, eventId));
   });
 }
 

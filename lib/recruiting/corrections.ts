@@ -8,6 +8,7 @@ export function parseCorrection(raw: unknown): EventCorrection | undefined {
   const r = raw as Record<string, unknown>;
   const out: EventCorrection = {};
   if (r.ignored === true) out.ignored = true;
+  if (r.confirmed === true) out.confirmed = true;
   if (typeof r.type === "string" && (EVENT_TYPES as string[]).includes(r.type)) out.type = r.type as EventType;
   if (typeof r.company === "string" && r.company.trim()) out.company = r.company.trim().slice(0, 120);
   if (r.role === null) out.role = null;
@@ -23,6 +24,7 @@ export function parseCorrection(raw: unknown): EventCorrection | undefined {
 export function serializeCorrection(c: EventCorrection): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (c.ignored) out.ignored = true;
+  if (c.confirmed) out.confirmed = true;
   if (c.type !== undefined) out.type = c.type;
   if (c.company !== undefined) out.company = c.company;
   if (c.role !== undefined) out.role = c.role;

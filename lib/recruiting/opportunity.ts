@@ -12,6 +12,8 @@ import type {
 /** A user's correction to one extracted event. Absent field = keep extracted value. */
 export type EventCorrection = {
   ignored?: boolean;
+  /** "Looks right": the person checked what we read. Changes no value; it settles the doubt so the item leaves the review queue. */
+  confirmed?: boolean;
   type?: EventType;
   company?: string;
   role?: string | null;
@@ -27,7 +29,7 @@ export function applyCorrection(
 ): EffectiveEvent | null {
   if (!correction) return { ...event, corrected: false };
   if (correction.ignored) return null;
-  const merged: EffectiveEvent = { ...event, corrected: false };
+  const merged: EffectiveEvent = { ...event, corrected: false, ...(correction.confirmed ? { confirmed: true } : {}) };
   if (correction.type !== undefined) { merged.type = correction.type; merged.corrected = true; }
   if (correction.company !== undefined) { merged.company = correction.company; merged.corrected = true; }
   if (correction.role !== undefined) { merged.role = correction.role; merged.corrected = true; }
@@ -162,7 +164,7 @@ export function opportunityKey(company: string | null, role: string | null, used
  * and falls back to the event-level confidence for older rows. A person's own correction settles it.
  */
 export function eventNeedsReview(e: EffectiveEvent, policy: Policy = DEFAULT_POLICY): boolean {
-  if (e.corrected) return false;
+  if (e.corrected || e.confirmed) return false;
   if (!e.fieldConfidence) return e.confidence < policy.reviewBelow;
   return decide(e.type, e.fieldConfidence.type, policy, "type").state !== "accepted" || (e.company !== null && decide(e.company, e.fieldConfidence.company, policy, "company").state !== "accepted");
 }

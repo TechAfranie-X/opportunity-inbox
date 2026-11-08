@@ -31,3 +31,15 @@ test("the queue never includes the user's own replies and lists active opportuni
   const q = buildReviewQueue(buildOpportunities(events()));
   assert.ok(q.every((i) => !i.event.outbound));
 });
+
+test("pressing Looks right (confirmed) settles an item without changing any value", () => {
+  const base = events();
+  const first = buildReviewQueue(buildOpportunities(base));
+  const target = first[0].event;
+  const confirmed = base.map((e) => (e.id === target.id ? { ...e, confirmed: true } : e));
+  const after = buildReviewQueue(buildOpportunities(confirmed));
+  assert.equal(after.some((i) => i.event.id === target.id), false);
+  const unchanged = buildOpportunities(confirmed).flatMap((o) => o.events).find((e) => e.id === target.id)!;
+  assert.equal(unchanged.company, target.company);
+  assert.equal(unchanged.type, target.type);
+});

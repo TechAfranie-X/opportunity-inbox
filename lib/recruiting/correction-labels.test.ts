@@ -61,3 +61,13 @@ test("encoding is stable", () => {
   assert.equal(encodeField("role", predicted), "not_applicable");
   assert.equal(encodeField("type", predicted), "assessment");
 });
+
+import { applyCorrection as _apply } from "./opportunity.ts";
+import { parseCorrection as _parse, serializeCorrection as _ser } from "./corrections.ts";
+test("a confirmation round-trips through storage and marks the event confirmed without calling it corrected", () => {
+  const c = _parse(_ser({ confirmed: true }));
+  assert.deepEqual(c, { confirmed: true });
+  const e = _apply({ id: "x" } as never, c);
+  assert.equal(e?.confirmed, true);
+  assert.equal(e?.corrected, false);
+});
