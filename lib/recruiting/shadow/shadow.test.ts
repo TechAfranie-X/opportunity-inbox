@@ -239,13 +239,9 @@ test("the report compares old and v2 from stored facts alone, and counts what on
 });
 
 // ---- wiring ----
-test("the sync hook is lazy, flag-gated and failure-proof, and cannot reach the product's own tables", () => {
-  const actions = readFileSync(new URL("../../../app/actions.ts", import.meta.url), "utf8");
-  assert.match(actions, /import \{ after \} from "next\/server"/);
-  assert.match(actions, /readShadowConfig\(\)\.enabled/);
-  assert.match(actions, /await import\("@\/lib\/recruiting\/shadow\/collect"\)/);
-  assert.doesNotMatch(actions, /^import .*shadow\/collect/m, "collection is never imported statically");
-  assert.match(actions, /catch \(error\) \{\s*console\.error\("shadow collection failed:", error instanceof Error \? error\.name : "unknown"\)/);
+// On the product branch the sync no longer triggers collection (evidence is collected only by the guarded CLI on the frozen
+// checkout; see lib/product-isolation.test.ts). The collector's own guarantees below still hold.
+test("the collector cannot reach the product's own tables and logs no content", () => {
   const collect = readFileSync(new URL("./collect.ts", import.meta.url), "utf8");
   const store = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
   assert.doesNotMatch(collect + store, /recruitingEvents|opportunityOverrides|actionDismissals|saveExtractedEvents|savePredictions/, "shadow code never writes the product's tables");
