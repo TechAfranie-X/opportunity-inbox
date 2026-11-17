@@ -59,13 +59,31 @@ export function SyncControl({
           <div className="sweep" />
         </div>
       ) : null}
-      <form ref={formRef} action={run} className="flex items-center gap-2.5">
-        <span className="t-meta tnum hidden text-ink-3 lg:inline" aria-live="polite">
-          {pending ? (continuing ? "Reading older mail…" : "Reading your inbox…") : state.status === "error" ? <span className="text-signal">{state.message}</span> : more ? `Older mail is still unread · Refresh to continue` : updated ? `Updated ${updated}` : ""}
+      <form ref={formRef} action={run} className="flex items-center gap-1.5">
+        {/* Quiet by default: words appear only while it works, when it needs you, or when it has never run. */}
+        <span className="t-meta hidden text-ink-3 lg:inline" aria-live="polite">
+          {pending ? (continuing ? "Reading older mail…" : "Reading your inbox…") : state.status === "error" ? <span className="text-signal">{state.message}</span> : more ? "Older mail is still unread" : ""}
         </span>
-        <button type="submit" disabled={pending} className="link-quiet t-meta disabled:opacity-50" onClick={() => { continues.current = 0; setGaveUp(false); }}>
-          {pending ? "Syncing" : updated ? "Refresh" : "Read my inbox"}
-        </button>
+        {updated || pending ? (
+          <button
+            type="submit"
+            disabled={pending}
+            className="icon-btn"
+            data-busy={pending}
+            title={pending ? "Syncing" : `Refresh. Updated ${updated}`}
+            aria-label={pending ? "Syncing your inbox" : `Refresh. Last updated ${updated}`}
+            onClick={() => { continues.current = 0; setGaveUp(false); }}
+          >
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M13.5 8a5.5 5.5 0 1 1-1.7-3.97" />
+              <path d="M13.5 2.5v3h-3" />
+            </svg>
+          </button>
+        ) : (
+          <button type="submit" disabled={pending} className="btn-soft !h-8 !px-3 text-xs" onClick={() => { continues.current = 0; setGaveUp(false); }}>
+            Read my inbox
+          </button>
+        )}
       </form>
       {state.status === "error" && state.reconnect ? (
         <form action="/api/gmail/connect" method="post" className="inline">

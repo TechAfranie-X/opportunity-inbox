@@ -9,7 +9,7 @@ export default async function DemoActivity() {
   await connection();
   const { opportunities, now } = loadDemoWorkspace();
   return (
-    <AppShell demo active="activity" opportunities={opportunities} now={now}>
+    <AppShell demo active="activity" opportunities={opportunities} now={now} width="reading">
       <h1 className="t-display">Activity</h1>
       <p className="t-lead mt-3 max-w-[44ch] text-ink-2">Everything that moved in your recruiting, newest first.</p>
       <div className="mt-10">

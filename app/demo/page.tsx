@@ -13,7 +13,7 @@ export default async function DemoToday() {
   const needs = buildBriefing(opportunities, actions, now).needsYou.length;
   const today = now.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" });
   return (
-    <AppShell demo active="today" opportunities={opportunities} now={now}>
+    <AppShell demo active="today" opportunities={opportunities} now={now} width="reading">
       <Greeting name="Sam" hour={9} needsYou={needs}>
         <span>{today}</span>
       </Greeting>

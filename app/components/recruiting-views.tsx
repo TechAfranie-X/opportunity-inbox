@@ -23,7 +23,7 @@ import {
   relativeDay,
   toInputValue,
 } from "@/lib/recruiting/format";
-import { annotateTimeline, nextMoment, peopleFor, pulse, stageSince } from "@/lib/recruiting/history";
+import { annotateTimeline, nextMoment, peopleFor, stageSince } from "@/lib/recruiting/history";
 import { EVENT_TYPES, type ActionItem, type ActionKind, type EffectiveEvent, type Opportunity } from "@/lib/recruiting/types";
 
 const fullHref = (base: string, key: string) => `${base}/${encodeURIComponent(key)}`;
@@ -111,8 +111,8 @@ function Hero({ item, opp, now, basePath, editable }: { item: ActionItem; opp?: 
   return (
     <section className="hero" aria-label="Most important today">
       <div className="flex items-baseline justify-between gap-4">
-        <p className="t-label text-ink-2">{item.company}</p>
-        {copy.relative ? <p className={`t-label ${copy.critical ? "text-signal" : "text-accent"}`}>{copy.relative}</p> : null}
+        <p className="font-medium tracking-tight text-ink-2">{item.company}</p>
+        {copy.relative ? <p className={`t-meta font-medium ${copy.critical ? "text-signal" : "text-accent"}`}>{copy.relative}</p> : null}
       </div>
       <h2 className="t-title mt-3.5">{item.role ?? copy.headline}</h2>
       <p className="t-lead mt-1 text-ink-2">{KIND_LABEL[item.kind]}</p>
@@ -146,8 +146,7 @@ function Hero({ item, opp, now, basePath, editable }: { item: ActionItem; opp?: 
 function EmptyHero() {
   return (
     <section className="hero" aria-label="Nothing needs you">
-      <p className="t-label text-accent">All clear</p>
-      <h2 className="t-title mt-4 max-w-[18ch]">Nothing is waiting on you.</h2>
+      <h2 className="t-title max-w-[18ch]">Nothing is waiting on you.</h2>
       <p className="t-lead mt-2 max-w-[38ch] text-ink-2">New emails and deadlines will appear here the moment they arrive.</p>
     </section>
   );
@@ -161,102 +160,62 @@ function dayHeading(now: Date, due: Date | null, overdue: boolean) {
   return due.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
 }
 
-/** Chronological agenda for the next week: things needing a reply first ("Now"), then by day. */
-function Agenda({ items, now, editable }: { items: ActionItem[]; now: Date; editable: boolean }) {
+/** Rows of work in time order: things needing a reply first ("Now"), then by day. The whole row is the link. */
+function ActionList({ items, now, editable }: { items: ActionItem[]; now: Date; editable: boolean }) {
   const sorted = [...items].sort((a, b) => {
     const ad = a.due && a.bucket !== "overdue" ? a.due.getTime() : -1;
     const bd = b.due && b.bucket !== "overdue" ? b.due.getTime() : -1;
     return ad - bd || b.priority - a.priority;
   });
-  const rows = sorted.map((item, i) => {
-    const heading = dayHeading(now, item.due, item.bucket === "overdue");
-    const previous = i === 0 ? null : dayHeading(now, sorted[i - 1].due, sorted[i - 1].bucket === "overdue");
-    return { item, heading, showHeading: heading !== previous };
-  });
   return (
-    <section>
-      <SectionHead title="Coming up" count={items.length} />
-      <ul className="list mt-2">
-        {rows.map(({ item, heading, showHeading }) => {
-          const copy = describeAction(item, now);
-          return (
-            <li key={item.id}>
-              <div className="row !items-start !gap-4">
-                <p className={`t-meta w-[5.25rem] shrink-0 pt-[0.2rem] ${heading === "Now" ? "font-semibold text-signal" : "text-ink-3"}`}>{showHeading ? heading : ""}</p>
-                <div className="min-w-0 flex-1">
-                  <OpenOpportunity opportunityKey={item.opportunityKey} className="row-link block font-medium tracking-tight">
-                    {copy.headline}
-                  </OpenOpportunity>
-                  <p className="t-meta mt-0.5 truncate text-ink-2">{item.role ?? item.reason}</p>
-                </div>
-                <div className="row-end shrink-0 pt-[0.2rem]">
-                  {item.due && item.dueHasTime ? (
-                    <span className="row-time t-meta tnum text-ink-3">
-                      {item.due.toLocaleTimeString("en-US", { timeZone: "UTC", hour: "numeric", minute: "2-digit" })}
-                    </span>
-                  ) : null}
-                  <div className="row-tools">
-                    <ActionMenu item={item} editable={editable} />
-                  </div>
+    <ul className="list mt-2">
+      {sorted.map((item, i) => {
+        const heading = dayHeading(now, item.due, item.bucket === "overdue");
+        const previous = i === 0 ? null : dayHeading(now, sorted[i - 1].due, sorted[i - 1].bucket === "overdue");
+        const copy = describeAction(item, now);
+        return (
+          <li key={item.id}>
+            <div className="row !items-start !gap-4">
+              <p className={`t-meta w-[4.75rem] shrink-0 pt-[0.2rem] ${heading === "Now" ? "font-semibold text-signal" : "text-ink-3"}`}>{heading !== previous ? heading : ""}</p>
+              <div className="min-w-0 flex-1">
+                <OpenOpportunity opportunityKey={item.opportunityKey} className="row-link block font-medium tracking-tight">
+                  {copy.headline}
+                </OpenOpportunity>
+                <p className="t-meta mt-0.5 truncate text-ink-2">{item.role ?? item.reason}</p>
+              </div>
+              <div className="row-end shrink-0 pt-[0.2rem]">
+                {item.due && item.dueHasTime ? (
+                  <span className="row-time t-meta tnum text-ink-3">{item.due.toLocaleTimeString("en-US", { timeZone: "UTC", hour: "numeric", minute: "2-digit" })}</span>
+                ) : null}
+                <div className="row-tools">
+                  <ActionMenu item={item} editable={editable} />
                 </div>
               </div>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-/** Where every active opportunity sits, as a thin distribution. Each row links to that stage. */
-function Pulse({ opportunities, pipelineHref }: { opportunities: Opportunity[]; pipelineHref: string }) {
-  const rows = pulse(opportunities);
-  const max = Math.max(1, ...rows.map((r) => r.count));
-  const active = opportunities.filter((o) => o.status === "active").length;
-  const closed = opportunities.length - active;
-  return (
-    <section aria-label="Recruiting pulse">
-      <SectionHead title="Recruiting pulse" />
-      <ul className="mt-4 space-y-3.5">
-        {rows.map((r) => (
-          <li key={r.stage}>
-            <Link href={`${pipelineHref}?stage=${r.stage}`} className="group grid grid-cols-[5.75rem_1fr_1.75rem] items-center gap-3">
-              <span className={`text-[0.9375rem] transition-colors group-hover:text-ink ${r.count === 0 ? "text-ink-3" : "text-ink-2"}`}>{STAGE_LABEL[r.stage]}</span>
-              <span className="relative block h-[3px] rounded-full bg-[var(--line)]" aria-hidden>
-                {r.count > 0 ? <span className="pulse-bar absolute inset-y-0 left-0 block" style={{ width: `${Math.max(4, (r.count / max) * 100)}%` }} /> : null}
-              </span>
-              <span className={`tnum text-right text-[0.9375rem] ${r.count === 0 ? "text-ink-3" : "font-medium"}`}>{r.count}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-      <p className="t-meta mt-5 text-ink-3">
-        {active} active{closed > 0 ? `, ${closed} closed` : ""}
-      </p>
-    </section>
-  );
-}
-
-/** A light event stream, not another task list. */
-function Recent({ opportunities, now }: { opportunities: Opportunity[]; now: Date }) {
-  const { recent } = buildBriefing(opportunities, [], now);
-  if (recent.length === 0) return null;
-  return (
-    <section>
-      <SectionHead title="Recently changed" />
-      <ul className="list mt-2">
-        {recent.map((c) => (
-          <li key={c.opportunityKey}>
-            <div className="row !px-0 !py-2.5" style={{ margin: 0 }}>
-              <OpenOpportunity opportunityKey={c.opportunityKey} className="row-link min-w-0">
-                <span className="block truncate font-medium tracking-tight">{c.company}</span>
-                <span className="t-meta block truncate text-ink-2">{c.label}</span>
-              </OpenOpportunity>
-              <span className="t-meta shrink-0 text-ink-3">{relativeDay(now, c.when)}</span>
             </div>
           </li>
-        ))}
-      </ul>
+        );
+      })}
+    </ul>
+  );
+}
+
+const QUEUE_VISIBLE = 3;
+
+/** A short list with the rest one click away: the first few are the work, the remainder is reachable but never in the way. */
+function Queue({ title, items, now, editable }: { title: string; items: ActionItem[]; now: Date; editable: boolean }) {
+  if (items.length === 0) return null;
+  const order = [...items].sort((a, b) => (a.due && a.bucket !== "overdue" ? a.due.getTime() : -1) - (b.due && b.bucket !== "overdue" ? b.due.getTime() : -1) || b.priority - a.priority);
+  const shown = order.slice(0, QUEUE_VISIBLE);
+  const more = order.slice(QUEUE_VISIBLE);
+  return (
+    <section>
+      <SectionHead title={title} count={items.length} />
+      <ActionList items={shown} now={now} editable={editable} />
+      {more.length > 0 ? (
+        <Disclose className="mt-3" summary={`Show ${more.length} more`} openSummary="Show fewer">
+          <ActionList items={more} now={now} editable={editable} />
+        </Disclose>
+      ) : null}
     </section>
   );
 }
@@ -286,8 +245,11 @@ function WaitingRow({ item, editable }: { item: ActionItem; editable: boolean })
   );
 }
 
-const WAITING_VISIBLE = 5;
-
+/**
+ * Today answers one question: what needs me now? One dominant card, then at most a few things to do next. Everything else
+ * (later this week, replies you are waiting on) is present but folded. Aggregates live where they belong: stage counts in
+ * Pipeline, what changed in Activity. Nothing here competes for attention it has not earned.
+ */
 export function TodayComposition({
   opportunities,
   actions,
@@ -296,6 +258,9 @@ export function TodayComposition({
   pipelineHref,
   editable,
   greeting,
+  toCheck = 0,
+  checkHref = "/review",
+  updated,
 }: {
   opportunities: Opportunity[];
   actions: ActionItem[];
@@ -304,48 +269,60 @@ export function TodayComposition({
   pipelineHref: string;
   editable: boolean;
   greeting: React.ReactNode;
+  /** Events the reader is unsure about (signed-in product only). */
+  toCheck?: number;
+  checkHref?: string;
+  /** Preformatted time of the last read. */
+  updated?: string;
 }) {
   const briefing = buildBriefing(opportunities, actions, now);
   const [hero, ...otherNeeds] = briefing.needsYou;
-  const agenda = [...otherNeeds, ...briefing.comingUp];
-  const visibleWaiting = briefing.waiting.slice(0, WAITING_VISIBLE);
-  const hiddenWaiting = briefing.waiting.slice(WAITING_VISIBLE);
   const heroOpp = hero ? opportunities.find((o) => o.key === hero.opportunityKey) : undefined;
+  const active = opportunities.filter((o) => o.status === "active").length;
+  const closed = opportunities.length - active;
+  const activityHref = pipelineHref.replace(/pipeline$/, "activity");
 
   return (
     <div>
       {greeting}
-      <div className="today-grid mt-8">
-        <div className="today-main space-y-12">
-          {hero ? <Hero item={hero} opp={heroOpp} now={now} basePath={basePath} editable={editable} /> : <EmptyHero />}
-          {agenda.length > 0 ? <Agenda items={agenda} now={now} editable={editable} /> : null}
-        </div>
-
-        <aside className="today-side space-y-12" aria-label="Overview">
-          <Pulse opportunities={opportunities} pipelineHref={pipelineHref} />
-          <Recent opportunities={opportunities} now={now} />
-        </aside>
+      <div className="mt-8 space-y-12">
+        {hero ? <Hero item={hero} opp={heroOpp} now={now} basePath={basePath} editable={editable} /> : <EmptyHero />}
+        <Queue title="Also needs you" items={otherNeeds} now={now} editable={editable} />
+        <Queue title="Coming up" items={briefing.comingUp} now={now} editable={editable} />
 
         {briefing.waiting.length > 0 ? (
-          <section className="today-wait">
-            <SectionHead title="Waiting" count={briefing.waiting.length} />
-            <p className="t-meta mb-1 mt-1 text-ink-3">Applications with no reply yet. Only worth a nudge if you want one.</p>
+          <Disclose summary={`Waiting on replies · ${briefing.waiting.length}`} openSummary="Hide waiting">
+            <p className="t-meta mb-1 mt-3 text-ink-3">Applications with no reply yet. Only worth a nudge if you want one.</p>
             <ul className="list">
-              {visibleWaiting.map((a) => (
+              {briefing.waiting.map((a) => (
                 <WaitingRow key={a.id} item={a} editable={editable} />
               ))}
             </ul>
-            {hiddenWaiting.length > 0 ? (
-              <Disclose className="mt-3" summary={`Show ${hiddenWaiting.length} more`} openSummary="Show fewer">
-                <ul className="list mt-1">
-                  {hiddenWaiting.map((a) => (
-                    <WaitingRow key={a.id} item={a} editable={editable} />
-                  ))}
-                </ul>
-              </Disclose>
-            ) : null}
-          </section>
+          </Disclose>
         ) : null}
+
+        <footer className="space-y-3 border-t border-line pt-6">
+          {toCheck > 0 ? (
+            <p>
+              <Link href={checkHref} className="link">
+                {toCheck} {toCheck === 1 ? "thing is" : "things are"} worth a quick check
+              </Link>
+              <span className="text-ink-3"> so your history stays accurate.</span>
+            </p>
+          ) : null}
+          <p className="t-meta flex flex-wrap items-center gap-x-5 gap-y-1 text-ink-3">
+            <span className="tnum">
+              {active} active{closed > 0 ? `, ${closed} closed` : ""}
+            </span>
+            <Link href={pipelineHref} className="link-quiet t-meta">
+              Pipeline
+            </Link>
+            <Link href={activityHref} className="link-quiet t-meta">
+              Activity
+            </Link>
+            {updated ? <span className="tnum">Updated {updated}</span> : null}
+          </p>
+        </footer>
       </div>
     </div>
   );
@@ -413,7 +390,7 @@ export function ActivityStream({ opportunities, now }: { opportunities: Opportun
 
 /* --------------------------------------------------------- Opportunity page */
 
-export function EventEditor({ event }: { event: EffectiveEvent }) {
+export function EventEditor({ event, compact = false }: { event: EffectiveEvent; compact?: boolean }) {
   return (
     <form action={editEventAction} className="grid gap-4 pb-1 pt-5 sm:grid-cols-2">
       <input type="hidden" name="eventId" value={event.id} />
@@ -443,12 +420,16 @@ export function EventEditor({ event }: { event: EffectiveEvent }) {
         <button type="submit" className="btn-primary">
           Save
         </button>
-        <button type="submit" formAction={confirmEventAction} formNoValidate className="link-quiet">
-          Looks right
-        </button>
-        <button type="submit" formAction={ignoreEventAction} className="link-quiet">
-          Not recruiting, hide it
-        </button>
+        {compact ? null : (
+          <>
+            <button type="submit" formAction={confirmEventAction} formNoValidate className="link-quiet">
+              Looks right
+            </button>
+            <button type="submit" formAction={ignoreEventAction} className="link-quiet">
+              Not recruiting, hide it
+            </button>
+          </>
+        )}
         {event.corrected ? (
           <button type="submit" formAction={resetEventAction} className="link-quiet">
             Undo my edits
@@ -543,7 +524,7 @@ export function OpportunityHistory({ opportunity, now, editable }: { opportunity
           ))}
         </ol>
 
-        <aside className="lg:sticky lg:top-24 lg:self-start" aria-label="Where this stands">
+        <aside className="order-first lg:sticky lg:top-24 lg:order-none lg:self-start" aria-label="Where this stands">
           <p className="t-label text-ink-3">Now</p>
           <div className="mt-5">
             <JourneyLine stage={opportunity.stage} surface="paper" />

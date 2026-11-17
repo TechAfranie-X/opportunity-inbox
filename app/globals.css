@@ -189,10 +189,16 @@ html.theme-fade *::after {
 
 /* ------------------------------------------------------------------- type */
 .t-greeting {
-  font-size: clamp(2rem, 4.2vw, 3.25rem);
+  font-size: clamp(1.75rem, 3.6vw, 2.5rem);
   line-height: 1.04;
   font-weight: 500;
   letter-spacing: -0.038em;
+}
+.t-hero {
+  font-size: clamp(2.5rem, 6.4vw, 4.5rem);
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: -0.045em;
 }
 .t-display {
   font-size: clamp(2rem, 5.2vw, 3rem);
@@ -330,6 +336,27 @@ html.theme-fade *::after {
   font-weight: 600;
   letter-spacing: 0;
   font-variant-numeric: tabular-nums;
+}
+
+.btn-soft {
+  display: inline-flex;
+  align-items: center;
+  height: 2.25rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  border: 0;
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color var(--dur-1) ease;
+}
+.btn-soft:hover {
+  background: var(--accent-line);
 }
 
 .link-quiet {
@@ -658,7 +685,7 @@ html.theme-fade *::after {
   padding: 0.35rem 0.8rem;
   border-radius: 999px;
   font-size: 0.875rem;
-  color: var(--ink-2);
+  color: var(--ink-3);
   transition:
     color var(--dur-1) ease,
     background-color var(--dur-1) ease;
@@ -680,8 +707,8 @@ html.theme-fade *::after {
   height: 2.125rem;
   padding: 0 0.75rem 0 0.8rem;
   border-radius: 999px;
-  border: 1px solid var(--glass-line);
-  background: var(--wash);
+  border: 1px solid transparent;
+  background: none;
   color: var(--ink-3);
   font-size: 0.8125rem;
   cursor: pointer;
@@ -691,8 +718,39 @@ html.theme-fade *::after {
 }
 .search-pill:hover {
   color: var(--ink);
-  background: var(--tint);
-  border-color: var(--accent-line);
+  background: var(--wash);
+  border-color: var(--glass-line);
+}
+
+/* A quiet icon button for controls that should be findable but never loud (refresh). */
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition:
+    color var(--dur-1) ease,
+    background-color var(--dur-1) ease;
+}
+.icon-btn:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--wash);
+}
+.icon-btn:disabled {
+  cursor: default;
+}
+.icon-btn[data-busy="true"] svg {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 @media (max-width: 767px) {
   .search-pill {
@@ -1288,4 +1346,46 @@ html[data-presentation] .inspector ol > li:nth-child(8) {
   height: 1.25rem;
   padding: 0 0.4rem;
   font-size: 0.6875rem;
+}
+
+/* ---------------------------------------------------------------- skeleton */
+/* The first read has no content yet: show the shape of what is coming, quietly. */
+.skeleton {
+  display: block;
+  border-radius: var(--r-sm);
+  background: linear-gradient(90deg, var(--wash) 0%, var(--line) 50%, var(--wash) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* ---------------------------------------------------------- landing preview */
+/* A real picture of the product, framed like a window and faded where it continues. */
+.preview-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  background: var(--paper);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--line-strong), var(--accent) 30%),
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 40px 80px -30px rgb(0 0 0 / 0.55),
+    0 0 120px -30px var(--accent-line);
+  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+}
+.landing-glow {
+  position: absolute;
+  inset: -10% 0 auto 0;
+  height: 36rem;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(60% 60% at 50% 0%, var(--accent-wash), transparent 70%);
 }

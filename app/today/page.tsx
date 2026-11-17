@@ -5,7 +5,6 @@ import { Greeting } from "@/app/components/greeting";
 import { TodayComposition } from "@/app/components/recruiting-views";
 import { isSyncLocked } from "@/app/sync-lock";
 import { isDatabaseConfigured } from "@/lib/db";
-import Link from "next/link";
 import { embargoHidingMail, EMBARGO_CUTOFF } from "@/lib/gmail/embargo";
 import { isSampleUser } from "@/lib/gmail/sample";
 import { findGmailConnection } from "@/lib/gmail/credentials";
@@ -40,7 +39,7 @@ export default async function TodayPage() {
   const hiding = !isSampleUser(sub) && embargoHidingMail(real);
 
   return (
-    <AppShell active="today" user={session?.user} updated={updated} autoSync={isSyncLocked() ? false : neverSynced ? "first" : syncIsStale(workspace.lastSyncedAt, real) ? "stale" : false}opportunities={workspace.opportunities} now={now}>
+    <AppShell active="today" user={session?.user} updated={updated} autoSync={isSyncLocked() ? false : neverSynced ? "first" : syncIsStale(workspace.lastSyncedAt, real) ? "stale" : false} opportunities={workspace.opportunities} now={now} width="reading">
       <Greeting name={name} hour={real.getHours()} needsYou={needs}>
         <span>{today}</span>
       </Greeting>
@@ -50,22 +49,25 @@ export default async function TodayPage() {
           Mail received on or after {EMBARGO_CUTOFF.toLocaleDateString("en-US", { timeZone: "UTC", month: "long", day: "numeric", year: "numeric" })} is not read or shown here while a separate evaluation of the reader is running. Earlier mail works as usual.
         </p>
       ) : null}
-      {toCheck > 0 ? (
-        <p className="mt-6 max-w-[60ch]">
-          <Link href="/review" className="underline decoration-line underline-offset-2 hover:decoration-ink">
-            {toCheck} {toCheck === 1 ? "thing is" : "things are"} worth a quick check
-          </Link>
-          <span className="text-ink-3"> so your history stays accurate.</span>
-        </p>
-      ) : null}
       {neverSynced ? (
-        <p className="t-lead mt-12 max-w-[40ch] text-ink-2">
-          The first read takes a minute or two. We look at each recruiting email once and keep only the company, stage and dates. The message text is never stored.
-        </p>
+        <div className="mt-12" role="status">
+          <p className="t-lead max-w-[40ch] text-ink-2">
+            The first read takes a minute or two. We look at each recruiting email once and keep only the company, stage and dates. The message text is never stored.
+          </p>
+          <div className="mt-10 space-y-3" aria-hidden>
+            <span className="skeleton h-[7.5rem] w-full !rounded-[var(--r-lg)]" />
+            <span className="skeleton h-4 w-3/4" />
+            <span className="skeleton h-4 w-2/3" />
+            <span className="skeleton h-4 w-1/2" />
+          </div>
+        </div>
       ) : workspace.opportunities.length === 0 ? (
-        <p className="t-lead mt-12 max-w-[40ch] text-ink-2">
-          We didn&apos;t find recruiting emails in your inbox. If you were expecting some, tell us which ones we missed.
-        </p>
+        <div className="mt-12 max-w-[44ch]">
+          <p className="t-heading">No recruiting emails found yet.</p>
+          <p className="t-lead mt-2 text-ink-2">
+            Applications, assessments, interviews and offers show up here as they arrive. If you were expecting some, they may be older than a year or filed under Promotions.
+          </p>
+        </div>
       ) : (
         <TodayComposition
           opportunities={workspace.opportunities}
@@ -75,6 +77,8 @@ export default async function TodayPage() {
           pipelineHref="/pipeline"
           editable
           greeting={null}
+          toCheck={toCheck}
+          updated={updated}
         />
       )}
     </AppShell>

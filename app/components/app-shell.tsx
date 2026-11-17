@@ -38,6 +38,7 @@ export function AppShell({
   autoSync = false as false | "first" | "stale",
   opportunities,
   now,
+  width = "wide",
   children,
 }: {
   active: NavId;
@@ -48,6 +49,8 @@ export function AppShell({
   autoSync?: false | "first" | "stale";
   opportunities: Opportunity[];
   now: Date;
+  /** One centred column everywhere so the page edge never jumps between tabs. "wide" is only for a page with a side column (an opportunity's history). */
+  width?: "reading" | "wide";
   children: ReactNode;
 }) {
   const reviewCount = demo ? 0 : buildReviewQueue(opportunities).length;
@@ -120,7 +123,9 @@ export function AppShell({
             to see your own.
           </p>
         ) : null}
-        <main className="mx-auto w-full max-w-[75rem] px-6 lg:px-10">{children}</main>
+        <main className="mx-auto w-full max-w-[75rem] px-6 lg:px-10">
+          <div className={`mx-auto w-full ${width === "reading" ? "max-w-[46rem]" : "max-w-[60rem]"}`}>{children}</div>
+        </main>
       </div>
 
       <nav className="tabbar glass" aria-label="Primary">

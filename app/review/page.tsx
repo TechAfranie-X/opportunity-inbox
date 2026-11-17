@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { AppShell } from "@/app/components/app-shell";
 import { EventEditor } from "@/app/components/recruiting-views";
+import { ReviewTools } from "@/app/components/review-tools";
 import { isDatabaseConfigured } from "@/lib/db";
 import { toFloating } from "@/lib/recruiting/actions";
 import { EVENT_LABEL, formatDay, gmailThreadUrl } from "@/lib/recruiting/format";
@@ -24,7 +25,7 @@ export default async function ReviewPage() {
   const sample = isSampleUser(sub);
 
   return (
-    <AppShell active="review" user={session?.user} updated={updated} opportunities={workspace.opportunities} now={now}>
+    <AppShell active="review" user={session?.user} updated={updated} opportunities={workspace.opportunities} now={now} width="reading">
       <h1 className="t-display flex items-center gap-3">
         Check these
         {queue.length > 0 ? <span className="badge" aria-label={`${queue.length} to check`}>{queue.length}</span> : null}
@@ -32,7 +33,7 @@ export default async function ReviewPage() {
       <p className="t-lead mt-3 max-w-[46ch] text-ink-2">
         {queue.length === 0
           ? "Nothing to check. Everything we read looked clear, or you have already settled it."
-          : "We are not sure about these. Confirm what is right, fix what is wrong, or hide what is not recruiting. It takes a few seconds each, and it keeps your history clean."}
+          : "We are not sure about these. It takes a few seconds each, and it keeps your history clean."}
       </p>
       <ul className="mt-10 divide-y divide-line border-y border-line">
         {queue.map((item) => (
@@ -49,20 +50,18 @@ export default async function ReviewPage() {
             <p className="mt-1">
               We read this as <strong className="font-medium">{EVENT_LABEL[item.event.type].toLowerCase()}</strong>.
             </p>
-            <ul className="t-meta mt-1 list-disc pl-5 text-ink-3">
-              {item.reasons.map((r) => (
-                <li key={r}>{r}</li>
-              ))}
-            </ul>
-            <p className="t-meta mt-1 truncate text-ink-3">{item.event.senderName || item.event.senderDomain}: {item.event.subject}</p>
-            {sample ? null : (
-              <p className="mt-1">
-                <a className="link-quiet t-meta" href={gmailThreadUrl(item.event.gmailThreadId)} target="_blank" rel="noreferrer">
-                  Open the email in Gmail
+            <p className="t-meta mt-1 text-ink-2">{item.reasons.join(" ")}</p>
+            <p className="t-meta mt-1 flex items-baseline gap-x-4 text-ink-3">
+              <span className="min-w-0 truncate">{item.event.senderName || item.event.senderDomain}: {item.event.subject}</span>
+              {sample ? null : (
+                <a className="link-quiet t-meta shrink-0" href={gmailThreadUrl(item.event.gmailThreadId)} target="_blank" rel="noreferrer">
+                  Open in Gmail
                 </a>
-              </p>
-            )}
-            <EventEditor event={item.event} />
+              )}
+            </p>
+            <ReviewTools eventId={item.event.id}>
+              <EventEditor event={item.event} compact />
+            </ReviewTools>
           </li>
         ))}
       </ul>

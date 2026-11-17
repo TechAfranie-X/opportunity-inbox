@@ -20,9 +20,12 @@ export default async function PipelinePage({ searchParams }: PageProps<"/pipelin
   const updated = workspace.lastSyncedAt?.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
   return (
-    <AppShell active="pipeline" user={session?.user} updated={updated} opportunities={workspace.opportunities} now={now}>
+    <AppShell active="pipeline" user={session?.user} updated={updated} opportunities={workspace.opportunities} now={now} width="reading">
       <h1 className="t-display">Pipeline</h1>
-      <p className="t-lead mt-3 max-w-[44ch] text-ink-2">Every opportunity, where it stands. Choose a stage; select a row for the details.</p>
+      <p className="t-lead tnum mt-3 text-ink-2">
+        {workspace.opportunities.filter((o) => o.status === "active").length} active
+        {workspace.opportunities.some((o) => o.status === "closed") ? `, ${workspace.opportunities.filter((o) => o.status === "closed").length} closed` : ""}
+      </p>
       <div className="mt-10">
         <PipelineExplorer initialStage={stage} />
       </div>

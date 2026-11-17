@@ -10,9 +10,12 @@ export default async function DemoPipeline({ searchParams }: PageProps<"/demo/pi
   const { opportunities, now } = loadDemoWorkspace();
   const params = await searchParams;
   return (
-    <AppShell demo active="pipeline" opportunities={opportunities} now={now}>
+    <AppShell demo active="pipeline" opportunities={opportunities} now={now} width="reading">
       <h1 className="t-display">Pipeline</h1>
-      <p className="t-lead mt-3 max-w-[44ch] text-ink-2">Every opportunity, where it stands. Choose a stage; select a row for the details.</p>
+      <p className="t-lead tnum mt-3 text-ink-2">
+        {opportunities.filter((o) => o.status === "active").length} active
+        {opportunities.some((o) => o.status === "closed") ? `, ${opportunities.filter((o) => o.status === "closed").length} closed` : ""}
+      </p>
       <div className="mt-10">
         <PipelineExplorer initialStage={typeof params.stage === "string" ? params.stage : undefined} />
       </div>

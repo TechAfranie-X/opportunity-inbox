@@ -18,7 +18,7 @@ export default async function ActivityPage() {
   const updated = workspace.lastSyncedAt?.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
   return (
-    <AppShell active="activity" user={session?.user} updated={updated} opportunities={workspace.opportunities} now={now}>
+    <AppShell active="activity" user={session?.user} updated={updated} opportunities={workspace.opportunities} now={now} width="reading">
       <h1 className="t-display">Activity</h1>
       <p className="t-lead mt-3 max-w-[44ch] text-ink-2">Everything that moved in your recruiting, newest first.</p>
       <div className="mt-10">
