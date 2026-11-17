@@ -51,7 +51,7 @@ function PaletteDialog() {
         role="dialog"
         aria-label="Search"
         aria-modal="true"
-        className="glass-thick w-full max-w-[34rem] overflow-hidden rounded-[var(--r-lg)] border border-[var(--glass-line)] shadow-[var(--shadow-panel)]"
+        className="w-full max-w-[34rem] overflow-hidden rounded-[var(--r-lg)] bg-raised shadow-[var(--shadow-panel)]"
         style={{ animation: "pop-in var(--dur-2) var(--ease)" }}
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => {

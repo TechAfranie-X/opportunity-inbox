@@ -88,7 +88,7 @@ export function SyncControl({
         )}
       </form>
       {notice && dismissed !== notice ? (
-        <div className="notice-bar glass" role="status">
+        <div className="notice-bar" role="status">
           <p className="t-meta text-ink-2">{notice}</p>
           <button type="button" className="link-quiet t-meta" onClick={() => setDismissed(notice)}>
             Dismiss

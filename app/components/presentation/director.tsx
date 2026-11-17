@@ -244,7 +244,7 @@ function Stage({ opportunities, heroKey, historyKey, emailCount, todayNode, hist
       {mode === "button" ? <audio ref={audio} src={SOUNDTRACK} preload="auto" /> : null}
 
       <div className="presentation-root" aria-hidden={closing || (mode === "button" && !started)}>
-        <header className="nav glass">
+        <header className="nav">
           <div className="mx-auto flex h-full w-full max-w-[75rem] items-center justify-between px-6 lg:px-10">
             <div className="flex items-center gap-7">
               <span className="flex items-center gap-2.5 text-[0.9375rem] font-semibold tracking-tight">
