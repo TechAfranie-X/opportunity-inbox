@@ -16,13 +16,13 @@ export const metadata: Metadata = {
 
 /**
  * Applies the saved appearance before first paint so there is no flash.
- * Light is the default; "system" follows the OS. Kept inline and tiny on purpose.
+ * Dark graphite is the default; "system" follows the OS. Kept inline and tiny on purpose.
  */
-const THEME_SCRIPT = `try{var t=localStorage.getItem("oi-theme");if(t!=="dark"&&t!=="system")t="light";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="light"}`;
+const THEME_SCRIPT = `try{var t=localStorage.getItem("oi-theme");if(t!=="light"&&t!=="system")t="dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" data-theme="light" suppressHydrationWarning className={`${ui.variable} h-full antialiased`}>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${ui.variable} h-full antialiased`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>

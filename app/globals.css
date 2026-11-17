@@ -5,37 +5,53 @@
  *
  * Structure is made from type, space, hairlines and ONE surface shift (the tinted hero field).
  * Material (blur) is reserved for the control layer: navigation, menus, the inspector and the
- * command palette. Content is never glass. One accent (teal) belongs to "the journey";
+ * command palette. Content is never glass. One accent (blue) marks the primary action and "the journey";
  * semantic colour (signal) is used only for time-critical text.
  *
  * Themes: <html data-theme="light|dark|system">. Light is the default; "system" follows the OS.
  */
 
 /* ------------------------------------------------------------------ tokens */
+/*
+ * Palette: cool graphite neutrals + ONE blue. Blue is an accent, never a field: it marks the primary
+ * action, the current place (nav, journey stage, pipeline), links, focus and counts. Surfaces stay neutral.
+ *
+ *   --primary        #3B82F6  non-text accents: bars, dots, rings, glows (3:1+ on every surface)
+ *   --primary-strong #2563EB  filled buttons (white text clears 4.5:1 here; #3B82F6 does not)
+ *   --primary-hover  #1D4ED8  button hover/press
+ *   --accent         text-safe blue for links and labels (#60A5FA on dark, #1D4ED8 on light)
+ */
 :root {
-  /* canvas + ink: warm paper, deep ink */
-  --paper: #f8f6f2;
-  --tint: #efebe4; /* the one surface shift: hero field, active segments */
-  --raised: #fffefb; /* menus, inspector */
-  --ink: #1b1a18;
-  --ink-2: #5a564f;
-  --ink-3: #7a756c;
-  --line: rgb(27 26 24 / 0.1);
-  --line-strong: rgb(27 26 24 / 0.2);
-  --wash: rgb(27 26 24 / 0.05);
+  /* canvas + ink (light: cool paper) */
+  --paper: #f6f8fb;
+  --tint: #ecf0f6; /* the one surface shift: hero field, active segments */
+  --raised: #ffffff; /* menus, inspector */
+  --ink: #0b1220;
+  --ink-2: #4b5567;
+  --ink-3: #5f6b7e;
+  --line: rgb(11 18 32 / 0.1);
+  --line-strong: rgb(11 18 32 / 0.2);
+  --wash: rgb(11 18 32 / 0.05);
 
-  /* accent = the journey; signal = urgency */
-  --accent: #1f6e6b;
+  /* blue accent system */
+  --primary: #3b82f6;
+  --primary-strong: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-ink: #ffffff;
+  --accent: #1d4ed8;
   --accent-ink: #ffffff;
-  --accent-wash: rgb(31 110 107 / 0.1);
+  --accent-wash: rgb(37 99 235 / 0.1);
+  --accent-line: rgb(37 99 235 / 0.28);
+  --ring: rgb(59 130 246 / 0.45);
   --signal: #b3261e;
 
   /* materials (control layer only) */
-  --glass: rgb(248 246 242 / 0.72);
-  --glass-thick: rgb(255 254 251 / 0.95);
-  --glass-line: rgb(27 26 24 / 0.08);
-  --shadow-pop: 0 0 0 0.5px rgb(27 26 24 / 0.1), 0 16px 40px -12px rgb(27 26 24 / 0.22);
-  --shadow-panel: 0 0 0 0.5px rgb(27 26 24 / 0.1), 0 24px 60px -16px rgb(27 26 24 / 0.28);
+  --glass: rgb(246 248 251 / 0.74);
+  --glass-thick: rgb(255 255 255 / 0.95);
+  --glass-line: rgb(11 18 32 / 0.08);
+  --shadow-pop: 0 0 0 0.5px rgb(11 18 32 / 0.1), 0 16px 40px -12px rgb(11 18 32 / 0.22);
+  --shadow-panel: 0 0 0 0.5px rgb(11 18 32 / 0.1), 0 24px 60px -16px rgb(11 18 32 / 0.28);
+  --glow-primary: 0 8px 22px -8px rgb(37 99 235 / 0.55);
 
   /* radii: three, used deliberately */
   --r-sm: 8px;
@@ -55,49 +71,55 @@
   color-scheme: light;
 }
 
-/* Designed graphite: warm, low-glare, with its own accent and shadow. */
+/* Graphite + blue. Dark values are declared once as a mixin-by-selector list below. */
 :root[data-theme="dark"] {
-  --paper: #131312;
-  --tint: #1d1d1b;
-  --raised: #1a1a19;
-  --ink: #f1efea;
-  --ink-2: #aaa69d;
-  --ink-3: #8b867d;
-  --line: rgb(255 255 255 / 0.09);
-  --line-strong: rgb(255 255 255 / 0.18);
-  --wash: rgb(255 255 255 / 0.05);
-  --accent: #6cc0b9;
-  --accent-ink: #0d2a28;
-  --accent-wash: rgb(108 192 185 / 0.13);
-  --signal: #ff8b7b;
-  --glass: rgb(19 19 18 / 0.7);
-  --glass-thick: rgb(26 26 25 / 0.95);
-  --glass-line: rgb(255 255 255 / 0.1);
-  --shadow-pop: 0 0 0 0.5px rgb(255 255 255 / 0.14), 0 18px 48px -12px rgb(0 0 0 / 0.65);
-  --shadow-panel: 0 0 0 0.5px rgb(255 255 255 / 0.14), 0 28px 70px -16px rgb(0 0 0 / 0.7);
+  --paper: #0b0f14;
+  --tint: #111827; /* surface */
+  --raised: #1a2233; /* surface-elevated */
+  --ink: #f3f4f6;
+  --ink-2: #9ca3af;
+  --ink-3: #8794a8;
+  --line: rgb(38 50 68 / 0.75);
+  --line-strong: #263244;
+  --wash: rgb(148 163 184 / 0.07);
+  --accent: #60a5fa;
+  --accent-ink: #08111f;
+  --accent-wash: rgb(59 130 246 / 0.14);
+  --accent-line: rgb(96 165 250 / 0.34);
+  --ring: rgb(96 165 250 / 0.55);
+  --signal: #ff8f80;
+  --glass: rgb(11 15 20 / 0.72);
+  --glass-thick: rgb(26 34 51 / 0.96);
+  --glass-line: rgb(148 163 184 / 0.13);
+  --shadow-pop: 0 0 0 0.5px rgb(148 163 184 / 0.2), 0 18px 48px -12px rgb(0 0 0 / 0.65);
+  --shadow-panel: 0 0 0 0.5px rgb(148 163 184 / 0.2), 0 28px 70px -16px rgb(0 0 0 / 0.7);
+  --glow-primary: 0 8px 24px -8px rgb(59 130 246 / 0.6);
   color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
-    --paper: #131312;
-    --tint: #1d1d1b;
-    --raised: #1a1a19;
-    --ink: #f1efea;
-    --ink-2: #aaa69d;
-    --ink-3: #8b867d;
-    --line: rgb(255 255 255 / 0.09);
-    --line-strong: rgb(255 255 255 / 0.18);
-    --wash: rgb(255 255 255 / 0.05);
-    --accent: #6cc0b9;
-    --accent-ink: #0d2a28;
-    --accent-wash: rgb(108 192 185 / 0.13);
-    --signal: #ff8b7b;
-    --glass: rgb(19 19 18 / 0.7);
-    --glass-thick: rgb(26 26 25 / 0.95);
-    --glass-line: rgb(255 255 255 / 0.1);
-    --shadow-pop: 0 0 0 0.5px rgb(255 255 255 / 0.14), 0 18px 48px -12px rgb(0 0 0 / 0.65);
-    --shadow-panel: 0 0 0 0.5px rgb(255 255 255 / 0.14), 0 28px 70px -16px rgb(0 0 0 / 0.7);
+    --paper: #0b0f14;
+    --tint: #111827;
+    --raised: #1a2233;
+    --ink: #f3f4f6;
+    --ink-2: #9ca3af;
+    --ink-3: #8794a8;
+    --line: rgb(38 50 68 / 0.75);
+    --line-strong: #263244;
+    --wash: rgb(148 163 184 / 0.07);
+    --accent: #60a5fa;
+    --accent-ink: #08111f;
+    --accent-wash: rgb(59 130 246 / 0.14);
+    --accent-line: rgb(96 165 250 / 0.34);
+    --ring: rgb(96 165 250 / 0.55);
+    --signal: #ff8f80;
+    --glass: rgb(11 15 20 / 0.72);
+    --glass-thick: rgb(26 34 51 / 0.96);
+    --glass-line: rgb(148 163 184 / 0.13);
+    --shadow-pop: 0 0 0 0.5px rgb(148 163 184 / 0.2), 0 18px 48px -12px rgb(0 0 0 / 0.65);
+    --shadow-panel: 0 0 0 0.5px rgb(148 163 184 / 0.2), 0 28px 70px -16px rgb(0 0 0 / 0.7);
+    --glow-primary: 0 8px 24px -8px rgb(59 130 246 / 0.6);
     color-scheme: dark;
   }
 }
@@ -112,6 +134,7 @@
   --color-line: var(--line);
   --color-wash: var(--wash);
   --color-accent: var(--accent);
+  --color-primary: var(--primary);
   --color-signal: var(--signal);
   --font-sans: var(--font-ui), ui-sans-serif, system-ui, -apple-system, "SF Pro Text", sans-serif;
 }
@@ -141,14 +164,15 @@ p {
 }
 
 ::selection {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--accent-line);
+  color: var(--ink);
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--primary);
   outline-offset: 3px;
   border-radius: 6px;
+  box-shadow: 0 0 0 5px var(--ring);
 }
 
 /* Theme change crossfades instead of snapping. */
@@ -247,12 +271,13 @@ html.theme-fade *::after {
   height: 2.5rem;
   padding: 0 1.2rem;
   border-radius: 999px;
-  background: var(--ink);
-  color: var(--paper);
+  background: linear-gradient(to bottom, var(--primary), var(--primary-strong));
+  color: var(--primary-ink);
   font-size: 0.875rem;
   font-weight: 500;
   letter-spacing: -0.005em;
   border: 0;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18);
   cursor: pointer;
   text-decoration: none;
   transition:
@@ -262,18 +287,49 @@ html.theme-fade *::after {
 }
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 8px 20px -10px rgb(27 26 24 / 0.5);
+  background: linear-gradient(to bottom, var(--primary-strong), var(--primary-hover));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), var(--glow-primary);
 }
 .btn-primary:active {
   transform: translateY(0) scale(0.985);
-  box-shadow: none;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1);
 }
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: default;
 }
-:root[data-theme="dark"] .btn-primary:hover {
-  box-shadow: 0 8px 22px -10px rgb(0 0 0 / 0.8);
+
+/* Links: quiet until approached, then they take the accent. */
+.link-quiet:hover,
+.link {
+  color: var(--accent);
+}
+.link {
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--dur-1) ease;
+}
+.link:hover {
+  text-decoration-color: var(--accent);
+}
+
+/* Pills and counts: tinted, never solid, so they inform without shouting. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.55rem;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .link-quiet {
@@ -292,8 +348,7 @@ html.theme-fade *::after {
     text-decoration-color var(--dur-1) ease;
 }
 .link-quiet:hover {
-  color: var(--ink);
-  text-decoration-color: var(--line-strong);
+  text-decoration-color: var(--accent-line);
 }
 
 /* ------------------------------------------------------------------ lists */
@@ -384,7 +439,10 @@ html.theme-fade *::after {
 .hero {
   position: relative;
   border-radius: var(--r-lg);
-  background: var(--tint);
+  background:
+    radial-gradient(120% 90% at 0% 0%, var(--accent-wash), transparent 60%),
+    var(--tint);
+  box-shadow: inset 0 0 0 1px var(--line);
   padding: clamp(1.5rem, 2.6vw, 2rem);
 }
 
@@ -415,7 +473,7 @@ html.theme-fade *::after {
   background: var(--line-strong);
 }
 .jl-fill {
-  background: var(--ink);
+  background: linear-gradient(to right, var(--primary), var(--accent));
   transform-origin: left;
   animation: grow var(--dur-3) var(--ease) both;
 }
@@ -435,19 +493,19 @@ html.theme-fade *::after {
   box-shadow: inset 0 0 0 1px var(--line-strong);
 }
 .jl-dot[data-reached="true"] {
-  background: var(--ink);
+  background: var(--primary);
   box-shadow: none;
 }
 .jl-dot[data-current="true"] {
   background: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-wash);
+  box-shadow: 0 0 0 4px var(--accent-wash), 0 0 12px 1px var(--accent-line);
 }
 
 /* -------------------------------------------------------------- pulse bars */
 .pulse-bar {
   height: 3px;
   border-radius: 3px;
-  background: var(--ink);
+  background: linear-gradient(to right, var(--primary), var(--accent));
   transform-origin: left;
   animation: grow var(--dur-3) var(--ease) both;
 }
@@ -583,7 +641,8 @@ html.theme-fade *::after {
 }
 .input:focus-visible {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--ring);
 }
 
 /* ------------------------------------------------------------- navigation */
@@ -609,9 +668,10 @@ html.theme-fade *::after {
   background: var(--wash);
 }
 .nav-link[aria-current="page"] {
-  color: var(--ink);
+  color: var(--accent);
   font-weight: 500;
-  background: var(--tint);
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
 }
 .search-pill {
   display: inline-flex;
@@ -632,6 +692,7 @@ html.theme-fade *::after {
 .search-pill:hover {
   color: var(--ink);
   background: var(--tint);
+  border-color: var(--accent-line);
 }
 @media (max-width: 767px) {
   .search-pill {
@@ -668,8 +729,9 @@ kbd {
   color: var(--ink-2);
 }
 .tabbar a[aria-current="page"] {
-  background: var(--tint);
-  color: var(--ink);
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+  color: var(--accent);
   font-weight: 500;
 }
 
@@ -1201,4 +1263,29 @@ html[data-presentation] .inspector ol > li:nth-child(8) {
   margin-bottom: 1.6rem;
   transform: scale(1.5);
   color: var(--ink);
+}
+
+/* ------------------------------------------------------------ review queue */
+/* "Check these" is the one place we ask something of the person, so each item carries a blue edge. */
+.review-item {
+  position: relative;
+  padding-left: 1.1rem;
+}
+.review-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 1.65rem;
+  bottom: 1.65rem;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(to bottom, var(--primary), transparent);
+}
+
+.nav-link .badge,
+.tabbar .badge {
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.4rem;
+  font-size: 0.6875rem;
 }

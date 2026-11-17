@@ -25,7 +25,10 @@ export default async function ReviewPage() {
 
   return (
     <AppShell active="review" user={session?.user} updated={updated} opportunities={workspace.opportunities} now={now}>
-      <h1 className="t-display">Check these</h1>
+      <h1 className="t-display flex items-center gap-3">
+        Check these
+        {queue.length > 0 ? <span className="badge" aria-label={`${queue.length} to check`}>{queue.length}</span> : null}
+      </h1>
       <p className="t-lead mt-3 max-w-[46ch] text-ink-2">
         {queue.length === 0
           ? "Nothing to check. Everything we read looked clear, or you have already settled it."
@@ -33,10 +36,10 @@ export default async function ReviewPage() {
       </p>
       <ul className="mt-10 divide-y divide-line border-y border-line">
         {queue.map((item) => (
-          <li key={item.event.id} className="py-6">
+          <li key={item.event.id} className="review-item py-6">
             <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
               <p className="font-medium tracking-tight">
-                <Link className="underline decoration-line underline-offset-2 hover:decoration-ink" href={`/opportunities/${encodeURIComponent(item.opportunityKey)}`}>
+                <Link className="link" href={`/opportunities/${encodeURIComponent(item.opportunityKey)}`}>
                   {item.company}
                 </Link>
                 {item.role ? <span className="ml-2 font-normal text-ink-2">{item.role}</span> : null}

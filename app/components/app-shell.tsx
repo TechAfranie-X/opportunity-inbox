@@ -14,7 +14,7 @@ import type { Opportunity } from "@/lib/recruiting/types";
 
 type NavId = "today" | "pipeline" | "activity" | "review";
 
-const NAV: Array<{ id: NavId; label: string; href: string; demoHref: string }> = [
+const NAV: Array<{ id: NavId; label: string; href: string; demoHref: string; count?: number }> = [
   { id: "today", label: "Today", href: "/today", demoHref: "/demo" },
   { id: "pipeline", label: "Pipeline", href: "/pipeline", demoHref: "/demo/pipeline" },
   { id: "activity", label: "Activity", href: "/activity", demoHref: "/demo/activity" },
@@ -51,7 +51,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   const reviewCount = demo ? 0 : buildReviewQueue(opportunities).length;
-  const nav = reviewCount > 0 || active === "review" ? [...NAV, { id: "review" as NavId, label: reviewCount > 0 ? `Check ${reviewCount}` : "Check", href: "/review", demoHref: "/demo" }] : NAV;
+  const nav = reviewCount > 0 || active === "review" ? [...NAV, { id: "review" as NavId, label: "Check", count: reviewCount, href: "/review", demoHref: "/demo" }] : NAV;
   const hrefOf = (item: (typeof NAV)[number]) => (demo ? item.demoHref : item.href);
   const initial = firstName(user?.name, user?.email).charAt(0);
 
@@ -68,6 +68,7 @@ export function AppShell({
               {nav.map((item) => (
                 <Link key={item.id} href={hrefOf(item)} className="nav-link" aria-current={item.id === active ? "page" : undefined}>
                   {item.label}
+                  {item.count ? <span className="badge ml-2">{item.count}</span> : null}
                 </Link>
               ))}
             </nav>
@@ -113,7 +114,7 @@ export function AppShell({
         {demo ? (
           <p className="t-meta mx-auto -mt-4 mb-8 w-full max-w-[75rem] px-6 text-ink-2 lg:px-10">
             Sample data, not your inbox.{" "}
-            <Link className="text-ink underline decoration-line underline-offset-2 hover:decoration-ink" href="/">
+            <Link className="link" href="/">
               Connect Gmail
             </Link>{" "}
             to see your own.
@@ -126,6 +127,7 @@ export function AppShell({
         {nav.map((item) => (
           <Link key={item.id} href={hrefOf(item)} aria-current={item.id === active ? "page" : undefined}>
             {item.label}
+            {item.count ? <span className="badge ml-2">{item.count}</span> : null}
           </Link>
         ))}
       </nav>
