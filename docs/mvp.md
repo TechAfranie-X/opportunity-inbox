@@ -33,14 +33,14 @@ A prospective evaluation of a newer reader (architecture v2) starts **2026-12-01
 
 ## Privacy
 - Read-only Gmail scope; nothing in the mailbox is changed.
-- Message bodies exist only in memory during a sync. The database holds extracted fields and a link to the email. `npm run e2e:sample` checks that no sample body text reaches the database.
+- Message bodies exist only in memory during a sync. The database holds extracted fields and a link to the email, plus a pseudonymous contact key (a hash, never an address) used to link follow-ups, and, for mail the reader was unsure about, its subject and sender (forgotten if you hide it). `npm run e2e:sample` checks that no sample body text reaches the database. See `docs/reliability.md`.
 - Refresh tokens are encrypted at rest. Nothing is sent to any model or third party; the reader is rule-based and local.
 - "Delete my data" removes events, corrections and sync state; "Disconnect Gmail" removes the stored token.
 - Sample sign-in exists only with `SAMPLE_LOGIN=1` and is always off when `NODE_ENV=production`.
 
 ## Known limits (intentionally outside the MVP)
 - **Search recall.** By default mail is found by a keyword search (subject words and applicant-tracking senders). A recruiter email with none of those words is never fetched (about a quarter of recruiting mail on the development mailbox; the sample mailbox contains one on purpose). `DISCOVERY=sweep` widens the search to everything outside Gmail's Promotions, Social and Forums, keyword hits first; see `docs/discovery-v2.md` for the measurements, the privacy rules and the remaining weaknesses. It is off unless set.
-- **Rules, not a model.** Unusual wording, some vendor emails and some course or promotion mail can be misread. The review queue is the safety net, and it only flags what the reader itself doubts, so a confident mistake can still be wrong. Fix it from the opportunity page.
+- **Rules, not a model.** Unusual wording, some vendor emails and some course or promotion mail can be misread. The review queue is the safety net: besides what the reader doubts, it now also lists mail the reader did not recognise but that looks like hiring ("possibly recruiting"), a goodbye read as an update, and anything it cannot trace to the message. Recruiting mail with no hiring vocabulary and no named application can still be missed silently (3 of 12 on a synthetic holdout); see `docs/reliability.md`. Fix anything from the opportunity page.
 - **Accuracy is not claimed.** The sample mailbox is written alongside the rules, so it is a regression guard, not a measurement.
 - Gmail only. One account per sign-in. No sending email, calendar integration, push notifications, mobile app, sharing, or team features.
 - No hosted deployment. It runs locally with local Postgres.
