@@ -14,10 +14,13 @@ import type { EffectiveEvent, Opportunity } from "@/lib/recruiting/types";
 
 type NavId = "today" | "pipeline" | "activity" | "review";
 
-const NAV: Array<{ id: NavId; label: string; href: string; demoHref: string; count?: number }> = [
+/**
+ * Two destinations, not four. Today is the work; Pipeline is the state of everything. Activity is reached from Today ("all
+ * activity") and from search; Check is a status in the navigation that appears only when there is something to check.
+ */
+const NAV: Array<{ id: NavId; label: string; href: string; demoHref: string }> = [
   { id: "today", label: "Today", href: "/today", demoHref: "/demo" },
   { id: "pipeline", label: "Pipeline", href: "/pipeline", demoHref: "/demo/pipeline" },
-  { id: "activity", label: "Activity", href: "/activity", demoHref: "/demo/activity" },
 ];
 
 export function firstName(name?: string | null, email?: string | null) {
@@ -26,10 +29,7 @@ export function firstName(name?: string | null, email?: string | null) {
   return first ? first.charAt(0).toUpperCase() + first.slice(1) : "";
 }
 
-/**
- * The persistent frame. Navigation is a floating glass layer over the content; content scrolls
- * under it and dissolves at the edge. On narrow screens the same destinations become a floating tab bar.
- */
+/** The persistent frame: a solid, quiet navigation bar, and a plain tab bar on narrow screens. */
 export function AppShell({
   active,
   demo = false,
@@ -39,7 +39,7 @@ export function AppShell({
   opportunities,
   possible = [],
   now,
-  width = "wide",
+  width = "mid",
   children,
 }: {
   active: NavId;
@@ -52,40 +52,46 @@ export function AppShell({
   /** Messages that might be recruiting but are not in the pipeline (they only count toward "Check"). */
   possible?: EffectiveEvent[];
   now: Date;
-  /** One centred column everywhere so the page edge never jumps between tabs. "wide" is only for a page with a side column (an opportunity's history). */
-  width?: "reading" | "wide";
+  /** One centred column per kind of page: reading (lists to work through), mid (structure and history), wide (Today, which has a side column). */
+  width?: "reading" | "mid" | "wide";
   children: ReactNode;
 }) {
   const reviewCount = demo ? 0 : attentionCount(buildReviewQueue(opportunities, undefined, possible));
-  const nav = reviewCount > 0 || active === "review" ? [...NAV, { id: "review" as NavId, label: "Check", count: reviewCount, href: "/review", demoHref: "/demo" }] : NAV;
   const hrefOf = (item: (typeof NAV)[number]) => (demo ? item.demoHref : item.href);
   const initial = firstName(user?.name, user?.email).charAt(0);
 
   return (
     <WorkspaceProvider opportunities={opportunities} now={now} basePath={demo ? "/demo" : "/opportunities"} editable={!demo}>
-      <header className="nav glass">
+      <header className="nav">
         <div className="mx-auto flex h-full w-full max-w-[75rem] items-center justify-between px-6 lg:px-10">
-          <div className="flex items-center gap-7">
+          <div className="flex items-center gap-8">
             <Link href={demo ? "/demo" : "/today"} className="flex items-center gap-2.5 text-[0.9375rem] font-semibold tracking-tight">
               <Mark />
               <span className="max-sm:hidden">Opportunity Inbox</span>
             </Link>
-            <nav className="flex items-center gap-1 max-md:hidden" aria-label="Primary">
-              {nav.map((item) => (
+            <nav className="flex items-center gap-6 max-md:hidden" aria-label="Primary">
+              {NAV.map((item) => (
                 <Link key={item.id} href={hrefOf(item)} className="nav-link" aria-current={item.id === active ? "page" : undefined}>
                   {item.label}
-                  {item.count ? <span className="badge ml-2">{item.count}</span> : null}
                 </Link>
               ))}
             </nav>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {reviewCount > 0 ? (
+              <Link href="/review" className="status-link" aria-current={active === "review" ? "page" : undefined}>
+                <span className="status-dot" aria-hidden />
+                <span>
+                  <span className="tnum">{reviewCount}</span> to check
+                </span>
+              </Link>
+            ) : null}
             {!demo ? <SyncControl autoStart={autoSync} updated={updated} /> : null}
             <SearchButton />
             {user && !demo ? (
               <Menu
                 label="Account"
-                trigger={<span className="grid h-8 w-8 place-items-center rounded-full bg-tint text-sm font-medium text-ink">{initial}</span>}
+                trigger={<span className="grid h-8 w-8 place-items-center rounded-md bg-tint text-sm font-medium text-ink">{initial}</span>}
               >
                 {user.email ? <p className="t-meta px-2.5 pb-1 pt-1.5 text-ink-3">{user.email}</p> : null}
                 <div className="menu-sep" />
@@ -114,7 +120,6 @@ export function AppShell({
           </div>
         </div>
       </header>
-      <div className="scroll-edge" aria-hidden />
 
       <div className="workspace flex-1" style={{ paddingTop: "calc(var(--nav-h) + 2.75rem)", paddingBottom: "7rem" }}>
         {demo ? (
@@ -127,17 +132,21 @@ export function AppShell({
           </p>
         ) : null}
         <main className="mx-auto w-full max-w-[75rem] px-6 lg:px-10">
-          <div className={`mx-auto w-full ${width === "reading" ? "max-w-[46rem]" : "max-w-[60rem]"}`}>{children}</div>
+          <div className={`mx-auto w-full ${width === "reading" ? "max-w-[46rem]" : width === "mid" ? "max-w-[58rem]" : "max-w-[68rem]"}`}>{children}</div>
         </main>
       </div>
 
-      <nav className="tabbar glass" aria-label="Primary">
-        {nav.map((item) => (
+      <nav className="tabbar" aria-label="Primary">
+        {NAV.map((item) => (
           <Link key={item.id} href={hrefOf(item)} aria-current={item.id === active ? "page" : undefined}>
             {item.label}
-            {item.count ? <span className="badge ml-2">{item.count}</span> : null}
           </Link>
         ))}
+        {reviewCount > 0 ? (
+          <Link href="/review" aria-current={active === "review" ? "page" : undefined}>
+            Check <span className="tnum">{reviewCount}</span>
+          </Link>
+        ) : null}
       </nav>
     </WorkspaceProvider>
   );

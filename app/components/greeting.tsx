@@ -30,6 +30,7 @@ export function Greeting({
 }) {
   return (
     <div>
+      {children ? <div className="t-meta mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-ink-3">{children}</div> : null}
       <h1 className="t-greeting">
         <span className="settle block">
           {dayPart(hour)}
@@ -39,7 +40,6 @@ export function Greeting({
           {needsYou === null ? "Reading your recruiting emails." : countLine(needsYou)}
         </span>
       </h1>
-      {children ? <div className="t-meta mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 text-ink-3">{children}</div> : null}
     </div>
   );
 }

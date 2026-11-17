@@ -123,7 +123,13 @@ const NOISE: Array<[string, string, string, number]> = [
 ];
 
 /** Whole mailbox, oldest first. `anchor` is "today"; ids are stable for a given anchor. */
-export function buildSampleMailbox(anchor: Date): SampleEmail[] {
+/** A large synthetic set (about 100 more opportunities) to see the product with a dense pipeline. Fictional names; dev only (SAMPLE_LARGE=1). */
+const PREFIX = ["Aster", "Birch", "Cobalt", "Delta", "Ember", "Fjord", "Garnet", "Harbor", "Indigo", "Juniper", "Kestrel", "Lumen", "Meridian", "Nimbus", "Orchid", "Pioneer", "Quartz", "Ridge", "Summit", "Tern"];
+const SUFFIX = ["Labs", "Systems", "Works", "Analytics", "Robotics", "Health"];
+const ROLES = ["Software Engineer Intern", "Data Analyst Intern", "Product Design Intern", "Machine Learning Intern", "Security Engineer Intern", "Business Analyst Intern", "Backend Engineer Intern"];
+const EXTRA_COMPANIES: Array<[string, string]> = PREFIX.flatMap((p, i) => SUFFIX.slice(0, 5).map((s, j): [string, string] => [`${p} ${s}`, ROLES[(i + j) % ROLES.length]]));
+
+export function buildSampleMailbox(anchor: Date, large = false): SampleEmail[] {
   const day0 = Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate());
   const ago = (d: number, h = 10) => new Date(day0 - d * DAY + h * 3_600_000);
   const ahead = (d: number) => new Date(day0 + d * DAY);
@@ -135,7 +141,7 @@ export function buildSampleMailbox(anchor: Date): SampleEmail[] {
   });
   const r = rng(20261108);
   const out: SampleEmail[] = buildDemoMailbox(anchor); // the hand-written core (ids demo-*)
-  COMPANIES.forEach(([company, role], i) => {
+  (large ? [...COMPANIES, ...EXTRA_COMPANIES] : COMPANIES).forEach(([company, role], i) => {
     const ctx: Ctx = { company, role, i, r, ago, ahead, mail, person: RECRUITERS[i % RECRUITERS.length] };
     const [, scenario] = SCENARIOS[i % SCENARIOS.length];
     out.push(...scenario(ctx));
@@ -165,4 +171,4 @@ export function buildSampleMailbox(anchor: Date): SampleEmail[] {
   return out.sort((a, b) => a.email.receivedAt.getTime() - b.email.receivedAt.getTime());
 }
 
-export const sampleEmails = (anchor: Date): RecruitingEmail[] => buildSampleMailbox(anchor).map((x) => x.email);
+export const sampleEmails = (anchor: Date, large = false): RecruitingEmail[] => buildSampleMailbox(anchor, large).map((x) => x.email);

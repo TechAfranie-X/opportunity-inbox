@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
-import { Instrument_Sans } from "next/font/google";
+import { Instrument_Sans, Newsreader } from "next/font/google";
 import "./globals.css";
 
-// One family carries the whole interface; weight and size do the hierarchy.
+// A precise sans carries everything operational; a serif sets titles. Two voices, never mixed within a line.
 const ui = Instrument_Sans({
   variable: "--font-ui",
   subsets: ["latin"],
+});
+const serif = Newsreader({
+  variable: "--font-serif",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -22,7 +28,7 @@ const THEME_SCRIPT = `try{var t=localStorage.getItem("oi-theme");if(t!=="light"&
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${ui.variable} h-full antialiased`}>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${ui.variable} ${serif.variable} h-full antialiased`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>

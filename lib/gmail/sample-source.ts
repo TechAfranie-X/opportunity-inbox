@@ -10,7 +10,7 @@ import type { MailSource } from "../recruiting/sync-engine.ts";
  * `anchor` is "today" for the mailbox (the sample connection's time), so dates stay current without changing between syncs.
  */
 export function sampleMailSource(anchor: Date, mode: DiscoveryMode = "keyword"): MailSource {
-  const all = sampleEmails(anchor);
+  const all = sampleEmails(anchor, process.env.SAMPLE_LARGE === "1");
   const matches = queryMatcher(RECRUITING_QUERY);
   const byId = new Map(all.map((e) => [e.id, e]));
   return {

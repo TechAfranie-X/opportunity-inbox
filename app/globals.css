@@ -1,125 +1,115 @@
 @import "tailwindcss";
 
 /*
- * Opportunity Inbox visual system.
+ * Opportunity Inbox visual system: "a quiet ledger".
  *
- * Structure is made from type, space, hairlines and ONE surface shift (the tinted hero field).
- * Material (blur) is reserved for the control layer: navigation, menus, the inspector and the
- * command palette. Content is never glass. One accent (blue) marks the primary action and "the journey";
- * semantic colour (signal) is used only for time-critical text.
+ * One matte surface for the work, hairlines instead of shadows, small radii, flat controls. No glow, no gradient, no glass.
+ * Type does the hierarchy: a serif for titles, a precise sans for everything operational. Blue is functional only: the active place,
+ * the primary action, links, focus and the current step. Red, amber and green are semantic and stay distinct.
  *
- * Themes: <html data-theme="light|dark|system">. Light is the default; "system" follows the OS.
+ * Themes: <html data-theme="light|dark|system">. Dark warm graphite is the default; "system" follows the OS.
  */
 
 /* ------------------------------------------------------------------ tokens */
-/*
- * Palette: cool graphite neutrals + ONE blue. Blue is an accent, never a field: it marks the primary
- * action, the current place (nav, journey stage, pipeline), links, focus and counts. Surfaces stay neutral.
- *
- *   --primary        #3B82F6  non-text accents: bars, dots, rings, glows (3:1+ on every surface)
- *   --primary-strong #2563EB  filled buttons (white text clears 4.5:1 here; #3B82F6 does not)
- *   --primary-hover  #1D4ED8  button hover/press
- *   --accent         text-safe blue for links and labels (#60A5FA on dark, #1D4ED8 on light)
- */
 :root {
-  /* canvas + ink (light: cool paper) */
-  --paper: #f6f8fb;
-  --tint: #ecf0f6; /* the one surface shift: hero field, active segments */
-  --raised: #ffffff; /* menus, inspector */
-  --ink: #0b1220;
-  --ink-2: #4b5567;
-  --ink-3: #5f6b7e;
-  --line: rgb(11 18 32 / 0.1);
-  --line-strong: rgb(11 18 32 / 0.2);
-  --wash: rgb(11 18 32 / 0.05);
+  /* warm paper, warm ink */
+  --paper: #f5f3ee;
+  --tint: #ebe8e1; /* hover and selected fills */
+  --raised: #fbfaf7; /* the one working surface: panels, menus, inspector */
+  --ink: #1c1a17;
+  --ink-2: #56524a;
+  --ink-3: #6b675e;
+  --line: rgb(28 26 23 / 0.11);
+  --line-strong: rgb(28 26 23 / 0.2);
+  --wash: rgb(28 26 23 / 0.045);
 
-  /* blue accent system */
-  --primary: #3b82f6;
-  --primary-strong: #2563eb;
-  --primary-hover: #1d4ed8;
+  /* blue is functional only */
+  --primary: #2d56b3;
+  --primary-hover: #244a9e;
   --primary-ink: #ffffff;
-  --accent: #1d4ed8;
+  --accent: #2d56b3;
   --accent-ink: #ffffff;
-  --accent-wash: rgb(37 99 235 / 0.1);
-  --accent-line: rgb(37 99 235 / 0.28);
-  --ring: rgb(59 130 246 / 0.45);
-  --signal: #b3261e;
+  --accent-wash: rgb(45 86 179 / 0.08);
+  --accent-line: rgb(45 86 179 / 0.3);
+  --ring: #2d56b3;
 
-  /* materials (control layer only) */
-  --glass: rgb(246 248 251 / 0.74);
-  --glass-thick: rgb(255 255 255 / 0.95);
-  --glass-line: rgb(11 18 32 / 0.08);
-  --shadow-pop: 0 0 0 0.5px rgb(11 18 32 / 0.1), 0 16px 40px -12px rgb(11 18 32 / 0.22);
-  --shadow-panel: 0 0 0 0.5px rgb(11 18 32 / 0.1), 0 24px 60px -16px rgb(11 18 32 / 0.28);
-  --glow-primary: 0 8px 22px -8px rgb(37 99 235 / 0.55);
+  /* semantic */
+  --signal: #b3392d;
+  --warn: #8f6210;
+  --ok: #2c7347;
 
-  /* radii: three, used deliberately */
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 18px;
+  --nav-bg: #f5f3ee;
+  --glass-line: var(--line);
+  --shadow-pop: 0 0 0 1px var(--line), 0 1px 2px rgb(28 26 23 / 0.06), 0 10px 24px -12px rgb(28 26 23 / 0.2);
+  --shadow-panel: 0 0 0 1px var(--line), 0 1px 2px rgb(28 26 23 / 0.06), 0 18px 40px -20px rgb(28 26 23 / 0.28);
 
-  /* motion */
+  /* radii: small and few */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --dur-1: 140ms;
-  --dur-2: 240ms;
-  --dur-3: 420ms;
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 360ms;
 
-  /* layout */
-  --nav-h: 3.5rem;
+  --nav-h: 3.25rem;
   --inspector-w: 25rem;
 
   color-scheme: light;
 }
 
-/* Graphite + blue. Dark values are declared once as a mixin-by-selector list below. */
+/* warm graphite */
 :root[data-theme="dark"] {
-  --paper: #0b0f14;
-  --tint: #111827; /* surface */
-  --raised: #1a2233; /* surface-elevated */
-  --ink: #f3f4f6;
-  --ink-2: #9ca3af;
-  --ink-3: #8794a8;
-  --line: rgb(38 50 68 / 0.75);
-  --line-strong: #263244;
-  --wash: rgb(148 163 184 / 0.07);
-  --accent: #60a5fa;
-  --accent-ink: #08111f;
-  --accent-wash: rgb(59 130 246 / 0.14);
-  --accent-line: rgb(96 165 250 / 0.34);
-  --ring: rgb(96 165 250 / 0.55);
-  --signal: #ff8f80;
-  --glass: rgb(11 15 20 / 0.72);
-  --glass-thick: rgb(26 34 51 / 0.96);
-  --glass-line: rgb(148 163 184 / 0.13);
-  --shadow-pop: 0 0 0 0.5px rgb(148 163 184 / 0.2), 0 18px 48px -12px rgb(0 0 0 / 0.65);
-  --shadow-panel: 0 0 0 0.5px rgb(148 163 184 / 0.2), 0 28px 70px -16px rgb(0 0 0 / 0.7);
-  --glow-primary: 0 8px 24px -8px rgb(59 130 246 / 0.6);
+  --paper: #151413;
+  --tint: #242220;
+  --raised: #1c1b19;
+  --ink: #ebe8e1;
+  --ink-2: #aaa69c;
+  --ink-3: #8c887e;
+  --line: rgb(255 248 235 / 0.09);
+  --line-strong: rgb(255 248 235 / 0.17);
+  --wash: rgb(255 248 235 / 0.05);
+  --primary: #3f6bd0;
+  --primary-hover: #3559b4;
+  --accent: #8aaef0;
+  --accent-ink: #0f1626;
+  --accent-wash: rgb(138 174 240 / 0.1);
+  --accent-line: rgb(138 174 240 / 0.32);
+  --ring: #8aaef0;
+  --signal: #ee8577;
+  --warn: #d9a649;
+  --ok: #7dbb8f;
+  --nav-bg: #151413;
+  --shadow-pop: 0 0 0 1px var(--line-strong), 0 12px 28px -12px rgb(0 0 0 / 0.55);
+  --shadow-panel: 0 0 0 1px var(--line-strong), 0 20px 44px -20px rgb(0 0 0 / 0.6);
   color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
-    --paper: #0b0f14;
-    --tint: #111827;
-    --raised: #1a2233;
-    --ink: #f3f4f6;
-    --ink-2: #9ca3af;
-    --ink-3: #8794a8;
-    --line: rgb(38 50 68 / 0.75);
-    --line-strong: #263244;
-    --wash: rgb(148 163 184 / 0.07);
-    --accent: #60a5fa;
-    --accent-ink: #08111f;
-    --accent-wash: rgb(59 130 246 / 0.14);
-    --accent-line: rgb(96 165 250 / 0.34);
-    --ring: rgb(96 165 250 / 0.55);
-    --signal: #ff8f80;
-    --glass: rgb(11 15 20 / 0.72);
-    --glass-thick: rgb(26 34 51 / 0.96);
-    --glass-line: rgb(148 163 184 / 0.13);
-    --shadow-pop: 0 0 0 0.5px rgb(148 163 184 / 0.2), 0 18px 48px -12px rgb(0 0 0 / 0.65);
-    --shadow-panel: 0 0 0 0.5px rgb(148 163 184 / 0.2), 0 28px 70px -16px rgb(0 0 0 / 0.7);
-    --glow-primary: 0 8px 24px -8px rgb(59 130 246 / 0.6);
+    --paper: #151413;
+    --tint: #242220;
+    --raised: #1c1b19;
+    --ink: #ebe8e1;
+    --ink-2: #aaa69c;
+    --ink-3: #8c887e;
+    --line: rgb(255 248 235 / 0.09);
+    --line-strong: rgb(255 248 235 / 0.17);
+    --wash: rgb(255 248 235 / 0.05);
+    --primary: #3f6bd0;
+    --primary-hover: #3559b4;
+    --accent: #8aaef0;
+    --accent-ink: #0f1626;
+    --accent-wash: rgb(138 174 240 / 0.1);
+    --accent-line: rgb(138 174 240 / 0.32);
+    --ring: #8aaef0;
+    --signal: #ee8577;
+    --warn: #d9a649;
+    --ok: #7dbb8f;
+    --nav-bg: #151413;
+    --shadow-pop: 0 0 0 1px var(--line-strong), 0 12px 28px -12px rgb(0 0 0 / 0.55);
+    --shadow-panel: 0 0 0 1px var(--line-strong), 0 20px 44px -20px rgb(0 0 0 / 0.6);
     color-scheme: dark;
   }
 }
@@ -136,7 +126,10 @@
   --color-accent: var(--accent);
   --color-primary: var(--primary);
   --color-signal: var(--signal);
+  --color-warn: var(--warn);
+  --color-ok: var(--ok);
   --font-sans: var(--font-ui), ui-sans-serif, system-ui, -apple-system, "SF Pro Text", sans-serif;
+  --font-display: var(--font-serif), ui-serif, Georgia, serif;
 }
 
 /* ------------------------------------------------------------------- base */
@@ -150,7 +143,7 @@ body {
   font-family: var(--font-ui), ui-sans-serif, system-ui, -apple-system, "SF Pro Text", sans-serif;
   font-size: 15px;
   line-height: 1.5;
-  letter-spacing: -0.006em;
+  letter-spacing: -0.004em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -168,14 +161,13 @@ p {
   color: var(--ink);
 }
 
+/* Focus is a crisp outline, never a halo. */
 :focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 3px;
-  border-radius: 6px;
-  box-shadow: 0 0 0 5px var(--ring);
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
-/* Theme change crossfades instead of snapping. */
 html.theme-fade,
 html.theme-fade *,
 html.theme-fade *::before,
@@ -188,85 +180,70 @@ html.theme-fade *::after {
 }
 
 /* ------------------------------------------------------------------- type */
-.t-greeting {
-  font-size: clamp(1.75rem, 3.6vw, 2.5rem);
-  line-height: 1.04;
+/* Titles are set in a serif; everything operational in the sans. */
+.t-hero,
+.t-display,
+.t-greeting,
+.t-title {
+  font-family: var(--font-serif), ui-serif, Georgia, serif;
   font-weight: 500;
-  letter-spacing: -0.038em;
 }
 .t-hero {
-  font-size: clamp(2.5rem, 6.4vw, 4.5rem);
-  line-height: 1;
-  font-weight: 600;
-  letter-spacing: -0.045em;
+  font-size: clamp(2.5rem, 5.6vw, 4.25rem);
+  line-height: 1.02;
+  letter-spacing: -0.025em;
 }
 .t-display {
-  font-size: clamp(2rem, 5.2vw, 3rem);
-  line-height: 1.06;
-  font-weight: 600;
-  letter-spacing: -0.034em;
+  font-size: clamp(2rem, 4.4vw, 2.75rem);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+.t-greeting {
+  font-size: clamp(1.875rem, 3.6vw, 2.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
 }
 .t-title {
-  font-size: 1.75rem;
-  line-height: 1.12;
-  font-weight: 600;
-  letter-spacing: -0.026em;
+  font-size: 1.625rem;
+  line-height: 1.15;
+  letter-spacing: -0.016em;
 }
 .t-heading {
-  font-size: 1.0625rem;
+  font-size: 0.9375rem;
   line-height: 1.3;
   font-weight: 600;
-  letter-spacing: -0.014em;
+  letter-spacing: -0.006em;
 }
 .t-lead {
   font-size: 1.0625rem;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 .t-meta {
   font-size: 0.8125rem;
   line-height: 1.4;
 }
-/* tiny tracked label: used sparingly (hero company, section tags) */
 .t-label {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   line-height: 1.2;
   font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 .tnum {
   font-variant-numeric: tabular-nums;
 }
 
-/* -------------------------------------------------------------- materials */
-.glass {
-  background: var(--glass);
-  -webkit-backdrop-filter: blur(22px) saturate(1.6);
-  backdrop-filter: blur(22px) saturate(1.6);
+/* ---------------------------------------------------------------- surfaces */
+/* The one surface: matte, bordered, barely raised. Used for the work (what needs you, the timeline), never for decoration. */
+.panel {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
 }
-.glass-thick {
-  background: var(--glass-thick);
-  -webkit-backdrop-filter: blur(28px) saturate(1.6);
-  backdrop-filter: blur(28px) saturate(1.6);
-}
-@media (prefers-reduced-transparency: reduce) {
-  .glass,
-  .glass-thick {
-    background: var(--raised);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-}
-
-/* Content softly dissolves as it passes under the navigation. */
-.scroll-edge {
-  position: fixed;
-  z-index: 38;
-  inset: var(--nav-h) 0 auto 0;
-  height: 1.75rem;
-  pointer-events: none;
-  background: linear-gradient(to bottom, var(--paper), transparent);
-  opacity: 0.9;
+.hero {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: clamp(1.25rem, 2.4vw, 1.75rem);
 }
 
 /* ---------------------------------------------------------------- actions */
@@ -274,80 +251,35 @@ html.theme-fade *::after {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  height: 2.5rem;
-  padding: 0 1.2rem;
-  border-radius: 999px;
-  background: linear-gradient(to bottom, var(--primary), var(--primary-strong));
+  height: 2.25rem;
+  padding: 0 1rem;
+  border-radius: var(--r-md);
+  background: var(--primary);
   color: var(--primary-ink);
   font-size: 0.875rem;
   font-weight: 500;
-  letter-spacing: -0.005em;
   border: 0;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18);
   cursor: pointer;
   text-decoration: none;
-  transition:
-    transform var(--dur-1) var(--ease),
-    background-color var(--dur-1) ease,
-    box-shadow var(--dur-2) ease;
+  transition: background-color var(--dur-1) ease;
 }
 .btn-primary:hover {
-  transform: translateY(-1px);
-  background: linear-gradient(to bottom, var(--primary-strong), var(--primary-hover));
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), var(--glow-primary);
-}
-.btn-primary:active {
-  transform: translateY(0) scale(0.985);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1);
+  background: var(--primary-hover);
 }
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
-/* Links: quiet until approached, then they take the accent. */
-.link-quiet:hover,
-.link {
-  color: var(--accent);
-}
-.link {
-  text-decoration: underline;
-  text-decoration-color: var(--accent-line);
-  text-underline-offset: 3px;
-  transition: text-decoration-color var(--dur-1) ease;
-}
-.link:hover {
-  text-decoration-color: var(--accent);
-}
-
-/* Pills and counts: tinted, never solid, so they inform without shouting. */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  min-width: 1.5rem;
-  height: 1.5rem;
-  padding: 0 0.55rem;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--accent-wash);
-  box-shadow: inset 0 0 0 1px var(--accent-line);
-  color: var(--accent);
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0;
-  font-variant-numeric: tabular-nums;
-}
-
 .btn-soft {
   display: inline-flex;
   align-items: center;
   height: 2.25rem;
-  padding: 0 1rem;
-  border-radius: 999px;
-  border: 0;
-  background: var(--accent-wash);
-  box-shadow: inset 0 0 0 1px var(--accent-line);
-  color: var(--accent);
+  padding: 0 0.9rem;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink);
   font: inherit;
   font-size: 0.875rem;
   font-weight: 500;
@@ -356,7 +288,7 @@ html.theme-fade *::after {
   transition: background-color var(--dur-1) ease;
 }
 .btn-soft:hover {
-  background: var(--accent-line);
+  background: var(--wash);
 }
 
 .link-quiet {
@@ -374,8 +306,80 @@ html.theme-fade *::after {
     color var(--dur-1) ease,
     text-decoration-color var(--dur-1) ease;
 }
+.link-quiet:hover,
+.link {
+  color: var(--accent);
+}
 .link-quiet:hover {
   text-decoration-color: var(--accent-line);
+}
+.link {
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--dur-1) ease;
+}
+.link:hover {
+  text-decoration-color: var(--accent);
+}
+
+/* A count: neutral. It states a number; it does not ask for attention. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.4rem;
+  border-radius: var(--r-sm);
+  background: var(--tint);
+  color: var(--ink-2);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 1.4rem;
+  padding: 0 0.5rem;
+  border-radius: var(--r-sm);
+  background: var(--tint);
+  color: var(--ink-2);
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--r-md);
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition:
+    color var(--dur-1) ease,
+    background-color var(--dur-1) ease;
+}
+.icon-btn:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--wash);
+}
+.icon-btn:disabled {
+  cursor: default;
+}
+.icon-btn[data-busy="true"] svg {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ------------------------------------------------------------------ lists */
@@ -387,10 +391,10 @@ html.theme-fade *::after {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 1.5rem;
+  gap: 1.25rem;
   margin: 0 -0.75rem;
-  padding: 0.8rem 0.75rem;
-  border-radius: var(--r-sm);
+  padding: 0.7rem 0.75rem;
+  border-radius: var(--r-md);
   transition: background-color var(--dur-1) ease;
 }
 .row:hover,
@@ -403,21 +407,19 @@ html.theme-fade *::after {
   content: "";
   position: absolute;
   left: 0;
-  top: 0.7rem;
-  bottom: 0.7rem;
+  top: 0.6rem;
+  bottom: 0.6rem;
   width: 2px;
   border-radius: 2px;
   background: var(--accent);
 }
-/* the whole row is the primary action */
 .row-link::after {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-md);
 }
 
-/* Time and tools share one spot: the time yields to the menu button when the row is approached. */
 .row-end {
   display: grid;
   align-items: center;
@@ -461,23 +463,10 @@ html.theme-fade *::after {
   }
 }
 
-/* ------------------------------------------------------------------- hero */
-/* The single surface shift in the product: a tinted field, not a card. */
-.hero {
-  position: relative;
-  border-radius: var(--r-lg);
-  background:
-    radial-gradient(120% 90% at 0% 0%, var(--accent-wash), transparent 60%),
-    var(--tint);
-  box-shadow: inset 0 0 0 1px var(--line);
-  padding: clamp(1.5rem, 2.6vw, 2rem);
-}
-
 /* ------------------------------------------------------------ journey line */
-/* The signature: a hairline with a dot per stage. Reached stages are inked, the current one is the accent.
-   Five equal columns, content centred, so dots sit at 10/30/50/70/90% and labels always fit. */
+/* The stages as a hairline with a dot each. What is behind is solid ink, the current stage is the one blue mark. */
 .jl {
-  --jl-bg: var(--tint);
+  --jl-bg: var(--raised);
   position: relative;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -485,8 +474,8 @@ html.theme-fade *::after {
 .jl[data-surface="paper"] {
   --jl-bg: var(--paper);
 }
-.jl[data-surface="raised"] {
-  --jl-bg: var(--raised);
+.jl[data-surface="tint"] {
+  --jl-bg: var(--tint);
 }
 .jl-track,
 .jl-fill {
@@ -500,7 +489,7 @@ html.theme-fade *::after {
   background: var(--line-strong);
 }
 .jl-fill {
-  background: linear-gradient(to right, var(--primary), var(--accent));
+  background: var(--ink-3);
   transform-origin: left;
   animation: grow var(--dur-3) var(--ease) both;
 }
@@ -520,19 +509,21 @@ html.theme-fade *::after {
   box-shadow: inset 0 0 0 1px var(--line-strong);
 }
 .jl-dot[data-reached="true"] {
-  background: var(--primary);
+  background: var(--ink-3);
   box-shadow: none;
 }
 .jl-dot[data-current="true"] {
   background: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-wash), 0 0 12px 1px var(--accent-line);
+  box-shadow: none;
+  outline: 2px solid var(--accent-line);
+  outline-offset: 2px;
 }
 
-/* -------------------------------------------------------------- pulse bars */
+/* A flat, neutral bar. Quantity is shown in one colour; colour is not used to rank stages. */
 .pulse-bar {
   height: 3px;
   border-radius: 3px;
-  background: linear-gradient(to right, var(--primary), var(--accent));
+  background: var(--ink-3);
   transform-origin: left;
   animation: grow var(--dur-3) var(--ease) both;
 }
@@ -552,8 +543,9 @@ html.theme-fade *::after {
   right: 0;
   top: calc(100% + 6px);
   min-width: 14rem;
-  padding: 0.3rem;
-  border-radius: var(--r-md);
+  padding: 0.25rem;
+  border-radius: var(--r-lg);
+  background: var(--raised);
   box-shadow: var(--shadow-pop);
   transform-origin: top right;
   animation: pop-in var(--dur-1) var(--ease);
@@ -567,8 +559,8 @@ html.theme-fade *::after {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 0.5rem 0.7rem;
-  border-radius: 7px;
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--r-md);
   border: 0;
   background: none;
   color: var(--ink);
@@ -588,17 +580,16 @@ html.theme-fade *::after {
 }
 .menu-sep {
   height: 1px;
-  margin: 0.3rem 0.4rem;
+  margin: 0.25rem 0.4rem;
   background: var(--line);
 }
 
-/* Segmented control (appearance). The selected segment is a tinted pill that slides. */
 .segmented {
   position: relative;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   padding: 2px;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   background: var(--wash);
 }
 .segmented > button {
@@ -624,9 +615,9 @@ html.theme-fade *::after {
   bottom: 2px;
   left: 2px;
   width: calc((100% - 4px) / 3);
-  border-radius: 7px;
+  border-radius: 4px;
   background: var(--raised);
-  box-shadow: 0 0 0 0.5px var(--line-strong), 0 1px 2px rgb(0 0 0 / 0.08);
+  box-shadow: 0 0 0 1px var(--line-strong);
   transition: transform var(--dur-2) var(--ease);
 }
 
@@ -655,7 +646,7 @@ html.theme-fade *::after {
   width: 100%;
   height: 2.25rem;
   padding: 0 0.6rem;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-md);
   border: 1px solid var(--line-strong);
   background: transparent;
   color: var(--ink);
@@ -667,9 +658,9 @@ html.theme-fade *::after {
   border-color: var(--ink-3);
 }
 .input:focus-visible {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--ring);
+  outline: 2px solid var(--ring);
+  outline-offset: 0;
+  border-color: var(--ring);
 }
 
 /* ------------------------------------------------------------- navigation */
@@ -678,79 +669,57 @@ html.theme-fade *::after {
   z-index: 40;
   inset: 0 0 auto 0;
   height: var(--nav-h);
-  border-bottom: 1px solid var(--glass-line);
+  background: var(--nav-bg);
+  border-bottom: 1px solid var(--line);
 }
 .nav-link {
   position: relative;
-  padding: 0.35rem 0.8rem;
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  height: var(--nav-h);
+  padding: 0 0.15rem;
   font-size: 0.875rem;
   color: var(--ink-3);
-  transition:
-    color var(--dur-1) ease,
-    background-color var(--dur-1) ease;
+  transition: color var(--dur-1) ease;
 }
 .nav-link:hover {
   color: var(--ink);
-  background: var(--wash);
 }
+/* The current place is marked by a short blue rule under the label, the one place the navigation uses colour. */
 .nav-link[aria-current="page"] {
-  color: var(--accent);
+  color: var(--ink);
   font-weight: 500;
-  background: var(--accent-wash);
-  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+.nav-link[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: 0.15rem;
+  right: 0.15rem;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
 }
 .search-pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.6rem;
-  height: 2.125rem;
-  padding: 0 0.75rem 0 0.8rem;
-  border-radius: 999px;
-  border: 1px solid transparent;
+  gap: 0.55rem;
+  height: 2rem;
+  padding: 0 0.5rem 0 0.65rem;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
   background: none;
   color: var(--ink-3);
   font-size: 0.8125rem;
   cursor: pointer;
   transition:
     background-color var(--dur-1) ease,
-    color var(--dur-1) ease;
+    color var(--dur-1) ease,
+    border-color var(--dur-1) ease;
 }
 .search-pill:hover {
   color: var(--ink);
   background: var(--wash);
-  border-color: var(--glass-line);
-}
-
-/* A quiet icon button for controls that should be findable but never loud (refresh). */
-.icon-btn {
-  display: inline-grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 999px;
-  border: 0;
-  background: none;
-  color: var(--ink-3);
-  cursor: pointer;
-  transition:
-    color var(--dur-1) ease,
-    background-color var(--dur-1) ease;
-}
-.icon-btn:hover:not(:disabled) {
-  color: var(--ink);
-  background: var(--wash);
-}
-.icon-btn:disabled {
-  cursor: default;
-}
-.icon-btn[data-busy="true"] svg {
-  animation: spin 1s linear infinite;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  border-color: var(--line-strong);
 }
 @media (max-width: 767px) {
   .search-pill {
@@ -761,34 +730,60 @@ kbd {
   font: inherit;
   font-size: 0.6875rem;
   padding: 0.05rem 0.35rem;
-  border-radius: 5px;
+  border-radius: 4px;
   border: 1px solid var(--line-strong);
   color: var(--ink-3);
 }
 
-/* Floating tab bar for narrow screens: a control surface, so it gets the material. */
+/* The state of the review queue, as a status in the navigation rather than a destination. */
+.status-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 2rem;
+  padding: 0 0.6rem;
+  border-radius: var(--r-md);
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+  transition: background-color var(--dur-1) ease;
+}
+@media (max-width: 767px) {
+  .status-link {
+    display: none; /* the bottom bar carries it on small screens */
+  }
+}
+.status-link:hover {
+  background: var(--wash);
+  color: var(--ink);
+}
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+/* Small screens: a plain bar at the bottom edge, not a floating object. */
 .tabbar {
   position: fixed;
   z-index: 40;
-  left: 50%;
-  bottom: max(0.9rem, env(safe-area-inset-bottom));
-  transform: translateX(-50%);
+  inset: auto 0 0 0;
   display: none;
-  gap: 0.15rem;
-  padding: 0.3rem;
-  border-radius: 999px;
-  border: 1px solid var(--glass-line);
-  box-shadow: var(--shadow-pop);
+  padding: 0 0.5rem env(safe-area-inset-bottom);
+  background: var(--nav-bg);
+  border-top: 1px solid var(--line);
 }
 .tabbar a {
-  padding: 0.55rem 1.05rem;
-  border-radius: 999px;
-  font-size: 0.875rem;
-  color: var(--ink-2);
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  height: 3.25rem;
+  font-size: 0.8125rem;
+  color: var(--ink-3);
 }
 .tabbar a[aria-current="page"] {
-  background: var(--accent-wash);
-  box-shadow: inset 0 0 0 1px var(--accent-line);
   color: var(--accent);
   font-weight: 500;
 }
@@ -814,10 +809,9 @@ kbd {
   display: flex;
   flex-direction: column;
   border-radius: var(--r-lg);
-  border: 1px solid var(--glass-line);
+  background: var(--raised);
   box-shadow: var(--shadow-panel);
   overflow: hidden;
-  /* closed: parked off to the right, so it leaves the way it came */
   transform: translateX(calc(100% + 1.5rem));
   visibility: hidden;
   transition:
@@ -837,7 +831,7 @@ kbd {
 @keyframes swap {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -848,7 +842,7 @@ kbd {
   position: fixed;
   z-index: 44;
   inset: 0;
-  background: rgb(0 0 0 / 0.32);
+  background: rgb(0 0 0 / 0.4);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--dur-2) ease;
@@ -872,7 +866,6 @@ kbd {
     opacity: 1;
     pointer-events: auto;
   }
-  /* grabber: tells a thumb this is a sheet */
   .inspector::before {
     content: "";
     position: absolute;
@@ -894,19 +887,17 @@ kbd {
 @keyframes pop-in {
   from {
     opacity: 0;
-    transform: scale(0.97);
+    transform: scale(0.98);
   }
   to {
     opacity: 1;
     transform: none;
   }
 }
-
-/* The one orchestrated moment: the greeting settles in, line by line. */
 @keyframes settle {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -914,13 +905,13 @@ kbd {
   }
 }
 .settle {
-  animation: settle 0.7s var(--ease) both;
+  animation: settle 0.6s var(--ease) both;
 }
 .settle-2 {
-  animation-delay: 0.14s;
+  animation-delay: 0.12s;
 }
 
-/* Sync: a line of the accent travels along the navigation's lower edge. */
+/* Sync: a flat line of the accent travels along the navigation's lower edge. */
 @keyframes sweep {
   from {
     transform: translateX(-100%);
@@ -938,12 +929,11 @@ kbd {
   content: "";
   position: absolute;
   inset: 0 auto 0 0;
-  width: 34%;
-  background: linear-gradient(to right, transparent, var(--accent), transparent);
+  width: 30%;
+  background: var(--accent);
   animation: sweep 1.4s ease-in-out infinite;
 }
 
-/* A stage's rows ease in when the stage changes. */
 .fade-in {
   animation: swap var(--dur-2) var(--ease) both;
 }
@@ -958,37 +948,32 @@ kbd {
   }
 }
 
-/* ------------------------------------------------------------ today layout */
-/* Desktop: main column + a quiet side column that runs the full height. Mobile: one stack, in reading order. */
-.today-grid {
+/* ------------------------------------------------------- command center */
+/* Today: the work on the left, the state of things quietly on the right. One stack on small screens, in reading order. */
+.cc {
   display: grid;
-  gap: 3.5rem 4rem;
-  grid-template-areas: "main" "side" "wait";
-}
-.today-main {
-  grid-area: main;
-  min-width: 0;
-}
-.today-side {
-  grid-area: side;
-  min-width: 0;
-}
-.today-wait {
-  grid-area: wait;
-  min-width: 0;
+  gap: 2.5rem 3.5rem;
 }
 @media (min-width: 1024px) {
-  .today-grid {
-    grid-template-columns: minmax(0, 1fr) 21rem;
-    grid-template-areas:
-      "main side"
-      "wait side";
+  .cc {
+    grid-template-columns: minmax(0, 1fr) 19rem;
     align-items: start;
   }
-  .today-side {
-    padding-left: 2.5rem;
-    border-left: 1px solid var(--line);
-  }
+}
+
+/* A key hint: small, bordered, never decorative. */
+.keyhint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  border-radius: 4px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-3);
+  font-size: 0.6875rem;
+  font-weight: 500;
 }
 
 
@@ -1323,71 +1308,80 @@ html[data-presentation] .inspector ol > li:nth-child(8) {
   color: var(--ink);
 }
 
-/* ------------------------------------------------------------ review queue */
-/* "Check these" is the one place we ask something of the person, so each item carries a blue edge. */
-.review-item {
+
+/* ------------------------------------------------------------------ timeline */
+/* The canonical memory of one opportunity. A rail, a marker per message, and the time between messages made visible. */
+.tl {
   position: relative;
-  padding-left: 1.1rem;
 }
-.review-item::before {
+.tl::before {
   content: "";
   position: absolute;
-  left: 0;
-  top: 1.65rem;
-  bottom: 1.65rem;
-  width: 2px;
-  border-radius: 2px;
-  background: linear-gradient(to bottom, var(--primary), transparent);
+  left: 5.55rem;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 1px;
+  background: var(--line-strong);
+}
+.tl-marker {
+  position: absolute;
+  left: 5.55rem;
+  top: 0.78rem;
+  width: 9px;
+  height: 9px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1.5px var(--ink-3);
+}
+.tl-marker[data-major="true"] {
+  background: var(--ink-3);
+  box-shadow: none;
+}
+.tl-marker[data-now="true"] {
+  background: var(--accent);
+  box-shadow: none;
+  outline: 2px solid var(--accent-line);
+  outline-offset: 2px;
+}
+.tl-gap {
+  margin-left: 6.4rem;
+  padding: 0.35rem 0;
+  font-size: 0.75rem;
+  color: var(--ink-3);
 }
 
-.nav-link .badge,
-.tabbar .badge {
-  min-width: 1.25rem;
-  height: 1.25rem;
-  padding: 0 0.4rem;
-  font-size: 0.6875rem;
+/* ----------------------------------------------------------- triage (Check) */
+.triage {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--raised);
+}
+.triage-rail {
+  height: 3px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+.triage-rail > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--dur-3) var(--ease);
 }
 
 /* ---------------------------------------------------------------- skeleton */
-/* The first read has no content yet: show the shape of what is coming, quietly. */
+/* The first read has no content yet: the shape of what is coming, quietly. */
 .skeleton {
   display: block;
   border-radius: var(--r-sm);
-  background: linear-gradient(90deg, var(--wash) 0%, var(--line) 50%, var(--wash) 100%);
-  background-size: 200% 100%;
-  animation: shimmer 1.8s ease-in-out infinite;
+  background: var(--wash);
+  animation: pulse 1.6s ease-in-out infinite;
 }
-@keyframes shimmer {
-  from {
-    background-position: 200% 0;
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
   }
-  to {
-    background-position: -200% 0;
-  }
-}
-
-/* ---------------------------------------------------------- landing preview */
-/* A real picture of the product, framed like a window and faded where it continues. */
-.preview-frame {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--r-lg);
-  background: var(--paper);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--line-strong), var(--accent) 30%),
-    inset 0 1px 0 rgb(255 255 255 / 0.06),
-    0 40px 80px -30px rgb(0 0 0 / 0.55),
-    0 0 120px -30px var(--accent-line);
-  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
-}
-.landing-glow {
-  position: absolute;
-  inset: -10% 0 auto 0;
-  height: 36rem;
-  z-index: -1;
-  pointer-events: none;
-  background: radial-gradient(60% 60% at 50% 0%, var(--accent-wash), transparent 70%);
 }
 
 /* A read that did not fully complete says so, right under the navigation, until it is dismissed or the next read succeeds. */
@@ -1399,6 +1393,20 @@ html[data-presentation] .inspector ol > li:nth-child(8) {
   align-items: baseline;
   justify-content: center;
   gap: 1rem;
-  padding: 0.6rem 1.5rem;
-  border-bottom: 1px solid var(--glass-line);
+  padding: 0.55rem 1.5rem;
+  background: var(--tint);
+  border-bottom: 1px solid var(--line);
+}
+
+/* ------------------------------------------------------------------ landing */
+/* The product shown as it is: a matte frame, a hairline, no halo. */
+.preview-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+}
+.inbox-pane {
+  background: var(--tint);
 }

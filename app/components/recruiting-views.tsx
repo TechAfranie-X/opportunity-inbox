@@ -23,7 +23,7 @@ import {
   relativeDay,
   toInputValue,
 } from "@/lib/recruiting/format";
-import { annotateTimeline, nextMoment, peopleFor, stageSince } from "@/lib/recruiting/history";
+import { annotateTimeline, nextMoment, peopleFor, pulse, stageSince } from "@/lib/recruiting/history";
 import { EVENT_TYPES, type ActionItem, type ActionKind, type EffectiveEvent, type Opportunity } from "@/lib/recruiting/types";
 
 const fullHref = (base: string, key: string) => `${base}/${encodeURIComponent(key)}`;
@@ -99,56 +99,44 @@ function heroContext(opp: Opportunity | undefined, item: ActionItem) {
   return `Confirmed ${shortDay(scheduled.occurredAt)}${people[0] ? ` by ${people[0]}` : ""}.`;
 }
 
-/**
- * The most important thing today. A tinted field (the one surface shift in the product), big type,
- * one primary action, and the journey line showing where this opportunity stands.
- */
-function Hero({ item, opp, now, basePath, editable }: { item: ActionItem; opp?: Opportunity; now: Date; basePath: string; editable: boolean }) {
+/** The one thing that needs you most: a larger block at the head of the "needs you" panel, with the single primary action. */
+function Lead({ item, opp, now, basePath, editable }: { item: ActionItem; opp?: Opportunity; now: Date; basePath: string; editable: boolean }) {
   const copy = describeAction(item, now);
   const context = heroContext(opp, item);
   const primaryHref = editable && item.sourceThreadId ? gmailThreadUrl(item.sourceThreadId) : fullHref(basePath, item.opportunityKey);
   const primaryLabel = copy.primaryLabel.replace("Open the ", "Open ").replace("the email", "email");
   return (
-    <section className="hero" aria-label="Most important today">
+    <div className="p-5 sm:p-6">
       <div className="flex items-baseline justify-between gap-4">
         <p className="font-medium tracking-tight text-ink-2">{item.company}</p>
-        {copy.relative ? <p className={`t-meta font-medium ${copy.critical ? "text-signal" : "text-accent"}`}>{copy.relative}</p> : null}
+        {copy.relative ? <p className={`t-meta font-medium ${copy.critical ? "text-signal" : "text-ink-2"}`}>{copy.relative}</p> : null}
       </div>
-      <h2 className="t-title mt-3.5">{item.role ?? copy.headline}</h2>
-      <p className="t-lead mt-1 text-ink-2">{KIND_LABEL[item.kind]}</p>
+      <h2 className="t-title mt-2">{item.role ?? copy.headline}</h2>
+      <p className="mt-1 text-ink-2">{KIND_LABEL[item.kind]}</p>
       {copy.when ? (
-        <p className="mt-5 text-[1.1875rem] font-medium leading-snug tracking-tight tnum sm:text-[1.375rem]">{copy.when.replace(" at ", " · ")}</p>
+        <p className="mt-4 text-[1.0625rem] font-medium leading-snug tracking-tight tnum">{copy.when.replace(" at ", " · ")}</p>
       ) : (
-        <p className="mt-6 max-w-[34ch] text-[1.1875rem] leading-snug text-ink-2">
+        <p className="mt-4 max-w-[40ch] text-ink-2">
           {copy.critical ? <span className="text-signal">{item.reason.split(" — ")[0]}</span> : item.reason.split(" — ")[0]}
           {item.reason.includes(" — ") ? ` — ${item.reason.split(" — ").slice(1).join(" — ")}` : ""}
         </p>
       )}
-      {context ? <p className="t-meta mt-2 text-ink-2">{context}</p> : null}
-      <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3">
+      {context ? <p className="t-meta mt-1 text-ink-2">{context}</p> : null}
+      <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3">
         <a className="btn-primary" href={primaryHref} {...(editable && item.sourceThreadId ? { target: "_blank", rel: "noreferrer" } : {})}>
           {editable ? primaryLabel : "See the history"}
         </a>
         <OpenOpportunity opportunityKey={item.opportunityKey} className="link-quiet">
-          View history →
+          View history
         </OpenOpportunity>
         <ActionMenu item={item} editable={editable} lean align="left" />
       </div>
       {opp ? (
-        <div className="mt-7 max-w-[28rem]">
-          <JourneyLine stage={opp.stage} surface="tint" />
+        <div className="mt-6 max-w-[26rem]">
+          <JourneyLine stage={opp.stage} surface="raised" />
         </div>
       ) : null}
-    </section>
-  );
-}
-
-function EmptyHero() {
-  return (
-    <section className="hero" aria-label="Nothing needs you">
-      <h2 className="t-title max-w-[18ch]">Nothing is waiting on you.</h2>
-      <p className="t-lead mt-2 max-w-[38ch] text-ink-2">New emails and deadlines will appear here the moment they arrive.</p>
-    </section>
+    </div>
   );
 }
 
@@ -176,7 +164,7 @@ function ActionList({ items, now, editable }: { items: ActionItem[]; now: Date; 
         return (
           <li key={item.id}>
             <div className="row !items-start !gap-4">
-              <p className={`t-meta w-[4.75rem] shrink-0 pt-[0.2rem] ${heading === "Now" ? "font-semibold text-signal" : "text-ink-3"}`}>{heading !== previous ? heading : ""}</p>
+              <p className={`t-meta w-[3.4rem] shrink-0 pt-[0.2rem] sm:w-[4.75rem] ${heading === "Now" ? "font-semibold text-signal" : "text-ink-3"}`}>{heading !== previous ? heading : ""}</p>
               <div className="min-w-0 flex-1">
                 <OpenOpportunity opportunityKey={item.opportunityKey} className="row-link block font-medium tracking-tight">
                   {copy.headline}
@@ -196,27 +184,6 @@ function ActionList({ items, now, editable }: { items: ActionItem[]; now: Date; 
         );
       })}
     </ul>
-  );
-}
-
-const QUEUE_VISIBLE = 3;
-
-/** A short list with the rest one click away: the first few are the work, the remainder is reachable but never in the way. */
-function Queue({ title, items, now, editable }: { title: string; items: ActionItem[]; now: Date; editable: boolean }) {
-  if (items.length === 0) return null;
-  const order = [...items].sort((a, b) => (a.due && a.bucket !== "overdue" ? a.due.getTime() : -1) - (b.due && b.bucket !== "overdue" ? b.due.getTime() : -1) || b.priority - a.priority);
-  const shown = order.slice(0, QUEUE_VISIBLE);
-  const more = order.slice(QUEUE_VISIBLE);
-  return (
-    <section>
-      <SectionHead title={title} count={items.length} />
-      <ActionList items={shown} now={now} editable={editable} />
-      {more.length > 0 ? (
-        <Disclose className="mt-3" summary={`Show ${more.length} more`} openSummary="Show fewer">
-          <ActionList items={more} now={now} editable={editable} />
-        </Disclose>
-      ) : null}
-    </section>
   );
 }
 
@@ -245,10 +212,72 @@ function WaitingRow({ item, editable }: { item: ActionItem; editable: boolean })
   );
 }
 
+/** Compact, neutral pipeline summary: where things stand, one colour. Each row opens that stage. */
+function PipelineSummary({ opportunities, pipelineHref }: { opportunities: Opportunity[]; pipelineHref: string }) {
+  const rows = pulse(opportunities);
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  const active = opportunities.filter((o) => o.status === "active").length;
+  return (
+    <section aria-label="Pipeline summary">
+      <SectionHead title="Pipeline">
+        <Link href={pipelineHref} className="link-quiet t-meta">
+          Open
+        </Link>
+      </SectionHead>
+      <ul className="mt-3 space-y-2.5">
+        {rows.map((r) => (
+          <li key={r.stage}>
+            <Link href={`${pipelineHref}?stage=${r.stage}`} className="group grid grid-cols-[5.5rem_1fr_1.5rem] items-center gap-3 text-[0.875rem]">
+              <span className={`transition-colors group-hover:text-ink ${r.count === 0 ? "text-ink-3" : "text-ink-2"}`}>{STAGE_LABEL[r.stage]}</span>
+              <span className="relative block h-[3px] rounded-full bg-[var(--line)]" aria-hidden>
+                {r.count > 0 ? <span className="pulse-bar absolute inset-y-0 left-0 block" style={{ width: `${Math.max(6, (r.count / max) * 100)}%` }} /> : null}
+              </span>
+              <span className={`tnum text-right ${r.count === 0 ? "text-ink-3" : "font-medium"}`}>{r.count}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <p className="t-meta tnum mt-3 text-ink-3">
+        {active} active{opportunities.length - active > 0 ? `, ${opportunities.length - active} closed` : ""}
+      </p>
+    </section>
+  );
+}
+
+/** What changed, newest first: one line each, written as a sentence. */
+function RecentChanges({ opportunities, now, activityHref }: { opportunities: Opportunity[]; now: Date; activityHref: string }) {
+  const { recent } = buildBriefing(opportunities, [], now);
+  if (recent.length === 0) return null;
+  return (
+    <section aria-label="Recent changes">
+      <SectionHead title="What changed">
+        <Link href={activityHref} className="link-quiet t-meta">
+          All activity
+        </Link>
+      </SectionHead>
+      <ul className="list mt-2">
+        {recent.map((c) => (
+          <li key={c.opportunityKey}>
+            <div className="row !px-0 !py-2" style={{ margin: 0 }}>
+              <OpenOpportunity opportunityKey={c.opportunityKey} className="row-link min-w-0">
+                <span className="block truncate text-[0.9375rem] font-medium tracking-tight">{c.company}</span>
+                <span className="t-meta block truncate text-ink-2">{c.label}</span>
+              </OpenOpportunity>
+              <span className="t-meta shrink-0 text-ink-3">{relativeDay(now, c.when)}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+const NEEDS_VISIBLE = 4;
+
 /**
- * Today answers one question: what needs me now? One dominant card, then at most a few things to do next. Everything else
- * (later this week, replies you are waiting on) is present but folded. Aggregates live where they belong: stage counts in
- * Pipeline, what changed in Activity. Nothing here competes for attention it has not earned.
+ * Today is the personal command center. It answers three questions in order: what needs me now (the panel, led by one thing),
+ * what is coming (a compact schedule), and where everything stands (a neutral summary and what changed, on the right).
+ * Quiet things (replies you are waiting on) are present but folded. When nothing needs you it says so, plainly.
  */
 export function TodayComposition({
   opportunities,
@@ -276,53 +305,90 @@ export function TodayComposition({
   updated?: string;
 }) {
   const briefing = buildBriefing(opportunities, actions, now);
-  const [hero, ...otherNeeds] = briefing.needsYou;
-  const heroOpp = hero ? opportunities.find((o) => o.key === hero.opportunityKey) : undefined;
-  const active = opportunities.filter((o) => o.status === "active").length;
-  const closed = opportunities.length - active;
+  const [lead, ...others] = briefing.needsYou;
+  const leadOpp = lead ? opportunities.find((o) => o.key === lead.opportunityKey) : undefined;
   const activityHref = pipelineHref.replace(/pipeline$/, "activity");
+  const sortedOthers = [...others].sort((a, b) => b.priority - a.priority);
+  const shown = sortedOthers.slice(0, NEEDS_VISIBLE - 1);
+  const more = sortedOthers.slice(NEEDS_VISIBLE - 1);
+  const next = briefing.comingUp[0];
 
   return (
     <div>
       {greeting}
-      <div className="mt-8 space-y-12">
-        {hero ? <Hero item={hero} opp={heroOpp} now={now} basePath={basePath} editable={editable} /> : <EmptyHero />}
-        <Queue title="Also needs you" items={otherNeeds} now={now} editable={editable} />
-        <Queue title="Coming up" items={briefing.comingUp} now={now} editable={editable} />
+      <div className="cc mt-10">
+        <div className="min-w-0 space-y-10">
+          {lead ? (
+            <section aria-label="Needs you now">
+              <SectionHead title="Needs you now" count={briefing.needsYou.length} />
+              <div className="panel mt-3">
+                <Lead item={lead} opp={leadOpp} now={now} basePath={basePath} editable={editable} />
+                {shown.length > 0 || more.length > 0 ? (
+                  <div className="border-t border-line px-5 pb-1 pt-1 sm:px-6">
+                    <ActionList items={shown} now={now} editable={editable} />
+                    {more.length > 0 ? (
+                      <Disclose className="mb-3 mt-1" summary={`Show ${more.length} more`} openSummary="Show fewer">
+                        <ActionList items={more} now={now} editable={editable} />
+                      </Disclose>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          ) : (
+            <section aria-label="Needs you now">
+              <div className="panel p-6">
+                <h2 className="t-title">Nothing needs you today.</h2>
+                <p className="mt-2 max-w-[44ch] text-ink-2">
+                  {next ? (
+                    <>
+                      Next up: {describeAction(next, now).headline}
+                      {describeAction(next, now).when ? `, ${describeAction(next, now).when}` : ""}.
+                    </>
+                  ) : (
+                    "New emails and deadlines will appear here the moment they arrive."
+                  )}
+                </p>
+              </div>
+            </section>
+          )}
 
-        {briefing.waiting.length > 0 ? (
-          <Disclose summary={`Waiting on replies · ${briefing.waiting.length}`} openSummary="Hide waiting">
-            <p className="t-meta mb-1 mt-3 text-ink-3">Applications with no reply yet. Only worth a nudge if you want one.</p>
-            <ul className="list">
-              {briefing.waiting.map((a) => (
-                <WaitingRow key={a.id} item={a} editable={editable} />
-              ))}
-            </ul>
-          </Disclose>
-        ) : null}
+          {briefing.comingUp.length > 0 ? (
+            <section aria-label="Coming up">
+              <SectionHead title="Coming up" count={briefing.comingUp.length} />
+              <ActionList items={briefing.comingUp.slice(0, 5)} now={now} editable={editable} />
+              {briefing.comingUp.length > 5 ? (
+                <Disclose className="mt-2" summary={`Show ${briefing.comingUp.length - 5} more`} openSummary="Show fewer">
+                  <ActionList items={briefing.comingUp.slice(5)} now={now} editable={editable} />
+                </Disclose>
+              ) : null}
+            </section>
+          ) : null}
 
-        <footer className="space-y-3 border-t border-line pt-6">
+          {briefing.waiting.length > 0 ? (
+            <Disclose summary={`Waiting on replies · ${briefing.waiting.length}`} openSummary="Hide waiting">
+              <p className="t-meta mb-1 mt-3 text-ink-3">Applications with no reply yet. Only worth a nudge if you want one.</p>
+              <ul className="list">
+                {briefing.waiting.map((a) => (
+                  <WaitingRow key={a.id} item={a} editable={editable} />
+                ))}
+              </ul>
+            </Disclose>
+          ) : null}
+        </div>
+
+        <aside className="min-w-0 space-y-10 lg:border-l lg:border-line lg:pl-10" aria-label="State of things">
+          <PipelineSummary opportunities={opportunities} pipelineHref={pipelineHref} />
+          <RecentChanges opportunities={opportunities} now={now} activityHref={activityHref} />
           {toCheck > 0 ? (
-            <p>
+            <p className="t-meta">
               <Link href={checkHref} className="link">
                 {toCheck} {toCheck === 1 ? "thing is" : "things are"} worth a quick check
               </Link>
-              <span className="text-ink-3"> so your history stays accurate.</span>
             </p>
           ) : null}
-          <p className="t-meta flex flex-wrap items-center gap-x-5 gap-y-1 text-ink-3">
-            <span className="tnum">
-              {active} active{closed > 0 ? `, ${closed} closed` : ""}
-            </span>
-            <Link href={pipelineHref} className="link-quiet t-meta">
-              Pipeline
-            </Link>
-            <Link href={activityHref} className="link-quiet t-meta">
-              Activity
-            </Link>
-            {updated ? <span className="tnum">Updated {updated}</span> : null}
-          </p>
-        </footer>
+          {updated ? <p className="t-meta tnum text-ink-3">Updated {updated}</p> : null}
+        </aside>
       </div>
     </div>
   );
@@ -440,45 +506,52 @@ export function EventEditor({ event, compact = false }: { event: EffectiveEvent;
   );
 }
 
-function TimelineEntry({ item, now, editable }: { item: ReturnType<typeof annotateTimeline>[number]; now: Date; editable: boolean }) {
+function gapLabel(days: number) {
+  if (days < 2) return null;
+  if (days < 14) return `${days} days later`;
+  if (days < 60) return `${Math.round(days / 7)} weeks later`;
+  return `${Math.round(days / 30)} months later`;
+}
+
+function TimelineEntry({ item, previous, now, editable }: { item: ReturnType<typeof annotateTimeline>[number]; previous?: ReturnType<typeof annotateTimeline>[number]; now: Date; editable: boolean }) {
   const { event, label, major, superseded, current } = item;
   const upcoming = event.eventDate ? daysBetween(now, event.eventDate) >= 0 : false;
   const struck = superseded ? "text-ink-3 line-through decoration-[var(--line-strong)]" : "";
+  const gap = previous ? gapLabel(Math.round((event.occurredAt.getTime() - previous.event.occurredAt.getTime()) / 86_400_000)) : null;
   return (
-    <li className="group relative grid grid-cols-[4.5rem_1fr] gap-x-6 pb-8 last:pb-0">
-      <span
-        className="absolute -left-px top-[0.62rem] h-[7px] w-[7px] -translate-x-1/2 rounded-full"
-        style={{ background: !major ? "var(--line-strong)" : current && upcoming ? "var(--accent)" : "var(--ink)", boxShadow: current && upcoming ? "0 0 0 4px var(--accent-wash)" : "none" }}
-        aria-hidden
-      />
-      <p className="t-meta tnum whitespace-nowrap pl-6 pt-[0.3rem] text-ink-3">{shortDay(event.occurredAt)}</p>
-      <div className="min-w-0 sm:pr-28">
-        <p className={`${major ? "font-medium tracking-tight" : "text-ink-2"} ${struck}`}>
-          {label}
-          {event.corrected ? <span className="t-meta ml-2 font-normal text-ink-3 no-underline">edited by you</span> : null}
-          {!event.corrected && event.confidence < 0.6 ? <span className="t-meta ml-2 font-normal text-ink-3">not sure about this one</span> : null}
-        </p>
-        {event.eventDate ? (
-          <p className={`mt-0.5 tnum ${struck}`}>
-            {event.dateKind === "deadline" ? "Due " : ""}
-            {formatFloating(event.eventDate, event.eventDateHasTime)}
-            {current && upcoming ? <span className="t-label ml-3 text-accent no-underline">Now</span> : null}
+    <>
+      {gap ? <li aria-hidden className="tl-gap">{gap}</li> : null}
+      <li className="group relative grid grid-cols-[5.5rem_1fr] gap-x-0 py-3">
+        <span className="tl-marker" data-major={major} data-now={current && upcoming} aria-hidden />
+        <p className="t-meta tnum whitespace-nowrap pt-[0.2rem] text-ink-3">{shortDay(event.occurredAt)}</p>
+        <div className="min-w-0 pl-8 sm:pr-28">
+          <p className={`${major ? "font-medium tracking-tight" : "text-ink-2"} ${struck}`}>
+            {label}
+            {event.corrected ? <span className="t-meta ml-2 font-normal text-ink-3 no-underline">edited by you</span> : null}
+            {!event.corrected && event.confidence < 0.6 ? <span className="t-meta ml-2 font-normal text-ink-3">not sure about this one</span> : null}
           </p>
+          {event.eventDate ? (
+            <p className={`mt-0.5 tnum ${struck}`}>
+              {event.dateKind === "deadline" ? "Due " : ""}
+              {formatFloating(event.eventDate, event.eventDateHasTime)}
+              {current && upcoming ? <span className="chip ml-3 no-underline">Next</span> : null}
+            </p>
+          ) : null}
+          <p className="t-meta mt-0.5 truncate text-ink-3">
+            {event.outbound ? "From you" : event.senderName || event.senderDomain}: {event.subject}
+          </p>
+        </div>
+        {editable ? (
+          <EventTools emailHref={gmailThreadUrl(event.gmailThreadId)}>
+            <EventEditor event={event} />
+          </EventTools>
         ) : null}
-        <p className="t-meta mt-0.5 truncate text-ink-3">
-          {event.outbound ? "From you" : event.senderName || event.senderDomain}: {event.subject}
-        </p>
-      </div>
-      {editable ? (
-        <EventTools emailHref={gmailThreadUrl(event.gmailThreadId)}>
-          <EventEditor event={event} />
-        </EventTools>
-      ) : null}
-    </li>
+      </li>
+    </>
   );
 }
 
-/** The canonical memory of one recruiting relationship. */
+/** The canonical memory of one recruiting relationship: where it stands and what is next, then every message in order. */
 export function OpportunityHistory({ opportunity, now, editable }: { opportunity: Opportunity; now: Date; editable: boolean }) {
   const items = annotateTimeline(opportunity.events);
   const next = nextMoment(opportunity, now);
@@ -517,47 +590,55 @@ export function OpportunityHistory({ opportunity, now, editable }: { opportunity
         ) : null}
       </header>
 
-      <div className="mt-12 grid gap-x-20 gap-y-12 lg:grid-cols-[minmax(0,1fr)_19rem]">
-        <ol className="relative ml-1 border-l border-line" aria-label="History">
-          {items.map((item) => (
-            <TimelineEntry key={item.event.gmailMessageId} item={item} now={now} editable={editable} />
-          ))}
-        </ol>
-
-        <aside className="order-first lg:sticky lg:top-24 lg:order-none lg:self-start" aria-label="Where this stands">
-          <p className="t-label text-ink-3">Now</p>
-          <div className="mt-5">
-            <JourneyLine stage={opportunity.stage} surface="paper" />
+      <section aria-label="Where this stands" className="panel mt-8 grid gap-x-10 gap-y-6 p-5 sm:p-6 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <div>
+          <p className="t-meta text-ink-3">Stage</p>
+          <div className="mt-4">
+            <JourneyLine stage={opportunity.stage} surface="raised" />
           </div>
-          <p className="mt-4 text-[1.0625rem] font-medium tracking-tight">
-            {closedNote ?? `${STAGE_LABEL[opportunity.stage]} since ${shortDay(since)}`}
-          </p>
+          <p className="mt-3 font-medium tracking-tight">{closedNote ?? `${STAGE_LABEL[opportunity.stage]} since ${shortDay(since)}`}</p>
           <p className="t-meta mt-0.5 text-ink-2">
             Applied {relativeDay(now, first.occurredAt)}
             {opportunity.status === "active" ? `, in ${STAGE_LABEL[opportunity.stage]} for ${Math.max(0, -daysBetween(now, since))} days` : ""}
           </p>
+        </div>
+        <div className="space-y-5 md:border-l md:border-line md:pl-10">
           {next ? (
-            <div className="mt-6 border-t border-line pt-5">
+            <div>
               <p className="t-meta text-ink-3">{next.label}</p>
-              <p className="mt-0.5 text-[1.0625rem] font-medium tnum">{formatWhen(next.date, next.hasTime).replace(" at ", " · ")}</p>
-              <p className="t-meta mt-0.5 text-ink-2">{relativeDay(now, next.date)}</p>
+              <p className="mt-0.5 font-medium tnum">{formatWhen(next.date, next.hasTime).replace(" at ", " · ")}</p>
+              <p className="t-meta text-ink-2">{relativeDay(now, next.date)}</p>
             </div>
-          ) : null}
+          ) : (
+            <div>
+              <p className="t-meta text-ink-3">Next</p>
+              <p className="mt-0.5 text-ink-2">Nothing scheduled.</p>
+            </div>
+          )}
           {people.length > 0 ? (
-            <div className="mt-6 border-t border-line pt-5">
+            <div>
               <p className="t-meta text-ink-3">People</p>
               <p className="mt-0.5">{people.join(", ")}</p>
             </div>
           ) : null}
           {editable && latestInbound ? (
-            <div className="mt-6 border-t border-line pt-5">
-              <a className="link-quiet" href={gmailThreadUrl(latestInbound.gmailThreadId)} target="_blank" rel="noreferrer">
-                Open latest email
-              </a>
-            </div>
+            <a className="link-quiet inline-block" href={gmailThreadUrl(latestInbound.gmailThreadId)} target="_blank" rel="noreferrer">
+              Open latest email
+            </a>
           ) : null}
-        </aside>
-      </div>
+        </div>
+      </section>
+
+      <section aria-label="History" className="mt-10">
+        <h2 className="t-heading">
+          History <span className="tnum ml-1 font-normal text-ink-3">{items.length}</span>
+        </h2>
+        <ol className="tl mt-3" aria-label="History">
+          {items.map((item, i) => (
+            <TimelineEntry key={item.event.gmailMessageId} item={item} previous={i > 0 ? items[i - 1] : undefined} now={now} editable={editable} />
+          ))}
+        </ol>
+      </section>
     </div>
   );
 }

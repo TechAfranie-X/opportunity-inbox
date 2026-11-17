@@ -17,8 +17,8 @@ const GMAIL_ERRORS: Record<string, string> = {
 
 const STEPS = [
   ["Connect Gmail", "Sign in with Google and approve one read-only permission."],
-  ["We find the recruiting mail", "Applications, assessments, interviews, offers and rejections. Everything else is ignored."],
-  ["See what needs you", "Today shows what is next. Pipeline shows where every opportunity stands. Fix anything we get wrong in a click."],
+  ["We find the recruiting mail", "Applications, assessments, interviews, offers and rejections become opportunities. Everything else is ignored."],
+  ["Act on what matters", "Today shows what needs you and what is next. Pipeline shows where everything stands. Fix anything we get wrong in a click."],
 ];
 
 const TRUST = [
@@ -48,13 +48,13 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             await signIn("google", { redirectTo: "/" });
           }}
         >
-          <button type="submit" className="btn-primary !h-12 !px-6 !text-[0.9375rem]">
+          <button type="submit" className="btn-primary !h-11 !px-5 !text-[0.9375rem]">
             Continue with Google
           </button>
         </form>
       ) : (
         <form action="/api/gmail/connect" method="post">
-          <button type="submit" className="btn-primary !h-12 !px-6 !text-[0.9375rem]">
+          <button type="submit" className="btn-primary !h-11 !px-5 !text-[0.9375rem]">
             Connect Gmail
           </button>
         </form>
@@ -67,8 +67,6 @@ export default async function Home({ searchParams }: PageProps<"/">) {
 
   return (
     <div className="relative flex min-h-full flex-col overflow-x-clip">
-      <div className="landing-glow" aria-hidden />
-
       <header className="mx-auto flex w-full max-w-[64rem] items-center justify-between px-6 pt-6 lg:px-10">
         <p className="flex items-center gap-2.5 text-[0.9375rem] font-semibold tracking-tight">
           <Mark />
@@ -81,9 +79,9 @@ export default async function Home({ searchParams }: PageProps<"/">) {
 
       <main className="flex-1">
         <section className="mx-auto w-full max-w-[64rem] px-6 pt-10 sm:pt-16 lg:px-10">
-          <h1 className="t-hero max-w-[11ch]">Know what needs you today.</h1>
+          <h1 className="t-hero max-w-[15ch]">Recruiting email in. A clear plan out.</h1>
           <p className="t-lead mt-5 max-w-[42ch] text-ink-2">
-            Opportunity Inbox turns the recruiting emails already in your Gmail into one calm view: what needs you, what changed, and where every application stands.
+            Opportunity Inbox reads the recruiting mail already in your Gmail and turns it into one record of every application: what needs you now, what changed, and where each one stands.
           </p>
           <div className="mt-7">{cta}</div>
           {gmailError ? (
@@ -121,7 +119,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           <ol className="mt-10 grid gap-10 sm:grid-cols-3 sm:gap-8">
             {STEPS.map(([title, detail], i) => (
               <li key={title}>
-                <p className="tnum text-[0.9375rem] font-medium text-accent">{i + 1}</p>
+                <p className="tnum text-[0.9375rem] font-medium text-ink-3">{i + 1}</p>
                 <h3 className="t-heading mt-2">{title}</h3>
                 <p className="mt-2 text-ink-2">{detail}</p>
               </li>
@@ -146,7 +144,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         </section>
 
         <section className="mx-auto mt-20 w-full max-w-[64rem] px-6 pb-24 sm:mt-28 sm:pb-28 lg:px-10" aria-labelledby="final">
-          <div className="hero !p-8 sm:!p-12">
+          <div className="panel p-8 sm:p-12">
             <h2 id="final" className="t-display max-w-[16ch]">
               See where you stand.
             </h2>
