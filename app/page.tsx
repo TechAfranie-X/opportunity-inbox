@@ -15,15 +15,15 @@ const GMAIL_ERRORS: Record<string, string> = {
   failed: "Could not connect Gmail. Try again.",
 };
 
-const STEPS = [
-  ["Connect Gmail", "Sign in with Google and approve one read-only permission."],
-  ["We find the recruiting mail", "Applications, assessments, interviews, offers and rejections become opportunities. Everything else is ignored."],
-  ["Act on what matters", "Today shows what needs you and what is next. Pipeline shows where everything stands. Fix anything we get wrong in a click."],
+const LENSES = [
+  ["Today", "What needs you now, and what is coming next."],
+  ["Pipeline", "Where every opportunity stands, from applied to offer."],
+  ["History", "How each one got here, in order, so you never dig through email."],
 ];
 
 const TRUST = [
   ["Read-only", "We cannot send, delete or change anything in your mailbox."],
-  ["Message text is never stored", "We keep the company, role, stage, dates and subject line, with a link back to the email."],
+  ["Your text stays yours", "We keep the company, role, stage, dates and subject line, never the message text."],
   ["No AI service reads your mail", "Nothing is sent to a model or any third party."],
   ["Yours to delete", "Remove everything we derived, or disconnect Gmail, from your account menu."],
 ];
@@ -112,44 +112,37 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           <LandingPreview />
         </section>
 
-        <section className="mx-auto mt-20 w-full max-w-[64rem] px-6 sm:mt-28 lg:px-10" aria-labelledby="how">
-          <h2 id="how" className="t-title max-w-[20ch]">
-            From inbox to clarity in three steps.
-          </h2>
-          <ol className="mt-10 grid gap-10 sm:grid-cols-3 sm:gap-8">
-            {STEPS.map(([title, detail], i) => (
-              <li key={title}>
-                <p className="tnum text-[0.9375rem] font-medium text-ink-3">{i + 1}</p>
-                <h3 className="t-heading mt-2">{title}</h3>
-                <p className="mt-2 text-ink-2">{detail}</p>
+        <section className="mx-auto mt-10 w-full max-w-[64rem] px-6 lg:px-10" aria-label="What you get">
+          <ul className="grid gap-x-10 gap-y-6 sm:grid-cols-3">
+            {LENSES.map(([term, detail]) => (
+              <li key={term} className="border-t border-line pt-4">
+                <p className="t-heading">{term}</p>
+                <p className="mt-1 text-ink-2">{detail}</p>
               </li>
             ))}
-          </ol>
+          </ul>
         </section>
 
-        <section className="mx-auto mt-20 w-full max-w-[64rem] px-6 sm:mt-28 lg:px-10" aria-labelledby="trust">
-          <div className="grid gap-10 border-t border-line pt-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] lg:gap-16">
-            <h2 id="trust" className="t-title max-w-[14ch]">
-              Built to be trusted with your inbox.
-            </h2>
-            <dl className="grid gap-x-10 gap-y-8 sm:grid-cols-2">
-              {TRUST.map(([term, detail]) => (
-                <div key={term}>
-                  <dt className="font-medium tracking-tight">{term}</dt>
-                  <dd className="mt-1.5 text-ink-2">{detail}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
+        <section className="mx-auto mt-20 w-full max-w-[64rem] px-6 sm:mt-24 lg:px-10" aria-labelledby="trust">
+          <h2 id="trust" className="t-heading">
+            Built to be trusted with your inbox
+          </h2>
+          <dl className="mt-5 grid gap-x-10 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
+            {TRUST.map(([term, detail]) => (
+              <div key={term} className="border-t border-line pt-4">
+                <dt className="font-medium tracking-tight">{term}</dt>
+                <dd className="mt-1 text-[0.9375rem] text-ink-2">{detail}</dd>
+              </div>
+            ))}
+          </dl>
         </section>
 
-        <section className="mx-auto mt-20 w-full max-w-[64rem] px-6 pb-24 sm:mt-28 sm:pb-28 lg:px-10" aria-labelledby="final">
-          <div className="panel p-8 sm:p-12">
-            <h2 id="final" className="t-display max-w-[16ch]">
+        <section className="mx-auto mt-20 w-full max-w-[64rem] px-6 pb-24 sm:mt-24 lg:px-10" aria-labelledby="final">
+          <div className="panel flex flex-wrap items-center justify-between gap-x-10 gap-y-6 p-8 sm:p-10">
+            <h2 id="final" className="t-title max-w-[20ch]">
               See where you stand.
             </h2>
-            <p className="t-lead mt-4 max-w-[40ch] text-ink-2">The first read takes a minute or two. After that, every morning starts with what needs you.</p>
-            <div className="mt-8">{cta}</div>
+            <div>{cta}</div>
           </div>
         </section>
       </main>

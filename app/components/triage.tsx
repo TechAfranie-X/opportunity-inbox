@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { confirmEventAction, ignoreEventAction } from "@/app/actions";
+import { EntityMark } from "@/app/components/entity-mark";
+import type { EntityState } from "@/lib/recruiting/presentation";
 
 export type TriageItem = {
   id: string;
@@ -15,19 +17,21 @@ export type TriageItem = {
   why: string;
   date: string;
   sentence: string;
+  entity: EntityState;
   reasons: string[];
   source: string;
   gmailHref: string | null;
 };
 
 /**
- * Check, as a triage: the most consequential uncertainty first, one decision at a time, resolved from the keyboard.
- * Ranked by impact on live recruiting (see lib/recruiting/review.ts), so ten housekeeping questions never bury the one that
- * might be a rejection. "Skip" defers without deciding. Anything weak is folded and never counted.
+ * Needs review, as a triage: only the reviews that matter to live recruiting are the flow, one decision at a time, most important first, resolved
+ * from the keyboard (Y, F, N, S). Housekeeping and weak suggestions are folded below and never counted, so this reads as "three decisions", not
+ * "sixty-seven chores". Ranked by impact on live recruiting (lib/recruiting/review.ts). "Skip" defers without deciding.
  */
 export function Triage({ items, editors }: { items: TriageItem[]; editors: Record<string, ReactNode> }) {
-  const counted = items.filter((i) => !i.weak);
-  const folded = items.filter((i) => i.weak);
+  const important = items.filter((i) => !i.weak && i.tier === "important");
+  const housekeeping = items.filter((i) => !i.weak && i.tier === "routine");
+  const suggestions = items.filter((i) => i.weak);
   const [skipped, setSkipped] = useState<string[]>([]);
   const [picked, setPicked] = useState<string | null>(null);
   const [fixingFor, setFixingFor] = useState<string | null>(null);
@@ -35,11 +39,10 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
   const ignoreForm = useRef<HTMLFormElement>(null);
   const editorId = useId();
 
-  const ordered = useMemo(() => [...counted.filter((i) => !skipped.includes(i.id)), ...counted.filter((i) => skipped.includes(i.id))], [counted, skipped]);
-  const current = ordered.find((i) => i.id === picked) ?? ordered[0];
+  const ordered = useMemo(() => [...important.filter((i) => !skipped.includes(i.id)), ...important.filter((i) => skipped.includes(i.id))], [important, skipped]);
+  const current = items.find((i) => i.id === picked) ?? ordered[0];
+  const position = current ? ordered.findIndex((i) => i.id === current.id) : -1;
   const rest = ordered.filter((i) => i.id !== current?.id);
-  const important = counted.filter((i) => i.tier === "important").length;
-
   const fixing = fixingFor !== null && fixingFor === current?.id;
   const toggleFix = () => setFixingFor((v) => (current && v !== current.id ? current.id : null));
 
@@ -56,55 +59,73 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
     return () => window.removeEventListener("keydown", onKey);
   }, [current]);
 
+  const below = (
+    <>
+      {housekeeping.length > 0 ? <div className="mt-10"><FoldedList title="Housekeeping" note="Smaller questions that keep your history accurate. None of them affects what needs you now." items={housekeeping} editors={editors} confirmLabel="Looks right" /></div> : null}
+      {suggestions.length > 0 ? <div className="mt-6"><FoldedList title="Also possibly recruiting" note="Mail that looks a little like hiring but that we are less sure about. None of it is in your pipeline." items={suggestions} editors={editors} confirmLabel="Yes, it is recruiting" /></div> : null}
+    </>
+  );
+
   if (!current) {
     return (
-      <div className="panel p-6">
-        <h2 className="t-title">All clear.</h2>
-        <p className="mt-2 max-w-[44ch] text-ink-2">Everything we were unsure about is settled. New doubts will wait here, most important first.</p>
-        {folded.length > 0 ? <Folded items={folded} editors={editors} /> : null}
+      <div>
+        <div className="panel p-6">
+          <h2 className="t-title">Nothing important to review.</h2>
+          <p className="mt-2 max-w-[44ch] text-ink-2">Everything that could change what you do next is settled. New doubts will wait here, most important first.</p>
+        </div>
+        {below}
       </div>
     );
   }
 
-  const confirmLabel = current.possible ? "Yes, it is recruiting" : "Looks right";
+  const isImportant = current.tier === "important" && !current.weak;
   return (
     <div>
       <p className="t-meta tnum text-ink-3" aria-live="polite">
-        {counted.length} to check{important > 0 ? ` · ${important} on active recruiting` : ""}
+        {isImportant ? `${position + 1} of ${important.length} important ${important.length === 1 ? "review" : "reviews"}` : "Housekeeping"}
       </p>
       <div className="triage-rail mt-3" aria-hidden>
-        <span style={{ width: `${Math.max(4, 100 / Math.max(1, counted.length))}%` }} />
+        <span style={{ width: `${isImportant ? Math.max(4, ((position + 1) / Math.max(1, important.length)) * 100) : 4}%` }} />
       </div>
 
-      <article className="triage mt-6 p-5 sm:p-6" aria-label="Item to check">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-          <p className="text-[1.0625rem] font-medium tracking-tight">
-            {current.possible ? current.company : (
-              <Link className="link" href={`/opportunities/${encodeURIComponent(current.opportunityKey)}`}>
-                {current.company}
-              </Link>
-            )}
-            {current.role ? <span className="ml-2 font-normal text-ink-2">{current.role}</span> : null}
-          </p>
-          <p className="t-meta tnum text-ink-3">{current.date}</p>
+      <article className="triage mt-6 p-5 sm:p-6" aria-label="Item to review">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <EntityMark name={current.company} state={current.entity} size="md" />
+            <div className="min-w-0">
+              <p className="truncate text-[1.0625rem] font-medium tracking-tight">
+                {current.possible || !current.opportunityKey ? current.company : (
+                  <Link className="link" href={`/opportunities/${encodeURIComponent(current.opportunityKey)}`}>{current.company}</Link>
+                )}
+              </p>
+              <p className="t-meta truncate text-ink-2">{current.role ?? (current.entity === "likely" ? "Likely company" : current.entity === "unknown" ? "Company unknown" : "No role detected")}</p>
+            </div>
+          </div>
+          <p className="t-meta tnum shrink-0 text-ink-3">{current.date}</p>
         </div>
-        <p className="mt-1"><span className="chip">{current.why}</span></p>
-        <p className="mt-4 text-[1.0625rem]">{current.sentence}</p>
-        <p className="mt-2 max-w-[60ch] text-ink-2">{current.reasons.join(" ")}</p>
-        <p className="t-meta mt-3 flex items-baseline gap-x-4 text-ink-3">
-          <span className="min-w-0 truncate">{current.source}</span>
-          {current.gmailHref ? (
-            <a className="link-quiet t-meta shrink-0" href={current.gmailHref} target="_blank" rel="noreferrer">
-              Open in Gmail
-            </a>
-          ) : null}
-        </p>
+
+        <p className="mt-5 text-[1.125rem] font-medium leading-snug tracking-tight">{current.sentence}</p>
+        <p className="t-meta mt-2"><span className="chip">{current.why}</span></p>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div>
+            <p className="t-meta text-ink-3">Why we are unsure</p>
+            <p className="mt-1 text-ink-2">{current.reasons.join(" ")}</p>
+          </div>
+          <div className="min-w-0">
+            <p className="t-meta text-ink-3">From the email</p>
+            <p className="mt-1 truncate text-ink-2">{current.source}</p>
+            {current.gmailHref ? (
+              <a className="link-quiet t-meta mt-1 inline-block" href={current.gmailHref} target="_blank" rel="noreferrer">Open in Gmail</a>
+            ) : null}
+          </div>
+        </div>
 
         <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-3 border-t border-line pt-5">
           <form ref={confirmForm} action={confirmEventAction}>
             <input type="hidden" name="eventId" value={current.id} />
             <button type="submit" className="btn-primary">
-              {confirmLabel} <span className="keyhint ml-1 !border-white/30 !text-white/80" aria-hidden>Y</span>
+              {current.possible ? "Yes, it is recruiting" : "Looks right"} <span className="keyhint ml-1 !border-white/30 !text-white/80" aria-hidden>Y</span>
             </button>
           </form>
           <button type="button" className="btn-soft" aria-expanded={fixing} aria-controls={editorId} onClick={toggleFix}>
@@ -127,18 +148,19 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
         </div>
       </article>
 
-      {rest.length > 0 ? (
+      {isImportant && rest.length > 0 ? (
         <section className="mt-10" aria-label="Up next">
-          <h2 className="t-heading">
-            Up next <span className="tnum ml-1 font-normal text-ink-3">{rest.length}</span>
-          </h2>
+          <h2 className="t-heading">Up next <span className="tnum ml-1 font-normal text-ink-3">{rest.length}</span></h2>
           <ul className="list mt-2">
             {rest.map((i) => (
               <li key={i.id}>
                 <button type="button" className="row !items-center !py-2.5 w-full text-left" onClick={() => setPicked(i.id)}>
-                  <span className="min-w-0">
-                    <span className="block truncate text-[0.9375rem] font-medium tracking-tight">{i.company}{i.role ? <span className="font-normal text-ink-2"> {i.role}</span> : null}</span>
-                    <span className="t-meta block truncate text-ink-3">{i.why}</span>
+                  <span className="flex min-w-0 items-center gap-3">
+                    <EntityMark name={i.company} state={i.entity} size="sm" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-[0.9375rem] font-medium tracking-tight">{i.company}{i.role ? <span className="font-normal text-ink-2"> {i.role}</span> : null}</span>
+                      <span className="t-meta block truncate text-ink-3">{i.why}</span>
+                    </span>
                   </span>
                   <span className="t-meta tnum shrink-0 text-ink-3">{i.date}</span>
                 </button>
@@ -147,13 +169,13 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
           </ul>
         </section>
       ) : null}
-      {folded.length > 0 ? <div className="mt-10"><Folded items={folded} editors={editors} /></div> : null}
+      {below}
     </div>
   );
 }
 
-/** Weak suggestions: offered, folded, never counted. Each can still be settled. */
-function Folded({ items, editors }: { items: TriageItem[]; editors: Record<string, ReactNode> }) {
+/** Quiet lists: offered, folded, never counted. Each can still be settled in place. */
+function FoldedList({ title, note, items, editors, confirmLabel }: { title: string; note: string; items: TriageItem[]; editors: Record<string, ReactNode>; confirmLabel: string }) {
   const [open, setOpen] = useState(false);
   const id = useId();
   return (
@@ -162,20 +184,23 @@ function Folded({ items, editors }: { items: TriageItem[]; editors: Record<strin
         <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ transform: open ? "rotate(90deg)" : "none" }}>
           <path d="M3 1.5 6 4.5 3 7.5" />
         </svg>
-        Also possibly recruiting · {items.length}
+        {title} · {items.length}
       </button>
       <div id={id} className="disclose" data-open={open} aria-hidden={!open} inert={!open}>
         <div>
-          <p className="t-meta mb-2 mt-3 max-w-[52ch] text-ink-3">Mail that looks a little like hiring but that we are less sure about. None of it is in your pipeline.</p>
+          <p className="t-meta mb-2 mt-3 max-w-[52ch] text-ink-3">{note}</p>
           <ul className="list border-y border-line">
             {items.map((i) => (
               <li key={i.id} className="py-4">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-6">
-                  <p className="font-medium tracking-tight">{i.company}</p>
+                <div className="flex flex-wrap items-center justify-between gap-x-6">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <EntityMark name={i.company} state={i.entity} size="sm" />
+                    <p className="truncate font-medium tracking-tight">{i.company}</p>
+                  </div>
                   <p className="t-meta tnum text-ink-3">{i.date}</p>
                 </div>
-                <p className="t-meta mt-0.5 truncate text-ink-3">{i.source}</p>
-                <WeakActions id={i.id} editor={editors[i.id]} />
+                <p className="t-meta mt-1 truncate text-ink-3">{i.source}</p>
+                <InlineActions id={i.id} editor={editors[i.id]} confirmLabel={confirmLabel} />
               </li>
             ))}
           </ul>
@@ -185,7 +210,7 @@ function Folded({ items, editors }: { items: TriageItem[]; editors: Record<strin
   );
 }
 
-function WeakActions({ id, editor }: { id: string; editor: ReactNode }) {
+function InlineActions({ id, editor, confirmLabel }: { id: string; editor: ReactNode; confirmLabel: string }) {
   const [fix, setFix] = useState(false);
   const eid = useId();
   return (
@@ -193,7 +218,7 @@ function WeakActions({ id, editor }: { id: string; editor: ReactNode }) {
       <div className="flex flex-wrap items-center gap-3">
         <form action={confirmEventAction}>
           <input type="hidden" name="eventId" value={id} />
-          <button type="submit" className="btn-soft">Yes, it is recruiting</button>
+          <button type="submit" className="btn-soft">{confirmLabel}</button>
         </form>
         <button type="button" className="link-quiet" aria-expanded={fix} aria-controls={eid} onClick={() => setFix((v) => !v)}>
           {fix ? "Close" : "Fix details"}

@@ -98,7 +98,7 @@ try {
     assert.ok(ws.possible.every((e) => !inPipeline.has(e.gmailMessageId)), "a near miss is not in the pipeline");
     assert.ok(full.some((i) => i.possible && !i.weak), "a strong near miss is in the review queue");
     assert.ok(full.some((i) => i.weak), "a weak near miss is offered");
-    assert.equal(attentionCount(full), full.filter((i) => !i.weak).length, "weak suggestions are not counted");
+    assert.equal(attentionCount(full), full.filter((i) => !i.weak && i.tier === "important").length, "weak suggestions and housekeeping are not counted");
     step(`reliability: ${ws.possible.length} near misses surfaced outside the pipeline, goodbye flagged`);
     if (process.env.SEMANTIC_READER === "sample") {
       // The scripted stand-in recognises the reference-request mail the rules cannot see, and doubts the course promotion.

@@ -19,13 +19,23 @@ An editorial record of one person's recruiting life. Calm, precise, mature, unde
 - **Raycast**: keyboard-first, search as a way to move, small bordered key hints.
 
 ## Screens
+The product should feel like it already understood the person's recruiting and quietly says what matters: **quiet by default, decisive when something matters.**
+One dominant thing per screen; everything else recedes or folds.
+
 | Screen | Its question | Composition |
 |---|---|---|
-| Today | What needs me now? | A needs-now panel led by one item with one primary action, then a few more, folded beyond four; a compact schedule; folded "waiting on replies". Beside it, the state of things: a neutral pipeline summary, what changed, the review status. When nothing needs you it says so, plainly. |
-| Pipeline | Where does everything stand? | A rail of stages with counts and a filter. "All active" reads from the most advanced stage down with five rows each and the rest one click away, so it stays calm at 100+ opportunities; a stage lists all of it. |
-| Opportunity | What is this one's story? | Company and role; a stage, next-step and people panel; then the history as the strongest surface: a rail with a marker per message, dates in a gutter, and the time between messages made visible. |
-| Check | What am I unsure about? | A triage, not a list: the most consequential uncertainty first (ranked by impact on live recruiting), one decision at a time, resolved from the keyboard (Y, F, N, S). Housekeeping and weak suggestions are folded. |
-| Landing | What is this and can I trust it? | An outcome headline, one primary action, the demo, and the product itself as the picture: recruiting email on the left, the Today command center on the right. Three steps, four trust facts, one final action. |
+| Today | What needs me now? | A greeting that says where to begin (not an alarming number); one lead card with the single primary action; two decision-sized cards beside it; everything else folded ("46 more need you", "20 later", "18 waiting on replies"). Beside it, the state of things: a compact neutral pipeline summary, what changed, and a review panel that counts only reviews that matter. When nothing needs you: "You are all caught up." |
+| Pipeline | Where does everything stand? | The opportunity is the unit. "All active" is a compact board that reads left to right as the journey, a handful of cards per stage (dated things first), the rest one click away; a stage opens as a card grid; a filter narrows. Cards show who, what, what is next or just moved, and whether we are unsure. Swipeable lanes on phones. Usable at 100+ opportunities. |
+| Opportunity | What is this one's story? | Identity, then "how it got here": the stages reached with the day each was reached, where it stands and what is next; then the history as a rail with the time between messages made visible. It reads as memory, not email. |
+| Needs review | What am I unsure about? | A triage over the reviews that matter to live recruiting: "1 of 8 important reviews", one decision at a time, "We think this is ...", "Why we are unsure", the evidence, and Looks right / Fix details / Not recruiting (Y, F, N, S). Housekeeping and weak suggestions are folded and never counted. |
+| Landing | What is this and can I trust it? | The whole transformation as the picture: Gmail on the left, Pipeline cards in the middle, Today's actions on the right, built from the product's own styles; then Today, Pipeline, History in one line each, and four trust facts. |
+
+## Company identity
+We never fetch or invent a logo (that would send company names to a third party, and guess when unsure). The mark is a monogram, and its treatment says how much we know:
+**known** (solid), **likely** (dashed, "needs confirmation"), **unknown** (dashed question mark). A strong suggestion never looks identical to having no information.
+
+## Navigation
+Two destinations: Today and Pipeline. Search (⌘K), a review status ("3 need review", only when something important needs you), and the account menu. Activity is reached from Today ("All activity") and search.
 
 ## Rules we follow
 - One dominant thing per screen; secondary things quieter; supporting analytics never compete with work.

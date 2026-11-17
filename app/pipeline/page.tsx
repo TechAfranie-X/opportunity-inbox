@@ -20,7 +20,7 @@ export default async function PipelinePage({ searchParams }: PageProps<"/pipelin
   const updated = workspace.lastSyncedAt?.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
   return (
-    <AppShell active="pipeline" user={session?.user} updated={updated} opportunities={workspace.opportunities} possible={workspace.possible} now={now} width="mid">
+    <AppShell active="pipeline" user={session?.user} updated={updated} opportunities={workspace.opportunities} possible={workspace.possible} now={now} width="wide">
       <h1 className="t-display">Pipeline</h1>
       <p className="t-lead tnum mt-3 text-ink-2">
         {workspace.opportunities.filter((o) => o.status === "active").length} active

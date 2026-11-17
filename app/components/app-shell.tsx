@@ -82,7 +82,7 @@ export function AppShell({
               <Link href="/review" className="status-link" aria-current={active === "review" ? "page" : undefined}>
                 <span className="status-dot" aria-hidden />
                 <span>
-                  <span className="tnum">{reviewCount}</span> to check
+                  <span className="tnum">{reviewCount}</span> {reviewCount === 1 ? "needs" : "need"} review
                 </span>
               </Link>
             ) : null}
@@ -144,7 +144,7 @@ export function AppShell({
         ))}
         {reviewCount > 0 ? (
           <Link href="/review" aria-current={active === "review" ? "page" : undefined}>
-            Check <span className="tnum">{reviewCount}</span>
+            Review <span className="tnum">{reviewCount}</span>
           </Link>
         ) : null}
       </nav>

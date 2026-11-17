@@ -48,8 +48,11 @@ export function reviewImpact(item: { event: EffectiveEvent; active: boolean; pos
   return { impact, why };
 }
 
-/** What the badge and Today's nudge count: everything except the weak, folded suggestions. */
-export const attentionCount = (queue: ReviewItem[]) => queue.filter((i) => !i.weak).length;
+/**
+ * What the navigation and Today count: only the reviews that matter to live recruiting. Housekeeping and weak suggestions stay reachable on the
+ * Check screen but never inflate the number, so "3 need review" is a real statement, not a to-do list.
+ */
+export const attentionCount = (queue: ReviewItem[]) => queue.filter((i) => !i.weak && i.tier === "important").length;
 
 const FALLBACK = "We are not fully sure about this one.";
 

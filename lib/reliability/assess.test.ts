@@ -120,7 +120,7 @@ test("review: near misses join the queue after the real items, the badge counts 
   const queue = buildReviewQueue(opportunities, undefined, [...strong, ...weak].map(asEffective));
   assert.equal(opportunities.every((o) => o.events.every((e) => !isNearMiss(e))), true, "near misses are not in the pipeline");
   assert.deepEqual(queue.filter((i) => i.possible).map((i) => Boolean(i.weak)).sort(), [false, true]);
-  assert.equal(attentionCount(queue), queue.length - 1, "the weak one is offered, not counted");
+  assert.equal(attentionCount(queue), queue.filter((i) => !i.weak && i.tier === "important").length, "only important, non-weak reviews are counted; the weak one is offered, not counted");
   assert.ok(queue.filter((i) => i.possible).every((i) => i.opportunityKey === "" && i.reasons.length > 0));
 });
 

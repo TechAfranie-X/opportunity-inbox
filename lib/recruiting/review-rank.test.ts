@@ -33,6 +33,7 @@ test("weak near misses rank last and are never counted", () => {
   const real = ev("Acme", "applied", 5);
   const queue = buildReviewQueue(buildOpportunities([real]), undefined, [strong, weak], NOW);
   assert.equal(queue[queue.length - 1].weak, true);
-  assert.equal(attentionCount(queue), queue.length - 1);
+  assert.equal(attentionCount(queue), queue.filter((i) => !i.weak && i.tier === "important").length, "only important, non-weak reviews are counted");
+  assert.ok(attentionCount(queue) < queue.length, "housekeeping and weak suggestions never inflate the number");
   assert.ok(queue.find((i) => i.possible && !i.weak)!.impact > 0);
 });

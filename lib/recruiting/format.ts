@@ -84,3 +84,29 @@ export function relativeDay(now: Date, date: Date) {
   if (past < 60) return `${Math.round(past / 7)} weeks ago`;
   return `${Math.round(past / 30)} months ago`;
 }
+
+/** "We think this is ___": the event as a noun phrase, with its article. */
+export const EVENT_NOUN: Record<EventType, string> = {
+  applied: "an application confirmation",
+  recruiter_outreach: "a recruiter reaching out",
+  assessment: "an assessment",
+  assessment_completed: "an assessment receipt",
+  interview_invite: "an interview invitation",
+  interview_scheduled: "a scheduled interview",
+  follow_up: "a follow-up",
+  status_update: "a status update",
+  offer: "an offer",
+  rejection: "a rejection",
+  withdrawn: "a withdrawal",
+  user_reply: "your own reply",
+};
+
+/** A short, scannable time for cards: "Today 2:00 PM", "Tomorrow", "Wed 11:59 PM" within a week, "Nov 18" beyond. */
+export function compactWhen(now: Date, date: Date, withTime: boolean): string {
+  const d = daysBetween(now, date);
+  const time = withTime ? date.toLocaleTimeString("en-US", { timeZone: "UTC", hour: "numeric", minute: "2-digit" }) : "";
+  if (d === 0) return `Today${time ? ` ${time}` : ""}`;
+  if (d === 1) return `Tomorrow${time ? ` ${time}` : ""}`;
+  if (d > 1 && d < 7) return `${date.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short" })}${time ? ` ${time}` : ""}`;
+  return date.toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
+}

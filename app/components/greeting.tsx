@@ -9,7 +9,9 @@ export function dayPart(hour: number) {
 
 function countLine(n: number) {
   if (n === 0) return "Nothing needs you today.";
-  return n === 1 ? "1 thing needs you today." : `${n} things need you today.`;
+  if (n === 1) return "1 thing needs you today.";
+  // A long list is not a verdict: say where to begin instead of announcing a number that reads as alarm.
+  return n > 6 ? `${n} are open. Start with these.` : `${n} things need you today.`;
 }
 
 /**

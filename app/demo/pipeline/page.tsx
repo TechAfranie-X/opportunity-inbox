@@ -10,7 +10,7 @@ export default async function DemoPipeline({ searchParams }: PageProps<"/demo/pi
   const { opportunities, now } = loadDemoWorkspace();
   const params = await searchParams;
   return (
-    <AppShell demo active="pipeline" opportunities={opportunities} now={now} width="mid">
+    <AppShell demo active="pipeline" opportunities={opportunities} now={now} width="wide">
       <h1 className="t-display">Pipeline</h1>
       <p className="t-lead tnum mt-3 text-ink-2">
         {opportunities.filter((o) => o.status === "active").length} active
