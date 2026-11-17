@@ -1,5 +1,6 @@
 import type { Prediction } from "./predictions.ts";
 import type { ThreadAnchor } from "./extract.ts";
+import { minimizeSweepPredictions, tagEvents, viaMap } from "../discovery/strategy.ts";
 import type { ExtractedEvent, RecruitingEmail } from "./types.ts";
 
 /**
@@ -14,7 +15,8 @@ import type { ExtractedEvent, RecruitingEmail } from "./types.ts";
  *    refreshed every sync. Without this, an answered recruiter message would keep showing as "reply to the recruiter".
  *  - Embargoed: mail at or after `embargoBefore` is dropped wherever it appears (see lib/gmail/embargo.ts).
  */
-export type CandidateRef = { id: string; threadId: string };
+/** `via` records which discovery tier found the message (see lib/discovery/strategy.ts); absent in the original keyword-only mode. */
+export type CandidateRef = { id: string; threadId: string; via?: "keyword" | "sweep" };
 
 export type MailSource = {
   /** Candidate message refs, newest first. */
@@ -88,6 +90,7 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
   const allowed = (e: RecruitingEmail) => !p.embargoBefore || e.receivedAt.getTime() < p.embargoBefore.getTime();
 
   const refs = await source.listCandidates(p.maxCandidates);
+  const via = viaMap(refs);
   const known = await store.evaluatedIds(refs.map((r) => r.id));
   const plan = planChunks(refs, known, p.threadsPerChunk);
 
@@ -100,10 +103,10 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
     const inboundEvents = p.extract(inbound);
     const threadIds = [...new Set(inboundEvents.map((e) => e.gmailThreadId))];
     const outbound = threadIds.length ? (await source.fetchOutbound(threadIds)).filter(allowed) : [];
-    const events = p.extract([...inbound, ...outbound]);
+    const events = tagEvents(p.extract([...inbound, ...outbound]), via);
     await store.saveEvents(events);
     try {
-      await store.savePredictions(p.predict([...inbound, ...outbound]));
+      await store.savePredictions(minimizeSweepPredictions(p.predict([...inbound, ...outbound]), via));
     } catch {
       // The prediction log is evaluation evidence and the "already evaluated" memory: losing it only costs a re-read next time.
     }

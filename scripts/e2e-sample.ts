@@ -1,6 +1,8 @@
 /**
  * End-to-end check of the signed-in product against a SCRATCH Postgres database, using the synthetic sample mailbox.
  * Run:  npm run e2e:sample      (creates scratch_mvp_e2e, migrates, runs, drops it). Refuses any database not named scratch_*.
+ *       DISCOVERY=sweep npm run e2e:sample   the same journey with recall-first discovery (lib/discovery/strategy.ts).
+ *       DB_CONTAINER=<name> if the Postgres container is not called opportunity-inbox-db-1.
  * Never touches the real database or Gmail.
  */
 import assert from "node:assert/strict";
@@ -9,13 +11,15 @@ import { execFileSync } from "node:child_process";
 const base = process.env.DATABASE_URL;
 if (!base) throw new Error("DATABASE_URL is required (it is only used to reach the server; the scratch database is separate)");
 const SCRATCH = "scratch_mvp_e2e";
+const CONTAINER = process.env.DB_CONTAINER ?? "opportunity-inbox-db-1";
+const SWEEP = process.env.DISCOVERY === "sweep";
 const url = new URL(base);
 const admin = new URL(base);
 url.pathname = `/${SCRATCH}`;
 assert.ok(url.pathname.slice(1).startsWith("scratch_"), "refusing to run outside a scratch database");
 
 const psql = (db: string, sql: string) =>
-  execFileSync("docker", ["exec", "opportunity-inbox-db-1", "psql", "-U", decodeURIComponent(admin.username), "-d", db, "-v", "ON_ERROR_STOP=1", "-c", sql], { stdio: ["ignore", "pipe", "pipe"] });
+  execFileSync("docker", ["exec", CONTAINER, "psql", "-U", decodeURIComponent(admin.username), "-d", db, "-v", "ON_ERROR_STOP=1", "-c", sql], { stdio: ["ignore", "pipe", "pipe"] });
 
 psql("postgres", `DROP DATABASE IF EXISTS ${SCRATCH} WITH (FORCE)`);
 psql("postgres", `CREATE DATABASE ${SCRATCH}`);
@@ -49,6 +53,20 @@ try {
   const again = await syncRecruitingMail(SAMPLE_SUB);
   assert.ok(again.ok && again.fetched === 0, `refetched ${again.ok ? again.fetched : "?"}`);
   step("second sync is a no-op");
+
+  // 3b. discovery mode: provenance and retention are what the mode promises
+  const sql = (q: string) => execFileSync("docker", ["exec", CONTAINER, "psql", "-U", decodeURIComponent(admin.username), "-d", SCRATCH, "-At", "-c", q]).toString().trim();
+  if (SWEEP) {
+    assert.ok(Number(sql(`select count(*) from recruiting_events where signals @> '["via:sweep"]'`)) >= 1, "the sweep found mail the keyword search cannot");
+    assert.equal(sql(`select count(*) from recruiting_events where signals::text like '%quick chat%'`), "0");
+    assert.equal(sql(`select count(*) from event_predictions where decision = 'not_recruiting' and signals @> '["via:sweep"]' and sender_domain <> ''`), "0", "rejected sweep mail keeps no sender domain");
+    assert.ok(Number(sql(`select count(*) from event_predictions where decision = 'not_recruiting' and signals @> '["via:sweep"]'`)) >= 1, "and the sweep did read and reject some");
+    assert.equal(sql(`select count(*) from event_predictions where sender_domain ilike '%chase%'`), "0", "a bank alert read by the sweep is not remembered by sender");
+    step("sweep: found extra mail, labelled it, retained no sender domain for rejected mail");
+  } else {
+    assert.equal(sql(`select count(*) from event_predictions where signals::text like '%via:%'`), "0", "keyword mode writes no provenance");
+    step("keyword mode: no provenance written (unchanged behavior)");
+  }
 
   // 4. the workspace: opportunities, briefing, review queue
   const real = new Date();
@@ -86,7 +104,7 @@ try {
   step("closing an opportunity sticks");
 
   // 8. privacy: the stored tables hold no message text from the sample bodies
-  const dump = execFileSync("docker", ["exec", "opportunity-inbox-db-1", "psql", "-U", decodeURIComponent(admin.username), "-d", SCRATCH, "-At", "-c", "select * from recruiting_events"]).toString();
+  const dump = execFileSync("docker", ["exec", CONTAINER, "psql", "-U", decodeURIComponent(admin.username), "-d", SCRATCH, "-At", "-c", "select * from recruiting_events"]).toString();
   for (const marker of ["We received your application and will be in touch", "I'm a recruiter at", "Please complete it by", "pleased to extend you an offer"]) assert.equal(dump.includes(marker), false, `body text stored: ${marker}`);
   step("no message body text in the database");
 

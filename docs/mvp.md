@@ -17,7 +17,7 @@ It answers three questions: what opportunities do I have, what needs my attentio
 | **Sample mailbox** | A synthetic mailbox for development and testing, no Gmail needed. |
 
 ## How the data flows
-Gmail (read-only) -> a keyword search for recruiting-looking mail -> the rule-based reader -> structured events in Postgres (company, role, stage, dates, a link to the source email; **never the message text**) -> opportunities derived on read.
+Gmail (read-only) -> a keyword search for recruiting-looking mail (or, with `DISCOVERY=sweep`, that search first and then Gmail's semantic filter) -> the rule-based reader -> structured events in Postgres (company, role, stage, dates, a link to the source email; **never the message text**) -> opportunities derived on read.
 
 - **Incremental:** messages already read are not fetched again. Work is cut into whole threads, saved as it goes (newest first), and resumes after an interruption. When a request ends with mail still unread, the page continues by itself a bounded number of times.
 - **Replies:** your own replies are metadata-only. Threads active in the last 30 days are re-checked on every sync so a reply you sent clears "reply to the recruiter". A reply to a thread that went quiet more than 30 days ago is picked up on the next full re-evaluation.
@@ -39,7 +39,7 @@ A prospective evaluation of a newer reader (architecture v2) starts **2026-12-01
 - Sample sign-in exists only with `SAMPLE_LOGIN=1` and is always off when `NODE_ENV=production`.
 
 ## Known limits (intentionally outside the MVP)
-- **Search recall.** Mail is found by a keyword search (subject words and applicant-tracking senders). A recruiter email with none of those words is never fetched. The sample mailbox contains one on purpose. Widening the search would need a decision on privacy and noise.
+- **Search recall.** By default mail is found by a keyword search (subject words and applicant-tracking senders). A recruiter email with none of those words is never fetched (about a quarter of recruiting mail on the development mailbox; the sample mailbox contains one on purpose). `DISCOVERY=sweep` widens the search to everything outside Gmail's Promotions, Social and Forums, keyword hits first; see `docs/discovery-v2.md` for the measurements, the privacy rules and the remaining weaknesses. It is off unless set.
 - **Rules, not a model.** Unusual wording, some vendor emails and some course or promotion mail can be misread. The review queue is the safety net, and it only flags what the reader itself doubts, so a confident mistake can still be wrong. Fix it from the opportunity page.
 - **Accuracy is not claimed.** The sample mailbox is written alongside the rules, so it is a regression guard, not a measurement.
 - Gmail only. One account per sign-in. No sending email, calendar integration, push notifications, mobile app, sharing, or team features.
