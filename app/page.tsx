@@ -72,9 +72,11 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           <Mark />
           Opportunity Inbox
         </p>
-        <Link href="/demo" className="link-quiet">
-          Demo
-        </Link>
+        <nav className="flex items-center gap-6 text-[0.875rem]" aria-label="Page">
+          <a href="#what" className="link-quiet max-sm:hidden">Product</a>
+          <a href="#trust" className="link-quiet max-sm:hidden">Privacy</a>
+          <Link href="/demo" className="btn-soft">See demo</Link>
+        </nav>
       </header>
 
       <main className="flex-1">
@@ -112,7 +114,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           <LandingPreview />
         </section>
 
-        <section className="mx-auto mt-10 w-full max-w-[64rem] px-6 lg:px-10" aria-label="What you get">
+        <section className="mx-auto mt-10 w-full max-w-[64rem] px-6 lg:px-10" id="what" aria-label="What you get">
           <ul className="grid gap-x-10 gap-y-6 sm:grid-cols-3">
             {LENSES.map(([term, detail]) => (
               <li key={term} className="border-t border-line pt-4">

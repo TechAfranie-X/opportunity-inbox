@@ -79,11 +79,10 @@ export function PipelineExplorer({ initialStage, controlledStage }: { initialSta
     ) : (
       <div className="-mx-6 flex snap-x scroll-pl-6 gap-3 overflow-x-auto px-6 pb-3 lg:mx-0 lg:grid lg:grid-cols-5 lg:overflow-visible lg:px-0">
         {columns.map(({ s, list }) => (
-          <section key={s} aria-label={STAGE_LABEL[s]} className="min-w-[15.5rem] snap-start lg:min-w-0">
-            <div className="flex items-baseline justify-between gap-2 px-1 pb-2">
-              <h2 className="t-heading">
-                {STAGE_LABEL[s]} <span className="tnum ml-1 font-normal text-ink-3">{counts[s]}</span>
-              </h2>
+          <section key={s} aria-label={STAGE_LABEL[s]} className="min-w-[15.5rem] snap-start rounded-lg border border-line bg-[var(--tint)] p-2 lg:min-w-0">
+            <div className="flex items-baseline justify-between gap-2 px-1.5 pb-2 pt-1">
+              <h2 className="t-heading">{STAGE_LABEL[s]}</h2>
+              <span className="tnum t-meta text-ink-3">{counts[s]}</span>
             </div>
             <div className="space-y-2">
               {list.slice(0, OVERVIEW_VISIBLE).map(card)}
@@ -157,7 +156,7 @@ function OppCard({ opp, now, active, onOpen }: { opp: Opportunity; now: Date; ac
       type="button"
       onClick={onOpen}
       data-active={active}
-      className="panel relative block w-full p-3 text-left transition-colors hover:bg-[var(--tint)] data-[active=true]:border-[var(--accent)]"
+      className="panel relative block w-full bg-[var(--paper)] p-3 text-left transition-colors hover:border-[var(--ink-3)] data-[active=true]:border-[var(--accent)]"
     >
       <span className="flex items-start gap-2.5">
         <EntityMark opportunity={opp} size="sm" />
@@ -172,7 +171,7 @@ function OppCard({ opp, now, active, onOpen }: { opp: Opportunity; now: Date; ac
         ) : null}
       </span>
       <span className="t-meta tnum mt-2.5 block truncate text-ink-3">
-        {closedNote ? `${closedNote} · ${relativeDay(now, last.at)}` : next ? <span className="text-ink">{next.kind === "deadline" ? "Due " : ""}{compactWhen(now, next.date, next.hasTime)}</span> : `${last.label} · ${relativeDay(now, last.at)}`}
+        {closedNote ? `${closedNote} · ${relativeDay(now, last.at)}` : next ? <span className={next.kind === "deadline" ? "text-[var(--warn)]" : "text-ink"}>{next.kind === "deadline" ? "Due " : ""}{compactWhen(now, next.date, next.hasTime)}</span> : `${last.label} · ${relativeDay(now, last.at)}`}
       </span>
     </button>
   );

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { confirmEventAction, ignoreEventAction } from "@/app/actions";
 import { EntityMark } from "@/app/components/entity-mark";
+import { IconCheck, IconPencil, IconSlash } from "@/app/components/icons";
 import type { EntityState } from "@/lib/recruiting/presentation";
 
 export type TriageItem = {
@@ -101,7 +102,7 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
               <p className="t-meta truncate text-ink-2">{current.role ?? (current.entity === "likely" ? "Likely company" : current.entity === "unknown" ? "Company unknown" : "No role detected")}</p>
             </div>
           </div>
-          <p className="t-meta tnum shrink-0 text-ink-3">{current.date}</p>
+          <div className="flex shrink-0 items-center gap-3"><span className="pill" data-tone="warn">Uncertain</span><p className="t-meta tnum text-ink-3">{current.date}</p></div>
         </div>
 
         <p className="mt-5 text-[1.125rem] font-medium leading-snug tracking-tight">{current.sentence}</p>
@@ -124,17 +125,17 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
         <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-3 border-t border-line pt-5">
           <form ref={confirmForm} action={confirmEventAction}>
             <input type="hidden" name="eventId" value={current.id} />
-            <button type="submit" className="btn-primary">
-              {current.possible ? "Yes, it is recruiting" : "Looks right"} <span className="keyhint ml-1 !border-white/30 !text-white/80" aria-hidden>Y</span>
+            <button type="submit" className="btn-primary inline-flex items-center gap-2">
+              <IconCheck />{current.possible ? "Yes, it is recruiting" : "Looks right"} <span className="keyhint ml-1 !border-white/30 !text-white/80" aria-hidden>Y</span>
             </button>
           </form>
-          <button type="button" className="btn-soft" aria-expanded={fixing} aria-controls={editorId} onClick={toggleFix}>
-            {fixing ? "Close" : "Fix details"} <span className="keyhint ml-1" aria-hidden>F</span>
+          <button type="button" className="btn-soft inline-flex items-center gap-2" aria-expanded={fixing} aria-controls={editorId} onClick={toggleFix}>
+            <IconPencil />{fixing ? "Close" : "Fix details"} <span className="keyhint ml-1" aria-hidden>F</span>
           </button>
           <form ref={ignoreForm} action={ignoreEventAction}>
             <input type="hidden" name="eventId" value={current.id} />
-            <button type="submit" className="btn-soft">
-              Not recruiting <span className="keyhint ml-1" aria-hidden>N</span>
+            <button type="submit" className="btn-soft inline-flex items-center gap-2">
+              <IconSlash />Not recruiting <span className="keyhint ml-1" aria-hidden>N</span>
             </button>
           </form>
           {ordered.length > 1 ? (

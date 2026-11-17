@@ -592,6 +592,10 @@ export function OpportunityHistory({ opportunity, now, editable }: { opportunity
             ) : null}
           </div>
         </div>
+        <div className="flex shrink-0 items-center gap-2">
+        <span className="pill" data-tone={opportunity.status === "closed" ? "plain" : opportunity.stage === "offer" ? "ok" : "accent"}>
+          {opportunity.status === "closed" ? "Closed" : STAGE_LABEL[opportunity.stage]}
+        </span>
         {editable ? (
           <Menu label="Options for this opportunity">
             <form action={setOpportunityStatusAction}>
@@ -603,6 +607,7 @@ export function OpportunityHistory({ opportunity, now, editable }: { opportunity
             </form>
           </Menu>
         ) : null}
+        </div>
       </header>
 
       <section aria-label="Where this stands" className="panel mt-8 grid gap-x-10 gap-y-6 p-5 sm:p-6 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
