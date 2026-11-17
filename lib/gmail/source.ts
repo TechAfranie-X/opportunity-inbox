@@ -17,9 +17,10 @@ export function gmailMailSource(accessToken: string, mode: DiscoveryMode = disco
   return {
     async listCandidates(max) {
       const keyword = await listMessageRefs(accessToken, max, applyEmbargo(RECRUITING_QUERY));
-      if (mode !== "sweep") return keyword;
+      if (mode !== "sweep") return { refs: keyword, truncated: keyword.length >= max };
       // Keyword hits first (they are read first), then everything Gmail does not file as Promotions, Social or Forums.
-      return mergeTiers(keyword, await listMessageRefs(accessToken, SWEEP_MAX, applyEmbargo(SWEEP_QUERY)));
+      const sweep = await listMessageRefs(accessToken, SWEEP_MAX, applyEmbargo(SWEEP_QUERY));
+      return { refs: mergeTiers(keyword, sweep), truncated: keyword.length >= max || sweep.length >= SWEEP_MAX };
     },
     fetchEmails: (ids) => fetchEmailsById(accessToken, ids),
     fetchOutbound: (threadIds) => fetchOutboundInThreads(accessToken, threadIds, OUTBOUND_THREADS),

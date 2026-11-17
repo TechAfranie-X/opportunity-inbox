@@ -1389,3 +1389,16 @@ html[data-presentation] .inspector ol > li:nth-child(8) {
   pointer-events: none;
   background: radial-gradient(60% 60% at 50% 0%, var(--accent-wash), transparent 70%);
 }
+
+/* A read that did not fully complete says so, right under the navigation, until it is dismissed or the next read succeeds. */
+.notice-bar {
+  position: fixed;
+  z-index: 39;
+  inset: var(--nav-h) 0 auto 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.6rem 1.5rem;
+  border-bottom: 1px solid var(--glass-line);
+}

@@ -8,7 +8,7 @@ import { confirmEventAction, ignoreEventAction } from "@/app/actions";
  * say it is right, say it is not recruiting, or open the form to fix it. The form is progressive disclosure, so a list of
  * a dozen items reads as a dozen sentences instead of a dozen forms.
  */
-export function ReviewTools({ eventId, children }: { eventId: string; children: ReactNode }) {
+export function ReviewTools({ eventId, confirmLabel = "Looks right", children }: { eventId: string; confirmLabel?: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const id = useId();
   return (
@@ -17,7 +17,7 @@ export function ReviewTools({ eventId, children }: { eventId: string; children: 
         <form action={confirmEventAction}>
           <input type="hidden" name="eventId" value={eventId} />
           <button type="submit" className="btn-soft">
-            Looks right
+            {confirmLabel}
           </button>
         </form>
         <button type="button" className="link-quiet" aria-expanded={open} aria-controls={id} onClick={() => setOpen((v) => !v)}>

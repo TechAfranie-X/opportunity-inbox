@@ -9,8 +9,8 @@ import { SearchButton } from "@/app/components/search-button";
 import { SyncControl } from "@/app/components/sync-control";
 import { ThemeControl } from "@/app/components/theme-control";
 import { WorkspaceProvider } from "@/app/components/workspace";
-import { buildReviewQueue } from "@/lib/recruiting/review";
-import type { Opportunity } from "@/lib/recruiting/types";
+import { attentionCount, buildReviewQueue } from "@/lib/recruiting/review";
+import type { EffectiveEvent, Opportunity } from "@/lib/recruiting/types";
 
 type NavId = "today" | "pipeline" | "activity" | "review";
 
@@ -37,6 +37,7 @@ export function AppShell({
   updated,
   autoSync = false as false | "first" | "stale",
   opportunities,
+  possible = [],
   now,
   width = "wide",
   children,
@@ -48,12 +49,14 @@ export function AppShell({
   updated?: string;
   autoSync?: false | "first" | "stale";
   opportunities: Opportunity[];
+  /** Messages that might be recruiting but are not in the pipeline (they only count toward "Check"). */
+  possible?: EffectiveEvent[];
   now: Date;
   /** One centred column everywhere so the page edge never jumps between tabs. "wide" is only for a page with a side column (an opportunity's history). */
   width?: "reading" | "wide";
   children: ReactNode;
 }) {
-  const reviewCount = demo ? 0 : buildReviewQueue(opportunities).length;
+  const reviewCount = demo ? 0 : attentionCount(buildReviewQueue(opportunities, undefined, possible));
   const nav = reviewCount > 0 || active === "review" ? [...NAV, { id: "review" as NavId, label: "Check", count: reviewCount, href: "/review", demoHref: "/demo" }] : NAV;
   const hrefOf = (item: (typeof NAV)[number]) => (demo ? item.demoHref : item.href);
   const initial = firstName(user?.name, user?.email).charAt(0);

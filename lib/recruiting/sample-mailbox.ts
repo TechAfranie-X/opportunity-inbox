@@ -145,6 +145,23 @@ export function buildSampleMailbox(anchor: Date): SampleEmail[] {
   // tests do not pretend the extractor handles it, and the product's review queue is the place a user would catch it.
   const KNOWN_HARD = /data course/;
   NOISE.forEach(([from, subject, body, d], i) => out.push(mail(`sg-noise-${i}`, from, subject, ago(d), body, { type: null }, { uncertain: KNOWN_HARD.test(subject) })));
+  // Reliability cases: recruiting mail the rule reader does not understand, and a goodbye it misreads. Each must be VISIBLE, never silent.
+  out.push(
+    mail("sg-nm-strong", "Dana Reyes <dana.reyes@brightpath.example>", "Quick note", ago(3),
+      "Hi Sam, about your candidacy for the Backend Engineer Intern role: the team has gone another direction for this cycle.\n", { type: null }, { uncertain: true }),
+    mail("sg-nm-weak", "Casey Park <casey.park@quill-labs.example>", "grab a time", ago(2),
+      "Hey Sam! Grab any slot that works for you here. Happy to tell you more about the Analytics Intern opening at Quill.\n", { type: null }, { uncertain: true }),
+    mail("sg-conflict", "Robin Ames <robin.ames@summit-ai.example>", "Following up on your application", ago(4),
+      "Hi Sam, thanks for your time on Thursday. After talking it over with the team, we are going to keep looking for someone with more production experience for the Backend Engineer Intern role. Best of luck with your search.\n",
+      { type: "follow_up" }, { uncertain: true }),
+  );
+  // Gmail's own labels, as the real API reports them: bulk senders are Promotions, security alerts and statements are plain Updates, everything else is important.
+  for (const x of out) {
+    if (x.email.labels) continue;
+    const noise = x.email.threadId.startsWith("sg-noise-");
+    const plain = noise && /accounts\.google|chase/i.test(x.email.from);
+    x.email.labels = plain ? ["INBOX", "CATEGORY_UPDATES"] : noise ? ["INBOX", "CATEGORY_PROMOTIONS"] : ["INBOX", "IMPORTANT", "CATEGORY_UPDATES"];
+  }
   return out.sort((a, b) => a.email.receivedAt.getTime() - b.email.receivedAt.getTime());
 }
 

@@ -1,3 +1,4 @@
+import { hasDoubt } from "../reliability/flags.ts";
 import { DEFAULT_POLICY, type Policy } from "./policy.ts";
 import type { ActionItem, ActionKind, EffectiveEvent, Opportunity } from "./types.ts";
 
@@ -78,6 +79,11 @@ export function buildActions(
     let uncertain = false;
     const trust = source.corrected ? 1 : Math.min(source.fieldConfidence?.type ?? source.confidence, source.company ? (source.fieldConfidence?.company ?? 1) : 1);
     if ((bucket === "overdue" || bucket === "today") && trust < policy.urgentMinConfidence) {
+      bucket = "worth_a_look";
+      uncertain = true;
+    }
+    // Doubt about whether this is hiring mail at all: it may never be urgent, whatever its deadline says, until a person settles it.
+    if (!source.corrected && !source.confirmed && hasDoubt(source) && bucket !== "worth_a_look") {
       bucket = "worth_a_look";
       uncertain = true;
     }

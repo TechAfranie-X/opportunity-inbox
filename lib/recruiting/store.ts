@@ -32,6 +32,8 @@ import {
   type OpportunityOverride,
 } from "@/lib/recruiting/opportunity";
 import type { Prediction } from "@/lib/recruiting/predictions";
+import { isContactKey } from "@/lib/discovery/continuity";
+import { isNearMiss } from "@/lib/reliability/flags";
 import { inheritRoles, type ThreadAnchor } from "@/lib/recruiting/extract";
 import { EXTRACTOR_VERSION } from "@/lib/recruiting/version";
 import type {
@@ -69,6 +71,8 @@ function rowToExtracted(row: EventRow): ExtractedEvent & { id: string } {
 
 export type Workspace = {
   opportunities: Opportunity[];
+  /** Messages the reader rejected but that structurally look like hiring mail. Not part of the pipeline; they wait in the review list. */
+  possible: EffectiveEvent[];
   actions: ActionItem[];
   lastSyncedAt: Date | null;
   eventCount: number;
@@ -83,10 +87,13 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
     db.select().from(recruitingSync).where(eq(recruitingSync.userGoogleSub, userGoogleSub)).limit(1),
   ]);
 
-  const events: EffectiveEvent[] = rows.flatMap((row) => {
+  const all: EffectiveEvent[] = rows.flatMap((row) => {
     const effective = applyCorrection(rowToExtracted(row), parseCorrection(row.correction));
     return effective ? [effective] : [];
   });
+  // A near miss joins the pipeline only when a person says it is recruiting ("Looks right" or an edit); hiding it removes it.
+  const possible = all.filter((e) => isNearMiss(e) && !e.confirmed && !e.corrected);
+  const events = all.filter((e) => !possible.includes(e));
   const overrides = new Map<string, OpportunityOverride>(
     overrideRows.flatMap((o) =>
       o.status === "closed" || o.status === "active"
@@ -99,7 +106,7 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
   const opportunities = buildOpportunities(events, overrides, policy);
   const actions = buildActions(opportunities, toFloating(now), new Set(dismissalRows.map((d) => d.actionId)), policy);
 
-  return { opportunities, actions, lastSyncedAt: syncRows[0]?.lastSyncedAt ?? null, eventCount: events.length };
+  return { opportunities, possible, actions, lastSyncedAt: syncRows[0]?.lastSyncedAt ?? null, eventCount: events.length };
 }
 
 /** Upsert freshly extracted fields. Never touches `correction`, so user edits survive re-sync. */
@@ -330,7 +337,10 @@ export async function ignoreEvent(userGoogleSub: string, eventId: string) {
     const row = await loadRow(tx, userGoogleSub, eventId);
     if (!row) return;
     await appendUserLabels(tx, userGoogleSub, row, draftsFromIgnore(await priorUserLabels(tx, userGoogleSub, row.gmailMessageId)));
-    await tx.update(recruitingEvents).set({ correction: serializeCorrection({ ignored: true }) }).where(eq(recruitingEvents.id, eventId));
+    // A near miss is a message we were never sure was recruiting. When the person says it is not, keep only the fact that it was
+    // decided (so it is never offered again) and forget what it was: no subject, no sender.
+    const forget = isNearMiss({ signals: row.signals ?? [] }) ? { subject: "", senderName: "", senderDomain: "" } : {};
+    await tx.update(recruitingEvents).set({ correction: serializeCorrection({ ignored: true }), ...forget }).where(eq(recruitingEvents.id, eventId));
   });
 }
 
@@ -395,6 +405,37 @@ export async function recentThreadAnchors(userGoogleSub: string, days: number, n
     }
   }
   return [...anchors.values()];
+}
+
+/**
+ * The anchor for each contact key: the stored event from that sender that best names a company (the person's own correction
+ * counts, and a hidden event never anchors anything). Lets a keyword-free message be linked to an earlier candidacy message
+ * that was read in another chunk or another sync. Keys are validated before they reach the query.
+ */
+export async function contactAnchors(userGoogleSub: string, keys: string[]): Promise<Map<string, ThreadAnchor>> {
+  const valid = [...new Set(keys.filter(isContactKey))];
+  const anchors = new Map<string, ThreadAnchor>();
+  if (valid.length === 0) return anchors;
+  const db = getDb();
+  for (let i = 0; i < valid.length; i += 200) {
+    const slice = valid.slice(i, i + 200);
+    const rows = await db
+      .select()
+      .from(recruitingEvents)
+      .where(and(eq(recruitingEvents.userGoogleSub, userGoogleSub), eq(recruitingEvents.outbound, false), sql`${recruitingEvents.signals} ?| array[${sql.raw(slice.map((k) => `'${k}'`).join(", "))}]::text[]`))
+      .orderBy(asc(recruitingEvents.occurredAt));
+    for (const row of rows) {
+      const effective = applyCorrection(rowToExtracted(row), parseCorrection(row.correction));
+      if (!effective) continue; // hidden by the person
+      for (const key of slice.filter((k) => (row.signals ?? []).includes(k))) {
+        const current = anchors.get(key);
+        if (!current || (!current.company && effective.company)) {
+          anchors.set(key, { gmailThreadId: effective.gmailThreadId, company: effective.company, role: effective.role, confidence: effective.confidence, fieldConfidence: effective.fieldConfidence });
+        }
+      }
+    }
+  }
+  return anchors;
 }
 
 export async function countEvents(userGoogleSub: string): Promise<number> {

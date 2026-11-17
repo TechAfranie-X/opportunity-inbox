@@ -1,6 +1,6 @@
 import "server-only";
 
-import { extractBodyText, type GmailPayloadPart } from "@/lib/gmail/body";
+import { bodyIsUnreadable, extractBodyText, type GmailPayloadPart } from "@/lib/gmail/body";
 import {
   GmailAccessError,
   classifyGmailApiFailure,
@@ -23,6 +23,14 @@ type GmailMessage = {
 
 function header(headers: Header[] | undefined, name: string) {
   return headers?.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value?.trim() ?? "";
+}
+
+/** The message or thread no longer exists (deleted between listing and reading). Not a failure: there is nothing to read. */
+export class GmailNotFound extends Error {
+  constructor() {
+    super("not_found");
+    this.name = "GmailNotFound";
+  }
 }
 
 const MAX_ATTEMPTS = 7;
@@ -54,6 +62,7 @@ async function gmailGet<T>(accessToken: string, url: URL): Promise<T> {
       await sleep(wait + Math.random() * 300);
       continue;
     }
+    if (response.status === 404) throw new GmailNotFound();
     console.error(`gmail request failed: status=${response.status} reason=${reason}`);
     throw new GmailAccessError(classifyGmailApiFailure(response.status));
   }
@@ -72,6 +81,7 @@ function toEmail(message: GmailMessage, includeBody: boolean): RecruitingEmail |
   const headers = message.payload?.headers;
   const labels = message.labelIds ?? [];
   const received = Number(message.internalDate);
+  const bodyText = includeBody ? extractBodyText(message.payload) : "";
   return {
     id: message.id,
     threadId: message.threadId,
@@ -81,7 +91,9 @@ function toEmail(message: GmailMessage, includeBody: boolean): RecruitingEmail |
     receivedAt: Number.isFinite(received) && received > 0 ? new Date(received) : new Date(header(headers, "Date")),
     outbound: labels.includes("SENT"),
     // Transient: only used by the extractor, never persisted or logged.
-    bodyText: includeBody ? extractBodyText(message.payload) : "",
+    bodyText,
+    labels,
+    ...(includeBody && bodyIsUnreadable(message.payload, bodyText) ? { bodyUnreadable: true } : {}),
   };
 }
 
@@ -111,9 +123,10 @@ export async function listMessageRefs(accessToken: string, max: number, query: s
  * Full messages (with bodies, transient) for known ids, in the same shape the extractor sees in production.
  * Ids that can no longer be fetched are returned in `missing` rather than silently dropped.
  */
-export async function fetchEmailsById(accessToken: string, ids: string[]): Promise<{ emails: RecruitingEmail[]; missing: string[] }> {
+export async function fetchEmailsById(accessToken: string, ids: string[]): Promise<{ emails: RecruitingEmail[]; missing: string[]; failed: string[] }> {
   const emails: RecruitingEmail[] = [];
   const missing: string[] = [];
+  const failed: string[] = [];
   await inBatches(ids, 2, async (id) => {
     try {
       const m = await gmailGet<GmailMessage>(accessToken, new URL(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=full`));
@@ -121,10 +134,13 @@ export async function fetchEmailsById(accessToken: string, ids: string[]): Promi
       if (email) emails.push(email); else missing.push(id);
     } catch (error) {
       if (error instanceof GmailAccessError && error.reason === "reconnect_required") throw error;
+      // `missing` keeps its original meaning (anything that could not be read) because evaluation tooling depends on it. `failed` is
+      // the subset that may succeed later: a deleted message is finished business; a throttled or failing one is retried and reported.
       missing.push(id);
+      if (!(error instanceof GmailNotFound)) failed.push(id);
     }
   });
-  return { emails, missing };
+  return { emails, missing, failed };
 }
 
 /**
@@ -168,9 +184,11 @@ export async function fetchInboundCandidates(accessToken: string, max = 200): Pr
  * The user's own messages in the given threads. Metadata only (no bodies):
  * we just need to know *that* they replied, not what they said.
  */
-export async function fetchOutboundInThreads(accessToken: string, threadIds: string[], max = 80): Promise<RecruitingEmail[]> {
-  const unique = [...new Set(threadIds)].slice(0, max);
-  const threads = await inBatches(unique, 2, async (threadId) => {
+export async function fetchOutboundInThreads(accessToken: string, threadIds: string[], max = 80): Promise<{ emails: RecruitingEmail[]; failedThreads: number }> {
+  const unique = [...new Set(threadIds)];
+  const checked = unique.slice(0, max);
+  let failedThreads = unique.length - checked.length; // threads beyond the cap were not checked either
+  const threads = await inBatches(checked, 2, async (threadId) => {
     const url = new URL(`https://gmail.googleapis.com/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}`);
     url.searchParams.set("format", "metadata");
     for (const h of ["From", "Subject", "Date"]) url.searchParams.append("metadataHeaders", h);
@@ -178,15 +196,17 @@ export async function fetchOutboundInThreads(accessToken: string, threadIds: str
       return await gmailGet<{ messages?: GmailMessage[] }>(accessToken, url);
     } catch (error) {
       if (error instanceof GmailAccessError && error.reason === "reconnect_required") throw error;
+      if (!(error instanceof GmailNotFound)) failedThreads += 1; // a reply we could not look for is not the same as no reply
       return { messages: [] };
     }
   });
-  return threads.flatMap((t) =>
+  const emails = threads.flatMap((t) =>
     (t.messages ?? []).flatMap((m) => {
       const email = toEmail(m, false);
       return email?.outbound ? [email] : [];
     }),
   );
+  return { emails, failedThreads };
 }
 
 /**

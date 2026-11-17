@@ -64,6 +64,10 @@ export type RecruitingEmail = {
   receivedAt: Date;
   outbound: boolean;
   bodyText: string;
+  /** Gmail's own labels for the message (INBOX, IMPORTANT, CATEGORY_*). Transient evidence for the reader; never stored. */
+  labels?: string[];
+  /** The text is in the message but Gmail did not inline it, so `bodyText` is empty for a reason other than "nothing there". */
+  bodyUnreadable?: boolean;
 };
 
 /** What we persist per email. No body, no snippet. */

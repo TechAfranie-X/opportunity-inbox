@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { parseSender, stripSubjectAnnotations } from "../opportunities/normalize.ts";
 import { companyKey, inferRole, roleTokens } from "./company.ts";
 import { classifySender, isApplicationPortal } from "./entity/vendors.ts";
@@ -341,7 +342,30 @@ export function outboundEvent(email: RecruitingEmail, anchor: ThreadAnchor): Ext
   };
 }
 
-export function extractAll(emails: RecruitingEmail[]): ExtractedEvent[] {
+/**
+ * What earlier reads already established, so a keyword-free message from a named person at an employer who has already written
+ * about the reader's candidacy is linked to it even when that earlier message is in another chunk or another sync. Keyed by a
+ * hash of the sender address (never the address itself).
+ */
+export type ReadContext = { contacts?: Map<string, ThreadAnchor> };
+
+/**
+ * Could this message be linked to a candidacy by its sender alone? A named person at an employer domain, not a role mailbox.
+ * The sync holds such messages (in memory, for the length of one run) until every chunk of the run has been read, because a reply
+ * can be newer than the message that anchors it and the sync reads newest first.
+ */
+export function isContinuityCandidate(email: RecruitingEmail): boolean {
+  if (email.outbound) return false;
+  const sender = parseSender(email.from);
+  return sender.email.length > 0 && classifySender(sender.domain) === "employer" && !BULK_LOCALPART.test(sender.localPart);
+}
+
+/** Pseudonymous key for a sender address, stored as a signal on the event that anchors it. */
+export function contactKeyOf(address: string): string {
+  return `contact:${createHash("sha256").update(`oi-contact:${address.trim().toLowerCase()}`).digest("hex").slice(0, 20)}`;
+}
+
+export function extractAll(emails: RecruitingEmail[], context?: ReadContext): ExtractedEvent[] {
   const events: ExtractedEvent[] = [];
   const byThread = new Map<string, ExtractedEvent>();
   const byContact = new Map<string, ExtractedEvent>();
@@ -360,7 +384,10 @@ export function extractAll(emails: RecruitingEmail[]): ExtractedEvent[] {
     const existing = byThread.get(event.gmailThreadId);
     if (!existing || (!existing.company && event.company)) byThread.set(event.gmailThreadId, event);
     const sender = parseSender(email.from);
-    if (sender.email && classifySender(sender.domain) === "employer" && !BULK_LOCALPART.test(sender.localPart)) byContact.set(sender.email, event);
+    if (sender.email && classifySender(sender.domain) === "employer" && !BULK_LOCALPART.test(sender.localPart)) {
+      byContact.set(sender.email, event);
+      event.signals.push(contactKeyOf(sender.email)); // lets a later chunk or sync find this anchor without storing the address
+    }
   }
 
   // A reply inside a thread we already know is recruiting activity even when its own text carries no keywords
@@ -372,7 +399,7 @@ export function extractAll(emails: RecruitingEmail[]): ExtractedEvent[] {
     if (processEvidence(email.subject, stripQuoted(email.bodyText)).eventLike) continue; // an invitation to an event is not candidacy traffic, whoever sends it
     const sender = parseSender(email.from);
     const threadAnchor = byThread.get(email.threadId);
-    const contactAnchor = threadAnchor ? undefined : reason === "no_recruiting_language" ? byContact.get(sender.email) : undefined;
+    const contactAnchor = threadAnchor ? undefined : reason === "no_recruiting_language" ? (byContact.get(sender.email) ?? (sender.email ? context?.contacts?.get(contactKeyOf(sender.email)) : undefined)) : undefined;
     const anchor = threadAnchor ?? contactAnchor;
     if (!anchor) continue;
     events.push({

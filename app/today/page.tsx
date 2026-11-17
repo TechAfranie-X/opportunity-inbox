@@ -8,7 +8,7 @@ import { isDatabaseConfigured } from "@/lib/db";
 import { embargoHidingMail, EMBARGO_CUTOFF } from "@/lib/gmail/embargo";
 import { isSampleUser } from "@/lib/gmail/sample";
 import { findGmailConnection } from "@/lib/gmail/credentials";
-import { buildReviewQueue } from "@/lib/recruiting/review";
+import { attentionCount, buildReviewQueue } from "@/lib/recruiting/review";
 import { toFloating } from "@/lib/recruiting/actions";
 import { buildBriefing } from "@/lib/recruiting/briefing";
 import { loadWorkspace, recordUsage } from "@/lib/recruiting/store";
@@ -35,11 +35,11 @@ export default async function TodayPage() {
   const today = now.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" });
   const updated = workspace.lastSyncedAt?.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
-  const toCheck = neverSynced ? 0 : buildReviewQueue(workspace.opportunities).length;
+  const toCheck = neverSynced ? 0 : attentionCount(buildReviewQueue(workspace.opportunities, undefined, workspace.possible));
   const hiding = !isSampleUser(sub) && embargoHidingMail(real);
 
   return (
-    <AppShell active="today" user={session?.user} updated={updated} autoSync={isSyncLocked() ? false : neverSynced ? "first" : syncIsStale(workspace.lastSyncedAt, real) ? "stale" : false} opportunities={workspace.opportunities} now={now} width="reading">
+    <AppShell active="today" user={session?.user} updated={updated} autoSync={isSyncLocked() ? false : neverSynced ? "first" : syncIsStale(workspace.lastSyncedAt, real) ? "stale" : false} opportunities={workspace.opportunities} possible={workspace.possible} now={now} width="reading">
       <Greeting name={name} hour={real.getHours()} needsYou={needs}>
         <span>{today}</span>
       </Greeting>

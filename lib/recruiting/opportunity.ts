@@ -1,5 +1,6 @@
 import { companyKey, roleRelation, roleTokens } from "./company.ts";
 import { decide, DEFAULT_POLICY, type Policy } from "./policy.ts";
+import { hasDoubt } from "../reliability/flags.ts";
 import type {
   EffectiveEvent,
   EventType,
@@ -139,14 +140,34 @@ export function groupEvents(events: EffectiveEvent[]): Group[] {
   return groups;
 }
 
+const STAGE_RANK: Record<Exclude<Stage, "closed">, number> = { applied: 0, recruiter: 1, assessment: 2, interview: 3, offer: 4 };
+
+/**
+ * Where an opportunity stands. A pipeline moves forward: a later "thank you for applying" receipt, a resent assessment link or a
+ * nudge from a recruiter must not drag an interview back to "applied". Only an ending (rejection, withdrawal) changes direction,
+ * and a later, non-ending stage event in the same conversation reopens it (a rejection that was reversed).
+ */
 function deriveState(events: EffectiveEvent[]): { stage: Stage; outcome: Outcome } {
   let stage: Stage = "applied";
   let outcome: Outcome = null;
+  let ended = false;
   for (const e of events) {
     const s = stageOfEvent(e.type);
     if (!s) continue;
-    stage = s;
-    outcome = e.type === "rejection" ? "rejected" : e.type === "withdrawn" ? "withdrawn" : e.type === "offer" ? "offer" : null;
+    if (s === "closed") {
+      stage = "closed";
+      ended = true;
+      outcome = e.type === "rejection" ? "rejected" : "withdrawn";
+      continue;
+    }
+    if (ended || stage === "closed") {
+      stage = s; // reopened
+      ended = false;
+      outcome = e.type === "offer" ? "offer" : null;
+      continue;
+    }
+    if (STAGE_RANK[s] >= STAGE_RANK[stage as Exclude<Stage, "closed">]) stage = s;
+    if (e.type === "offer") outcome = "offer";
   }
   return { stage, outcome };
 }
@@ -165,6 +186,7 @@ export function opportunityKey(company: string | null, role: string | null, used
  */
 export function eventNeedsReview(e: EffectiveEvent, policy: Policy = DEFAULT_POLICY): boolean {
   if (e.corrected || e.confirmed) return false;
+  if (hasDoubt(e)) return true; // doubt about whether it is hiring mail at all outranks doubt about its details
   if (!e.fieldConfidence) return e.confidence < policy.reviewBelow;
   return decide(e.type, e.fieldConfidence.type, policy, "type").state !== "accepted" || (e.company !== null && decide(e.company, e.fieldConfidence.company, policy, "company").state !== "accepted");
 }

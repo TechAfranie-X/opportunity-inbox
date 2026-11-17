@@ -22,7 +22,7 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
   const updated = workspace.lastSyncedAt?.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
   return (
-    <AppShell active="pipeline" user={session?.user} updated={updated} opportunities={workspace.opportunities} now={now}>
+    <AppShell active="pipeline" user={session?.user} updated={updated} opportunities={workspace.opportunities} possible={workspace.possible} now={now}>
       <Link href="/pipeline" className="link-quiet mb-10 inline-flex items-center gap-1.5">
         <svg width="6" height="10" viewBox="0 0 6 10" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden>
           <path d="M5 1 1 5l4 4" />

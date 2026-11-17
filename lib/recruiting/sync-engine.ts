@@ -1,5 +1,7 @@
 import type { Prediction } from "./predictions.ts";
-import type { ThreadAnchor } from "./extract.ts";
+import type { ReadContext, ThreadAnchor } from "./extract.ts";
+import { contactKeysOf, reconcilePredictions } from "../discovery/continuity.ts";
+import { isNearMiss } from "../reliability/flags.ts";
 import { minimizeSweepPredictions, tagEvents, viaMap } from "../discovery/strategy.ts";
 import type { ExtractedEvent, RecruitingEmail } from "./types.ts";
 
@@ -18,13 +20,21 @@ import type { ExtractedEvent, RecruitingEmail } from "./types.ts";
 /** `via` records which discovery tier found the message (see lib/discovery/strategy.ts); absent in the original keyword-only mode. */
 export type CandidateRef = { id: string; threadId: string; via?: "keyword" | "sweep" };
 
+/** A source may say the list hit its cap, so the engine can report that older mail was not looked at instead of staying silent. */
+export type CandidateList = CandidateRef[] | { refs: CandidateRef[]; truncated?: boolean };
+export type OutboundResult = RecruitingEmail[] | { emails: RecruitingEmail[]; failedThreads?: number };
+
 export type MailSource = {
   /** Candidate message refs, newest first. */
-  listCandidates(max: number): Promise<CandidateRef[]>;
-  /** Full inbound messages. Bodies are transient: they live only inside the engine's call stack. */
-  fetchEmails(ids: string[]): Promise<{ emails: RecruitingEmail[]; missing: string[] }>;
-  /** The user's own messages in these threads, metadata only. */
-  fetchOutbound(threadIds: string[]): Promise<RecruitingEmail[]>;
+  listCandidates(max: number): Promise<CandidateList>;
+  /**
+   * Full inbound messages. Bodies are transient: they live only inside the engine's call stack.
+   * `missing` are messages that no longer exist; `failed` are messages that exist but could not be read this time (they are
+   * not remembered as evaluated, so the next sync tries them again, and the result reports them).
+   */
+  fetchEmails(ids: string[]): Promise<{ emails: RecruitingEmail[]; missing: string[]; failed?: string[] }>;
+  /** The user's own messages in these threads, metadata only. `failedThreads` counts threads whose replies could not be checked. */
+  fetchOutbound(threadIds: string[]): Promise<OutboundResult>;
 };
 
 export type SyncStore = {
@@ -32,6 +42,8 @@ export type SyncStore = {
   saveEvents(events: ExtractedEvent[]): Promise<void>;
   savePredictions(predictions: Prediction[]): Promise<void>;
   prune(scannedIds: string[], keptIds: string[]): Promise<void>;
+  /** Earlier anchors for these contact keys (hashed sender addresses), so continuity survives chunk and sync boundaries. Optional. */
+  contactAnchors?(keys: string[]): Promise<Map<string, ThreadAnchor>>;
   /** One anchor per thread that has recruiting activity within `days`. */
   recentAnchors(days: number): Promise<ThreadAnchor[]>;
   /** Fill empty roles across ALL stored events with the extractor's own rule, so splitting a sync into chunks loses nothing. */
@@ -46,7 +58,12 @@ export type EngineParams = {
   recentDays: number;
   embargoBefore: Date | null;
   now?: () => number;
-  extract: (emails: RecruitingEmail[]) => ExtractedEvent[];
+  extract: (emails: RecruitingEmail[], context?: ReadContext) => ExtractedEvent[];
+  /**
+   * Messages for which "no event" is provisional: they are held until the run's chunks are all read and judged again with the anchors
+   * those chunks produced. Their prediction rows are written only after that final judgement, so the log never disagrees with the events.
+   */
+  deferable?: (email: RecruitingEmail) => boolean;
   predict: (emails: RecruitingEmail[]) => Prediction[];
   outboundEvent: (email: RecruitingEmail, anchor: ThreadAnchor) => ExtractedEvent;
 };
@@ -63,7 +80,16 @@ export type EngineResult = {
   /** Replies found by the refresh of recently active threads. */
   repliesFound: number;
   events: number;
+  /** Messages that exist but could not be read this time. They are retried by the next sync. Never silent: callers surface this. */
+  failed: number;
+  /** Threads whose replies could not be checked, so a "reply to the recruiter" reminder may be out of date. */
+  repliesUnchecked: number;
+  /** The candidate list hit its cap: older mail was not looked at. */
+  truncated: boolean;
 };
+
+/** Bound on messages held in memory (with their bodies) for the deferred pass. */
+const DEFER_MAX = 1500;
 
 export type Chunk = { ids: string[]; unknown: number };
 
@@ -89,8 +115,19 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
   const started = now();
   const allowed = (e: RecruitingEmail) => !p.embargoBefore || e.receivedAt.getTime() < p.embargoBefore.getTime();
 
-  const refs = await source.listCandidates(p.maxCandidates);
+  const listed = await source.listCandidates(p.maxCandidates);
+  const refs = Array.isArray(listed) ? listed : listed.refs;
+  const truncated = Array.isArray(listed) ? refs.length >= p.maxCandidates : (listed.truncated ?? false);
   const via = viaMap(refs);
+  const failedIds = new Set<string>();
+  const deferred = new Map<string, RecruitingEmail>();
+  let repliesUnchecked = 0;
+  const outboundOf = async (threadIds: string[]) => {
+    const r = await source.fetchOutbound(threadIds);
+    if (Array.isArray(r)) return r;
+    repliesUnchecked += r.failedThreads ?? 0;
+    return r.emails;
+  };
   const known = await store.evaluatedIds(refs.map((r) => r.id));
   const plan = planChunks(refs, known, p.threadsPerChunk);
 
@@ -98,15 +135,22 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
   const handledThreads = new Set<string>();
   for (const chunk of plan.chunks) {
     if (now() - started > p.budgetMs) break;
-    const { emails } = await source.fetchEmails(chunk.ids);
+    const { emails, failed } = await source.fetchEmails(chunk.ids);
+    for (const id of failed ?? []) failedIds.add(id);
     const inbound = emails.filter((e) => !e.outbound && allowed(e));
-    const inboundEvents = p.extract(inbound);
+    const keys = contactKeysOf(inbound);
+    const context: ReadContext = { contacts: keys.length > 0 && store.contactAnchors ? await store.contactAnchors(keys) : new Map() };
+    const inboundEvents = p.extract(inbound, context);
     const threadIds = [...new Set(inboundEvents.map((e) => e.gmailThreadId))];
-    const outbound = threadIds.length ? (await source.fetchOutbound(threadIds)).filter(allowed) : [];
-    const events = tagEvents(p.extract([...inbound, ...outbound]), via);
+    const outbound = threadIds.length ? (await outboundOf(threadIds)).filter(allowed) : [];
+    const events = tagEvents(p.extract([...inbound, ...outbound], context), via);
     await store.saveEvents(events);
+    const eventIds = new Set(events.filter((e) => !isNearMiss(e)).map((e) => e.gmailMessageId)); // a near miss is still "no event" for continuity
+    const held = p.deferable ? inbound.filter((e) => !eventIds.has(e.id) && deferred.size < DEFER_MAX && p.deferable!(e)) : [];
+    for (const h of held) deferred.set(h.id, h);
+    const heldIds = new Set(held.map((h) => h.id));
     try {
-      await store.savePredictions(minimizeSweepPredictions(p.predict([...inbound, ...outbound]), via));
+      await store.savePredictions(minimizeSweepPredictions(reconcilePredictions(p.predict([...inbound, ...outbound]), events), via).filter((pr) => !heldIds.has(pr.gmailMessageId)));
     } catch {
       // The prediction log is evaluation evidence and the "already evaluated" memory: losing it only costs a re-read next time.
     }
@@ -116,12 +160,25 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
     handledUnknown += chunk.unknown;
   }
 
+  // Held messages, judged again now that this run's anchors are stored (order no longer matters within a run).
+  if (deferred.size > 0) {
+    const held = [...deferred.values()];
+    const keys = contactKeysOf(held);
+    const events = tagEvents(p.extract(held, { contacts: keys.length > 0 && store.contactAnchors ? await store.contactAnchors(keys) : new Map() }), via);
+    await store.saveEvents(events);
+    try {
+      await store.savePredictions(minimizeSweepPredictions(reconcilePredictions(p.predict(held), events), via));
+    } catch {
+      // as above: only costs a re-read
+    }
+  }
+
   // Replies to recently active threads, which no new inbound message would otherwise reveal.
   let repliesFound = 0;
   const anchors = (await store.recentAnchors(p.recentDays)).filter((a) => !handledThreads.has(a.gmailThreadId));
   if (anchors.length > 0) {
     const byThread = new Map(anchors.map((a) => [a.gmailThreadId, a]));
-    const replies = (await source.fetchOutbound([...byThread.keys()])).filter(allowed);
+    const replies = (await outboundOf([...byThread.keys()])).filter(allowed);
     const events = replies.flatMap((e) => (byThread.has(e.threadId) ? [p.outboundEvent(e, byThread.get(e.threadId)!)] : []));
     await store.saveEvents(events);
     repliesFound = events.length;
@@ -129,5 +186,5 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
 
   await store.inheritRoles();
   const { events } = await store.finish(refs.length);
-  return { scanned: refs.length, reused: refs.length - plan.chunks.reduce((n, c) => n + c.ids.length, 0), fetched, remaining: plan.unknown - handledUnknown, repliesFound, events };
+  return { scanned: refs.length, reused: refs.length - plan.chunks.reduce((n, c) => n + c.ids.length, 0), fetched, remaining: plan.unknown - handledUnknown, repliesFound, events, failed: failedIds.size, repliesUnchecked, truncated };
 }

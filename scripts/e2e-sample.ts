@@ -33,7 +33,7 @@ try {
   const { syncRecruitingMail } = await import("../lib/recruiting/sync.ts");
   const store = await import("../lib/recruiting/store.ts");
   const { buildBriefing } = await import("../lib/recruiting/briefing.ts");
-  const { buildReviewQueue } = await import("../lib/recruiting/review.ts");
+  const { buildReviewQueue, attentionCount } = await import("../lib/recruiting/review.ts");
   const { toFloating } = await import("../lib/recruiting/actions.ts");
   const step = (name: string) => console.log("ok -", name);
 
@@ -55,7 +55,13 @@ try {
   step("second sync is a no-op");
 
   // 3b. discovery mode: provenance and retention are what the mode promises
-  const sql = (q: string) => execFileSync("docker", ["exec", CONTAINER, "psql", "-U", decodeURIComponent(admin.username), "-d", SCRATCH, "-At", "-c", q]).toString().trim();
+  const sql = (q: string) => {
+    try {
+      return execFileSync("docker", ["exec", CONTAINER, "psql", "-U", decodeURIComponent(admin.username), "-d", SCRATCH, "-At", "-v", "ON_ERROR_STOP=1", "-c", q], { stdio: ["ignore", "pipe", "pipe"] }).toString().trim();
+    } catch (error) {
+      throw new Error(`sql failed: ${String((error as { stderr?: Buffer }).stderr ?? error).slice(0, 300)}`);
+    }
+  };
   if (SWEEP) {
     assert.ok(Number(sql(`select count(*) from recruiting_events where signals @> '["via:sweep"]'`)) >= 1, "the sweep found mail the keyword search cannot");
     assert.equal(sql(`select count(*) from recruiting_events where signals::text like '%quick chat%'`), "0");
@@ -80,6 +86,39 @@ try {
   assert.ok(queue.length >= 1);
   step(`review queue: ${queue.length} to check`);
 
+  // 4b. reliability: uncertainty is visible and recoverable, never silent
+  const full = buildReviewQueue(ws.opportunities, undefined, ws.possible);
+  assert.ok(full.some((i) => !i.possible && i.reasons.some((r) => /goodbye/.test(r))), "a goodbye read as an update is in review");
+  assert.equal(sql(`select count(*) from event_predictions where decision = 'recruiting' and signals @> '["near-miss"]'`), "0", "a near miss is never logged as a recruiting decision");
+  let strong: (typeof full)[number] | undefined;
+  if (SWEEP) {
+    // These messages have no search keywords: only the sweep can reach them, which is exactly what it is for.
+    assert.ok(ws.possible.length >= 2, `near misses surfaced: ${ws.possible.length}`);
+    const inPipeline = new Set(ws.opportunities.flatMap((o) => o.events.map((e) => e.gmailMessageId)));
+    assert.ok(ws.possible.every((e) => !inPipeline.has(e.gmailMessageId)), "a near miss is not in the pipeline");
+    assert.ok(full.some((i) => i.possible && !i.weak), "a strong near miss is in the review queue");
+    assert.ok(full.some((i) => i.weak), "a weak near miss is offered");
+    assert.equal(attentionCount(full), full.filter((i) => !i.weak).length, "weak suggestions are not counted");
+    step(`reliability: ${ws.possible.length} near misses surfaced outside the pipeline, goodbye flagged`);
+
+    // 4c. a person's word brings a near miss into the pipeline
+    strong = full.find((i) => i.possible && !i.weak)!;
+    await store.confirmEvent(SAMPLE_SUB, strong.event.id);
+    const ws2 = await store.loadWorkspace(SAMPLE_SUB, real);
+    assert.ok(!ws2.possible.some((e) => e.id === strong!.event.id) && ws2.opportunities.some((o) => o.events.some((e) => e.id === strong!.event.id)), "confirmed: it joins the pipeline");
+    step("confirming a near miss moves it into the pipeline");
+
+    // 4d. hiding a near miss keeps nothing about what it was
+    const weakItem = full.find((i) => i.weak)!;
+    await store.ignoreEvent(SAMPLE_SUB, weakItem.event.id);
+    assert.equal(sql(`select subject || sender_name || sender_domain from recruiting_events where id = '${weakItem.event.id}'`), "", "a hidden near miss retains no subject or sender");
+    assert.ok(!(await store.loadWorkspace(SAMPLE_SUB, real)).possible.some((e) => e.id === weakItem.event.id), "and is not offered again");
+    step("hiding a near miss forgets its subject and sender");
+  } else {
+    assert.equal(ws.possible.length, 0, "keyword mode never reads that mail, so there is nothing to surface (the known recall gap the sweep closes)");
+    step("reliability: goodbye flagged; near misses need the sweep to be reached");
+  }
+
   // 5. correct one item: it leaves the queue and the correction survives a re-sync
   const target = queue[0].event;
   await store.editEvent(SAMPLE_SUB, target.id, { type: target.type, company: "Acme Robotics", role: "Software Engineer Intern", eventDate: target.eventDate });
@@ -88,6 +127,17 @@ try {
   assert.equal(buildReviewQueue(after.opportunities).some((i) => i.event.id === target.id), false);
   assert.ok(after.opportunities.some((o) => o.company === "Acme Robotics"), "corrected company appears");
   step("correction removes the item and survives a re-sync");
+
+  // 5b. a reader upgrade revisits every message (nothing of the mail is stored, so it is read from Gmail again) and keeps what the person decided
+  const judged = Number(sql(`select count(*) from event_predictions`));
+  let reread = await syncRecruitingMail(SAMPLE_SUB, { readerVersion: "next-reader" });
+  for (let i = 0; i < 8 && reread.ok && reread.remaining > 0; i++) reread = await syncRecruitingMail(SAMPLE_SUB, { readerVersion: "next-reader" });
+  assert.ok(reread.ok && reread.fetched > 0 && reread.remaining === 0, "a new reader version re-reads the mail");
+  assert.equal(Number(sql(`select count(*) from event_predictions where extractor_version = 'next-reader'`)), judged, "every message was judged again, as a new row (history is append-only)");
+  const upgraded = await store.loadWorkspace(SAMPLE_SUB, real);
+  assert.ok(upgraded.opportunities.some((o) => o.company === "Acme Robotics"), "the person's correction survived the revisit");
+  if (strong) assert.ok(upgraded.opportunities.some((o) => o.events.some((e) => e.id === strong!.event.id)), "and so did the near miss they confirmed");
+  step("a reader upgrade revisits old decisions and keeps corrections and confirmations");
 
   // 6. confirm and ignore
   const next = buildReviewQueue(after.opportunities)[0];

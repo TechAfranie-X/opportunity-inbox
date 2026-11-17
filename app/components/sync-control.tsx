@@ -31,6 +31,7 @@ export function SyncControl({
   const started = useRef(false);
   const continues = useRef(0);
   const [gaveUp, setGaveUp] = useState(false);
+  const [dismissed, setDismissed] = useState<string | null>(null);
 
   useEffect(() => {
     if (!autoStart || started.current) return;
@@ -49,6 +50,7 @@ export function SyncControl({
   }, [pending, state, remaining]);
 
   // Derived from what the last request reported, never from the ref, so rendering stays pure.
+  const notice = state.status === "idle" && !pending ? state.notice : undefined;
   const continuing = pending && remaining > 0;
   const more = !pending && remaining > 0 && gaveUp;
 
@@ -85,6 +87,14 @@ export function SyncControl({
           </button>
         )}
       </form>
+      {notice && dismissed !== notice ? (
+        <div className="notice-bar glass" role="status">
+          <p className="t-meta text-ink-2">{notice}</p>
+          <button type="button" className="link-quiet t-meta" onClick={() => setDismissed(notice)}>
+            Dismiss
+          </button>
+        </div>
+      ) : null}
       {state.status === "error" && state.reconnect ? (
         <form action="/api/gmail/connect" method="post" className="inline">
           <button type="submit" className="btn-primary !h-8 !px-3 text-xs">

@@ -17,11 +17,12 @@ import {
   setOpportunityStatus,
 } from "@/lib/recruiting/store";
 import { isSyncLocked } from "@/app/sync-lock";
+import { syncNotice } from "@/lib/recruiting/sync-notice";
 import { syncRecruitingMail } from "@/lib/recruiting/sync";
 import { EVENT_TYPES, type EventType } from "@/lib/recruiting/types";
 
 export type SyncState =
-  | { status: "idle"; /** Unread candidate mail left by this request; when above zero the client continues automatically. */ remaining?: number; fetched?: number; events?: number }
+  | { status: "idle"; /** Unread candidate mail left by this request; when above zero the client continues automatically. */ remaining?: number; fetched?: number; events?: number; /** Plain-language note when part of the read did not complete. Never silent. */ notice?: string }
   | { status: "error"; message: string; reconnect: boolean };
 
 const SYNC_ERRORS = {
@@ -41,7 +42,7 @@ export async function syncAction(): Promise<SyncState> {
   if (!result.ok) return { status: "error", message: SYNC_ERRORS[result.reason], reconnect: result.reason === "reconnect_required" };
   await recordUsage(sub, "sync");
   revalidatePath("/", "layout");
-  return { status: "idle", remaining: result.remaining, fetched: result.fetched, events: result.events };
+  return { status: "idle", remaining: result.remaining, fetched: result.fetched, events: result.events, ...(syncNotice(result) ? { notice: syncNotice(result) } : {}) };
 }
 
 function text(form: FormData, name: string, max = 160) {
