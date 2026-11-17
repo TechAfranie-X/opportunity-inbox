@@ -19,7 +19,7 @@ function shortDay(date: Date) {
 }
 
 /**
- * Quick context without leaving the current screen: a glass panel that glides in from the right
+ * Quick context without leaving the current screen: a matte panel that slides in from the right
  * (and leaves the way it came). On narrow screens it becomes a bottom sheet.
  */
 export function Inspector() {
@@ -40,7 +40,7 @@ export function Inspector() {
   return (
     <>
       <div className="scrim" data-open={open} onClick={close} aria-hidden />
-      <aside className="inspector glass-thick" data-open={open} aria-label="Opportunity details" aria-hidden={!open} inert={!open}>
+      <aside className="inspector" data-open={open} aria-label="Opportunity details" aria-hidden={!open} inert={!open}>
         {opp ? (
           <div className="flex min-h-0 flex-1 flex-col" key={opp.key}>
             <div className="inspector-body min-h-0 flex-1 overflow-y-auto px-6 pb-4 pt-5">

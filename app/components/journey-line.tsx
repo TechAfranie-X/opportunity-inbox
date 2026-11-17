@@ -4,7 +4,7 @@ import type { Stage } from "@/lib/recruiting/types";
 
 /**
  * Opportunity Inbox's signature: the journey line. One dot per stage on a hairline;
- * what has been reached is inked and the current stage glows in the accent.
+ * what has been reached is inked and the current stage is the one blue mark.
  * A closed opportunity shows the line unreached (the outcome is written beside it).
  */
 export function JourneyLine({
