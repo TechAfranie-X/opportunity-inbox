@@ -9,9 +9,9 @@ import {
 } from "@/app/actions";
 import { Disclose } from "@/app/components/disclose";
 import { EventTools } from "@/app/components/event-tools";
-import { JourneyLine } from "@/app/components/journey-line";
 import { Menu } from "@/app/components/menu";
 import { EntityMark } from "@/app/components/entity-mark";
+import { IconChevron, IconClock, IconPipeline } from "@/app/components/icons";
 import { OpenOpportunity } from "@/app/components/workspace";
 import { buildBriefing, describeAction } from "@/lib/recruiting/briefing";
 import {
@@ -27,8 +27,6 @@ import {
 import { annotateTimeline, nextMoment, peopleFor, pulse, stageSince } from "@/lib/recruiting/history";
 import { entityState, stageMilestones } from "@/lib/recruiting/presentation";
 import { EVENT_TYPES, type ActionItem, type ActionKind, type EffectiveEvent, type Opportunity } from "@/lib/recruiting/types";
-
-const fullHref = (base: string, key: string) => `${base}/${encodeURIComponent(key)}`;
 
 function shortDay(date: Date) {
   const sameYear = date.getUTCFullYear() === new Date().getUTCFullYear();
@@ -82,116 +80,6 @@ function ActionMenu({
   );
 }
 
-const KIND_LABEL: Record<ActionKind, string> = {
-  upcoming_interview: "Interview",
-  assessment_deadline: "Assessment due",
-  offer_decision: "Offer decision",
-  schedule_interview: "Interview invitation",
-  respond_recruiter: "Recruiter message",
-  follow_up: "Follow up",
-  check_in: "Check in",
-};
-
-/** The sentence under the date: where this came from, in words. Only when there is something true to say. */
-function heroContext(opp: Opportunity | undefined, item: ActionItem) {
-  if (!opp || item.kind !== "upcoming_interview") return null;
-  const scheduled = [...opp.events].reverse().find((e) => e.type === "interview_scheduled");
-  if (!scheduled) return null;
-  const people = peopleFor(opp, 1);
-  return `Confirmed ${shortDay(scheduled.occurredAt)}${people[0] ? ` by ${people[0]}` : ""}.`;
-}
-
-/** The one thing that needs you most: a larger block at the head of the "needs you" panel, with the single primary action. */
-function Lead({ item, opp, now, basePath, editable }: { item: ActionItem; opp?: Opportunity; now: Date; basePath: string; editable: boolean }) {
-  const copy = describeAction(item, now);
-  const context = heroContext(opp, item);
-  const primaryHref = editable && item.sourceThreadId ? gmailThreadUrl(item.sourceThreadId) : fullHref(basePath, item.opportunityKey);
-  const primaryLabel = copy.primaryLabel.replace("Open the ", "Open ").replace("the email", "email");
-  return (
-    <div className="p-5 sm:p-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-3">
-          {opp ? <EntityMark opportunity={opp} size="md" /> : <EntityMark name={item.company} size="md" />}
-          <p className="truncate font-medium tracking-tight text-ink-2">{item.company}</p>
-        </div>
-        {copy.relative ? <p className={`t-meta shrink-0 font-medium ${copy.critical ? "text-signal" : "text-ink-2"}`}>{copy.relative}</p> : null}
-      </div>
-      <h2 className="t-title mt-4">{item.role ?? copy.headline}</h2>
-      <p className="mt-1 text-ink-2">{KIND_LABEL[item.kind]}</p>
-      {copy.when ? (
-        <p className="mt-4 text-[1.0625rem] font-medium leading-snug tracking-tight tnum">{copy.when.replace(" at ", " · ")}</p>
-      ) : (
-        <p className="mt-4 max-w-[40ch] text-ink-2">
-          {copy.critical ? <span className="text-signal">{item.reason.split(" — ")[0]}</span> : item.reason.split(" — ")[0]}
-          {item.reason.includes(" — ") ? ` — ${item.reason.split(" — ").slice(1).join(" — ")}` : ""}
-        </p>
-      )}
-      {context ? <p className="t-meta mt-1 text-ink-2">{context}</p> : null}
-      <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3">
-        <a className="btn-primary" href={primaryHref} {...(editable && item.sourceThreadId ? { target: "_blank", rel: "noreferrer" } : {})}>
-          {editable ? primaryLabel : "See the history"}
-        </a>
-        <OpenOpportunity opportunityKey={item.opportunityKey} className="link-quiet">
-          View history
-        </OpenOpportunity>
-        <ActionMenu item={item} editable={editable} lean align="left" />
-      </div>
-      {opp ? (
-        <div className="mt-6 max-w-[26rem]">
-          <JourneyLine stage={opp.stage} surface="raised" />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function dayHeading(now: Date, due: Date | null, overdue: boolean) {
-  if (due === null || overdue) return "Now";
-  const d = daysBetween(now, due);
-  if (d <= 0) return "Today";
-  if (d === 1) return "Tomorrow";
-  return due.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
-}
-
-/** Rows of work in time order: things needing a reply first ("Now"), then by day. The whole row is the link. */
-function ActionList({ items, now, editable }: { items: ActionItem[]; now: Date; editable: boolean }) {
-  const sorted = [...items].sort((a, b) => {
-    const ad = a.due && a.bucket !== "overdue" ? a.due.getTime() : -1;
-    const bd = b.due && b.bucket !== "overdue" ? b.due.getTime() : -1;
-    return ad - bd || b.priority - a.priority;
-  });
-  return (
-    <ul className="list mt-2">
-      {sorted.map((item, i) => {
-        const heading = dayHeading(now, item.due, item.bucket === "overdue");
-        const previous = i === 0 ? null : dayHeading(now, sorted[i - 1].due, sorted[i - 1].bucket === "overdue");
-        const copy = describeAction(item, now);
-        return (
-          <li key={item.id}>
-            <div className="row !items-start !gap-4">
-              <p className={`t-meta w-[3.4rem] shrink-0 pt-[0.2rem] sm:w-[4.75rem] ${heading === "Now" ? "font-semibold text-signal" : "text-ink-3"}`}>{heading !== previous ? heading : ""}</p>
-              <div className="min-w-0 flex-1">
-                <OpenOpportunity opportunityKey={item.opportunityKey} className="row-link block font-medium tracking-tight">
-                  {copy.headline}
-                </OpenOpportunity>
-                <p className="t-meta mt-0.5 truncate text-ink-2">{item.role ?? item.reason}</p>
-              </div>
-              <div className="row-end shrink-0 pt-[0.2rem]">
-                {item.due && item.dueHasTime ? (
-                  <span className="row-time t-meta tnum text-ink-3">{item.due.toLocaleTimeString("en-US", { timeZone: "UTC", hour: "numeric", minute: "2-digit" })}</span>
-                ) : null}
-                <div className="row-tools">
-                  <ActionMenu item={item} editable={editable} />
-                </div>
-              </div>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 /** "Applied 19 days ago with no update" becomes "19 days quiet". */
 function quietFor(reason: string) {
   const m = reason.match(/(\d+) days? ago/);
@@ -217,104 +105,180 @@ function WaitingRow({ item, editable }: { item: ActionItem; editable: boolean })
   );
 }
 
-/** A decision-sized card for the next things that need you: who, what, when. The whole card opens the opportunity. */
-function ActionCard({ item, opp, now }: { item: ActionItem; opp?: Opportunity; now: Date }) {
-  const copy = describeAction(item, now);
+const PILL: Record<ActionKind, { label: string; tone: "accent" | "ok" | "plain" }> = {
+  upcoming_interview: { label: "Interview", tone: "accent" },
+  schedule_interview: { label: "Interview", tone: "accent" },
+  assessment_deadline: { label: "Assessment", tone: "plain" },
+  offer_decision: { label: "Offer", tone: "ok" },
+  respond_recruiter: { label: "Recruiter", tone: "plain" },
+  follow_up: { label: "Follow up", tone: "plain" },
+  check_in: { label: "Check in", tone: "plain" },
+};
+
+/** One line that says what is happening, in words: "Interview tomorrow · 12:00 PM", "Assessment due Nov 18", "Reply to the recruiter". */
+function summaryLine(item: ActionItem, now: Date): string {
+  const c = describeAction(item, now);
+  const when = item.due ? (item.dueHasTime ? `${relativeDay(now, item.due)} · ${item.due.toLocaleTimeString("en-US", { timeZone: "UTC", hour: "numeric", minute: "2-digit" })}` : relativeDay(now, item.due)) : null;
+  const day = item.due ? item.due.toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" }) : null;
+  switch (item.kind) {
+    case "upcoming_interview": return `Interview ${when ?? ""}`.trim();
+    case "assessment_deadline": return c.critical && item.bucket === "overdue" ? `Assessment was due ${day}` : `Assessment due ${day ?? ""}`.trim();
+    case "offer_decision": return day ? `Offer decision by ${day}` : "Offer decision";
+    case "schedule_interview": return "Reply to book your interview";
+    case "respond_recruiter": return "Reply to the recruiter";
+    case "follow_up": return "Worth a follow-up";
+    default: return "Worth a check-in";
+  }
+}
+
+/**
+ * The work, as one list: who (a mark), what is happening and when, the role, and a pill for what kind of thing it is. The whole row opens the
+ * opportunity; the quiet menu appears on hover or focus in place of the chevron.
+ */
+function ActionRows({ items, opportunities, now, editable }: { items: ActionItem[]; opportunities: Opportunity[]; now: Date; editable: boolean }) {
   return (
-    <div className="panel relative p-4 transition-colors hover:bg-[var(--tint)]">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          {opp ? <EntityMark opportunity={opp} size="sm" /> : <EntityMark name={item.company} size="sm" />}
-          <p className="truncate text-[0.875rem] font-medium tracking-tight">{item.company}</p>
-        </div>
-        {copy.relative ? <p className={`t-meta shrink-0 font-medium ${copy.critical ? "text-signal" : "text-ink-3"}`}>{copy.relative}</p> : null}
-      </div>
-      <OpenOpportunity opportunityKey={item.opportunityKey} className="row-link mt-3 block text-[0.9375rem] font-medium leading-snug tracking-tight">
-        {copy.headline}
-      </OpenOpportunity>
-      <p className="t-meta mt-1 truncate text-ink-2">{copy.when ? copy.when.replace(" at ", " · ") : item.role ?? item.reason}</p>
-    </div>
+    <ul className="list">
+      {items.map((item) => {
+        const opp = opportunities.find((o) => o.key === item.opportunityKey);
+        const pill = PILL[item.kind];
+        const critical = describeAction(item, now).critical;
+        return (
+          <li key={item.id}>
+            <div className="row !items-center !gap-4 !py-3.5">
+              <div className="flex min-w-0 flex-1 items-center gap-3.5">
+                {opp ? <EntityMark opportunity={opp} size="lg" /> : <EntityMark name={item.company} size="lg" />}
+                <div className="min-w-0">
+                  <OpenOpportunity opportunityKey={item.opportunityKey} className="row-link block truncate font-medium tracking-tight">
+                    {summaryLine(item, now)}
+                  </OpenOpportunity>
+                  <p className="t-meta mt-0.5 truncate text-ink-2">
+                    {item.company}
+                    {item.role ? ` · ${item.role}` : ""}
+                  </p>
+                </div>
+              </div>
+              <span className="pill shrink-0" data-tone={critical ? "critical" : pill.tone}>
+                {pill.label}
+              </span>
+              <div className="row-end w-6 shrink-0">
+                <span className="row-time text-ink-3">
+                  <IconChevron />
+                </span>
+                <div className="row-tools">
+                  <ActionMenu item={item} editable={editable} />
+                </div>
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
-/** Compact, neutral pipeline summary: where things stand, one colour. Each row opens that stage. */
-function PipelineSummary({ opportunities, pipelineHref }: { opportunities: Opportunity[]; pipelineHref: string }) {
+/** What is coming, as a compact schedule: day, who and what, time. */
+function ScheduleRows({ items, now }: { items: ActionItem[]; now: Date }) {
+  const sorted = [...items].sort((a, b) => (a.due?.getTime() ?? 0) - (b.due?.getTime() ?? 0));
+  return (
+    <ul className="list">
+      {sorted.map((item) => (
+        <li key={item.id}>
+          <div className="row !items-center !gap-4 !py-2.5">
+            <span className="t-meta tnum w-[6.25rem] shrink-0 text-ink-3">{item.due ? item.due.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" }) : ""}</span>
+            <OpenOpportunity opportunityKey={item.opportunityKey} className="row-link min-w-0 flex-1 truncate text-[0.9375rem]">
+              <span className="font-medium">{item.company}</span>
+              <span className="text-ink-2"> — {describeAction(item, now).headline.replace(item.company, "").replace(/\s+/g, " ").trim() || PILL[item.kind].label}</span>
+            </OpenOpportunity>
+            <span className="t-meta tnum shrink-0 text-ink-3">
+              {item.due && item.dueHasTime ? item.due.toLocaleTimeString("en-US", { timeZone: "UTC", hour: "numeric", minute: "2-digit" }) : item.bucket === "overdue" ? "Overdue" : "All day"}
+            </span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Where everything stands: a count, one flat segmented bar (quantity, not rank), and the stages. Each row opens that stage. */
+function PipelineCard({ opportunities, pipelineHref }: { opportunities: Opportunity[]; pipelineHref: string }) {
   const rows = pulse(opportunities);
-  const max = Math.max(1, ...rows.map((r) => r.count));
   const active = opportunities.filter((o) => o.status === "active").length;
+  const total = Math.max(1, rows.reduce((n, r) => n + r.count, 0));
   if (opportunities.length === 0) {
     return (
-      <section aria-label="Pipeline summary">
-        <SectionHead title="Pipeline" />
+      <section aria-label="Your pipeline" className="panel p-4">
+        <h2 className="t-heading flex items-center gap-2"><IconPipeline /> Your pipeline</h2>
         <p className="t-meta mt-3 max-w-[30ch] text-ink-2">No opportunities yet. They appear here as recruiting mail arrives.</p>
       </section>
     );
   }
   return (
-    <section aria-label="Pipeline summary">
-      <SectionHead title="Pipeline">
-        <Link href={pipelineHref} className="link-quiet t-meta">
-          Open
-        </Link>
-      </SectionHead>
-      <ul className="mt-3 space-y-2.5">
+    <section aria-label="Your pipeline" className="panel p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="t-heading flex items-center gap-2 text-ink-2"><IconPipeline /> Your pipeline</h2>
+        <Link href={pipelineHref} className="link-quiet t-meta">Open</Link>
+      </div>
+      <p className="mt-3 text-[1.5rem] font-medium leading-none tracking-tight"><span className="tnum">{active}</span> <span className="text-[1rem] font-normal text-ink-2">active</span></p>
+      <div className="mt-3 flex h-1.5 gap-0.5 overflow-hidden rounded-full" aria-hidden>
+        {rows.filter((r) => r.count > 0).map((r, i) => (
+          <span key={r.stage} className="block h-full" style={{ width: `${(r.count / total) * 100}%`, background: "var(--ink-3)", opacity: 0.35 + i * 0.16 }} />
+        ))}
+      </div>
+      <ul className="mt-4 space-y-2">
         {rows.map((r) => (
           <li key={r.stage}>
-            <Link href={`${pipelineHref}?stage=${r.stage}`} className="group grid grid-cols-[5.5rem_1fr_1.5rem] items-center gap-3 text-[0.875rem]">
+            <Link href={`${pipelineHref}?stage=${r.stage}`} className="group flex items-center justify-between text-[0.875rem]">
               <span className={`transition-colors group-hover:text-ink ${r.count === 0 ? "text-ink-3" : "text-ink-2"}`}>{STAGE_LABEL[r.stage]}</span>
-              <span className="relative block h-[3px] rounded-full bg-[var(--line)]" aria-hidden>
-                {r.count > 0 ? <span className="pulse-bar absolute inset-y-0 left-0 block" style={{ width: `${Math.max(6, (r.count / max) * 100)}%` }} /> : null}
-              </span>
-              <span className={`tnum text-right ${r.count === 0 ? "text-ink-3" : "font-medium"}`}>{r.count}</span>
+              <span className={`tnum ${r.count === 0 ? "text-ink-3" : "font-medium"}`}>{r.count}</span>
             </Link>
           </li>
         ))}
       </ul>
-      <p className="t-meta tnum mt-3 text-ink-3">
-        {active} active{opportunities.length - active > 0 ? `, ${opportunities.length - active} closed` : ""}
-      </p>
     </section>
   );
 }
 
-/** What changed, newest first: one line each, written as a sentence. */
-function RecentChanges({ opportunities, now, activityHref }: { opportunities: Opportunity[]; now: Date; activityHref: string }) {
+/** What changed, newest first: a mark, the company, what happened, and when. */
+function RecentCard({ opportunities, now, activityHref }: { opportunities: Opportunity[]; now: Date; activityHref: string }) {
   const { recent } = buildBriefing(opportunities, [], now);
   if (recent.length === 0) return null;
   return (
-    <section aria-label="Recent changes">
-      <SectionHead title="What changed">
-        <Link href={activityHref} className="link-quiet t-meta">
-          All activity
-        </Link>
-      </SectionHead>
-      <ul className="list mt-2">
-        {recent.map((c) => (
-          <li key={c.opportunityKey}>
-            <div className="row !px-0 !py-2" style={{ margin: 0 }}>
-              <OpenOpportunity opportunityKey={c.opportunityKey} className="row-link min-w-0">
-                <span className="block truncate text-[0.9375rem] font-medium tracking-tight">{c.company}</span>
-                <span className="t-meta block truncate text-ink-2">{c.label}</span>
+    <section aria-label="Recent changes" className="panel p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="t-heading flex items-center gap-2 text-ink-2"><IconClock /> Recent changes</h2>
+        <Link href={activityHref} className="link-quiet t-meta">All</Link>
+      </div>
+      <ul className="mt-3 space-y-3">
+        {recent.map((c) => {
+          const opp = opportunities.find((o) => o.key === c.opportunityKey);
+          return (
+            <li key={c.opportunityKey}>
+              <OpenOpportunity opportunityKey={c.opportunityKey} className="group flex items-center gap-3">
+                {opp ? <EntityMark opportunity={opp} size="sm" /> : <EntityMark name={c.company} size="sm" />}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[0.875rem] font-medium">{c.company}</span>
+                  <span className="t-meta block truncate text-ink-2">{c.label}</span>
+                </span>
+                <span className="t-meta shrink-0 text-ink-3">{relativeDay(now, c.when)}</span>
               </OpenOpportunity>
-              <span className="t-meta shrink-0 text-ink-3">{relativeDay(now, c.when)}</span>
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
 }
 
+const NEEDS_VISIBLE = 4;
+
 /**
- * Today is the personal command center. It answers three questions in order: what needs me now (the panel, led by one thing),
- * what is coming (a compact schedule), and where everything stands (a neutral summary and what changed, on the right).
- * Quiet things (replies you are waiting on) are present but folded. When nothing needs you it says so, plainly.
+ * Today is the personal command center. The work on the left (what needs you now as one list, then what is coming); on the right the state of
+ * things (the pipeline, what changed, what needs review). Quiet things are present but folded. When nothing needs you it says so, plainly.
  */
 export function TodayComposition({
   opportunities,
   actions,
   now,
-  basePath,
   pipelineHref,
   editable,
   greeting,
@@ -325,45 +289,36 @@ export function TodayComposition({
   opportunities: Opportunity[];
   actions: ActionItem[];
   now: Date;
-  basePath: string;
+  basePath?: string;
   pipelineHref: string;
   editable: boolean;
   greeting: React.ReactNode;
-  /** Events the reader is unsure about (signed-in product only). */
+  /** Reviews that matter to live recruiting (signed-in product only). */
   toCheck?: number;
   checkHref?: string;
   /** Preformatted time of the last read. */
   updated?: string;
 }) {
   const briefing = buildBriefing(opportunities, actions, now);
-  const [lead, ...others] = briefing.needsYou;
-  const leadOpp = lead ? opportunities.find((o) => o.key === lead.opportunityKey) : undefined;
+  const needs = [...briefing.needsYou].sort((a, b) => b.priority - a.priority);
   const activityHref = pipelineHref.replace(/pipeline$/, "activity");
-  const sortedOthers = [...others].sort((a, b) => b.priority - a.priority);
-  const shown = sortedOthers;
   const next = briefing.comingUp[0];
 
   return (
     <div>
       {greeting}
-      <div className="cc mt-10">
-        <div className="min-w-0 space-y-10">
-          {lead ? (
+      <div className="cc mt-8">
+        <div className="min-w-0 space-y-9">
+          {needs.length > 0 ? (
             <section aria-label="Needs you now">
-              <SectionHead title="Needs you now" count={briefing.needsYou.length} />
-              <div className="panel mt-3">
-                <Lead item={lead} opp={leadOpp} now={now} basePath={basePath} editable={editable} />
+              <div className="panel px-2 sm:px-3">
+                <ActionRows items={needs.slice(0, NEEDS_VISIBLE)} opportunities={opportunities} now={now} editable={editable} />
               </div>
-              {shown.length > 0 ? (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {shown.slice(0, 2).map((it) => (
-                    <ActionCard key={it.id} item={it} opp={opportunities.find((o) => o.key === it.opportunityKey)} now={now} />
-                  ))}
-                </div>
-              ) : null}
-              {sortedOthers.length > 2 ? (
-                <Disclose className="mt-4" summary={`${sortedOthers.length - 2} more need you`} openSummary="Show fewer">
-                  <ActionList items={sortedOthers.slice(2)} now={now} editable={editable} />
+              {needs.length > NEEDS_VISIBLE ? (
+                <Disclose className="mt-3" summary={`${needs.length - NEEDS_VISIBLE} more need you`} openSummary="Show fewer">
+                  <div className="panel mt-2 px-2 sm:px-3">
+                    <ActionRows items={needs.slice(NEEDS_VISIBLE)} opportunities={opportunities} now={now} editable={editable} />
+                  </div>
                 </Disclose>
               ) : null}
             </section>
@@ -372,14 +327,7 @@ export function TodayComposition({
               <div className="panel p-6">
                 <h2 className="t-title">You are all caught up.</h2>
                 <p className="mt-2 max-w-[44ch] text-ink-2">
-                  {next ? (
-                    <>
-                      Next up: {describeAction(next, now).headline}
-                      {describeAction(next, now).when ? `, ${describeAction(next, now).when}` : ""}.
-                    </>
-                  ) : (
-                    "New emails and deadlines will appear here the moment they arrive."
-                  )}
+                  {next ? <>Next up: {summaryLine(next, now)} with {next.company}.</> : "New emails and deadlines will appear here the moment they arrive."}
                 </p>
               </div>
             </section>
@@ -387,13 +335,19 @@ export function TodayComposition({
 
           {briefing.comingUp.length > 0 ? (
             <section aria-label="Coming up">
-              <SectionHead title="Coming up" count={briefing.comingUp.length} />
-              <ActionList items={briefing.comingUp.slice(0, 3)} now={now} editable={editable} />
-              {briefing.comingUp.length > 3 ? (
-                <Disclose className="mt-2" summary={`${briefing.comingUp.length - 3} later`} openSummary="Show fewer">
-                  <ActionList items={briefing.comingUp.slice(3)} now={now} editable={editable} />
-                </Disclose>
-              ) : null}
+              <SectionHead title="Coming up" count={briefing.comingUp.length}>
+                <Link href={pipelineHref} className="link t-meta">
+                  View pipeline
+                </Link>
+              </SectionHead>
+              <div className="panel mt-3 px-2 sm:px-3">
+                <ScheduleRows items={briefing.comingUp.slice(0, 3)} now={now} />
+                {briefing.comingUp.length > 3 ? (
+                  <Disclose className="mb-3 mt-1 px-2" summary={`${briefing.comingUp.length - 3} later`} openSummary="Show fewer">
+                    <ScheduleRows items={briefing.comingUp.slice(3)} now={now} />
+                  </Disclose>
+                ) : null}
+              </div>
             </section>
           ) : null}
 
@@ -409,9 +363,9 @@ export function TodayComposition({
           ) : null}
         </div>
 
-        <aside className="min-w-0 space-y-10 lg:border-l lg:border-line lg:pl-10" aria-label="State of things">
-          <PipelineSummary opportunities={opportunities} pipelineHref={pipelineHref} />
-          <RecentChanges opportunities={opportunities} now={now} activityHref={activityHref} />
+        <aside className="min-w-0 space-y-4" aria-label="State of things">
+          <PipelineCard opportunities={opportunities} pipelineHref={pipelineHref} />
+          <RecentCard opportunities={opportunities} now={now} activityHref={activityHref} />
           {toCheck > 0 ? (
             <section aria-label="Review" className="panel p-4">
               <p className="font-medium tracking-tight">
@@ -423,7 +377,7 @@ export function TodayComposition({
               </Link>
             </section>
           ) : null}
-          {updated ? <p className="t-meta tnum text-ink-3">Updated {updated}</p> : null}
+          {updated ? <p className="t-meta tnum px-1 text-ink-3">Updated {updated}</p> : null}
         </aside>
       </div>
     </div>

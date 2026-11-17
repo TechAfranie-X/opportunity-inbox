@@ -11,7 +11,7 @@ export function SearchButton() {
           <circle cx="5.5" cy="5.5" r="4" />
           <path d="m8.6 8.6 3 3" />
         </svg>
-        <span className="pr-6">Search</span>
+        <span className="pr-6 lg:flex-1 lg:pr-0 lg:text-left">Search opportunities…</span>
         <kbd>⌘K</kbd>
       </button>
       <button

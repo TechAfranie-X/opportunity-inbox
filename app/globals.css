@@ -54,6 +54,7 @@
   --dur-3: 360ms;
 
   --nav-h: 3.25rem;
+  --side-w: 14.5rem;
   --inspector-w: 25rem;
 
   color-scheme: light;
@@ -339,6 +340,36 @@ html.theme-fade *::after {
   font-variant-numeric: tabular-nums;
 }
 
+/* A small status pill: what kind of thing this is. Neutral by default; blue only for the active kind, green for an offer, red when it is late. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: 1.5rem;
+  padding: 0 0.65rem;
+  border-radius: 999px;
+  background: var(--tint);
+  color: var(--ink-2);
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.pill[data-tone="accent"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.pill[data-tone="ok"] {
+  background: color-mix(in srgb, var(--ok) 13%, transparent);
+  color: var(--ok);
+}
+.pill[data-tone="critical"] {
+  background: color-mix(in srgb, var(--signal) 13%, transparent);
+  color: var(--signal);
+}
+.pill[data-tone="warn"] {
+  background: color-mix(in srgb, var(--warn) 15%, transparent);
+  color: var(--warn);
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -555,6 +586,11 @@ html.theme-fade *::after {
   left: 0;
   transform-origin: top left;
 }
+.menu[data-side="up"] {
+  top: auto;
+  bottom: calc(100% + 6px);
+  transform-origin: bottom left;
+}
 .menu-item {
   display: block;
   width: 100%;
@@ -726,6 +762,14 @@ html.theme-fade *::after {
     display: none;
   }
 }
+@media (min-width: 1024px) {
+  .search-pill {
+    width: 100%;
+    max-width: 24rem;
+    justify-content: space-between;
+    padding-right: 0.55rem;
+  }
+}
 kbd {
   font: inherit;
   font-size: 0.6875rem;
@@ -733,6 +777,70 @@ kbd {
   border-radius: 4px;
   border: 1px solid var(--line-strong);
   color: var(--ink-3);
+}
+
+/* The sidebar: the product's frame on large screens. Quiet; the current place is the one tinted, blue-marked item. */
+.sidebar {
+  position: fixed;
+  z-index: 41;
+  inset: 0 auto 0 0;
+  width: var(--side-w);
+  display: none;
+  flex-direction: column;
+  padding: 1.1rem 0.85rem 0.85rem;
+  background: var(--paper);
+  border-right: 1px solid var(--line);
+}
+@media (min-width: 1024px) {
+  .sidebar {
+    display: flex;
+  }
+  .nav {
+    left: var(--side-w);
+  }
+  .workspace {
+    padding-left: var(--side-w);
+  }
+}
+.side-link {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  height: 2.25rem;
+  padding: 0 0.7rem;
+  border-radius: var(--r-md);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-1) ease,
+    color var(--dur-1) ease;
+}
+.side-link:hover {
+  background: var(--wash);
+  color: var(--ink);
+}
+.side-link[aria-current="page"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-weight: 500;
+}
+.side-badge {
+  margin-left: auto;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.4rem;
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-grid;
+  place-items: center;
+  font-variant-numeric: tabular-nums;
 }
 
 /* The state of the review queue, as a status in the navigation rather than a destination. */
@@ -956,7 +1064,7 @@ kbd {
 }
 @media (min-width: 1024px) {
   .cc {
-    grid-template-columns: minmax(0, 1fr) 19rem;
+    grid-template-columns: minmax(0, 1fr) 17.5rem;
     align-items: start;
   }
 }
@@ -1385,6 +1493,11 @@ html[data-presentation] .inspector ol > li:nth-child(8) {
 }
 
 /* A read that did not fully complete says so, right under the navigation, until it is dismissed or the next read succeeds. */
+@media (min-width: 1024px) {
+  .notice-bar {
+    left: var(--side-w);
+  }
+}
 .notice-bar {
   position: fixed;
   z-index: 39;

@@ -10,6 +10,8 @@ export function Menu({
   label,
   trigger,
   align = "right",
+  side = "down",
+  block = false,
   children,
   onOpenChange,
 }: {
@@ -18,6 +20,10 @@ export function Menu({
   trigger?: ReactNode;
   /** Which edge of the trigger the menu hangs from. */
   align?: "left" | "right";
+  /** Open downward (default) or upward (for a trigger at the bottom of the screen). */
+  side?: "down" | "up";
+  /** Let the trigger fill its container (the sidebar's account row). */
+  block?: boolean;
   children: ReactNode;
   onOpenChange?: (open: boolean) => void;
 }) {
@@ -57,14 +63,14 @@ export function Menu({
   }, [open]);
 
   return (
-    <div className="relative inline-block" ref={root}>
+    <div className={`relative ${block ? "block w-full" : "inline-block"}`} ref={root}>
       <button
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={label}
         onClick={() => set(!open)}
-        className="grid h-8 min-w-8 place-items-center rounded-full px-1 text-ink-2 transition-colors hover:bg-wash hover:text-ink"
+        className={`${block ? "flex w-full items-center rounded-md px-2 py-1.5 text-left" : "grid h-8 min-w-8 place-items-center rounded-md px-1"} text-ink-2 transition-colors hover:bg-wash hover:text-ink`}
       >
         {trigger ?? (
           <svg width="16" height="4" viewBox="0 0 16 4" fill="currentColor" aria-hidden>
@@ -75,7 +81,7 @@ export function Menu({
         )}
       </button>
       {open ? (
-        <div className="menu" data-align={align} role="menu" onClick={() => window.setTimeout(() => set(false), 180)}>
+        <div className="menu" data-align={align} data-side={side} role="menu" onClick={() => window.setTimeout(() => set(false), 180)}>
           {children}
         </div>
       ) : null}
