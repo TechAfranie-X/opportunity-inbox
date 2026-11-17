@@ -58,6 +58,8 @@ export function plainReason(reason: string): string {
   if (/sender is ats/i.test(reason)) return "This came from a job-application system, so we could not tell which employer it is for.";
   if (/^company: weak evidence/i.test(reason)) return "We are not confident about the company name.";
   if (/^membership: /i.test(reason)) return "We could not tie this to one of your applications. Is it really about a job or internship?";
+  if (/^conflict: a second reader/i.test(reason)) return "A second reader thinks this is not recruiting mail. Is it?";
+  if (/^possible: a second reader/i.test(reason)) return "A second reader thinks this is hiring mail that we did not recognise. We have not added it to your pipeline.";
   if (/^conflict: /i.test(reason)) return "The wording reads like a goodbye, but we read it as an ongoing update. Did they say no?";
   if (/^possible: we could not read/i.test(reason)) return "We could not read the text of this email, so we could not tell what it is. Open it to check.";
   if (/^possible: /i.test(reason)) return "This may be hiring mail that we did not recognise. We have not added it to your pipeline.";

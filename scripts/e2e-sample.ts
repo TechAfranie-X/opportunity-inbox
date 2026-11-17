@@ -100,6 +100,15 @@ try {
     assert.ok(full.some((i) => i.weak), "a weak near miss is offered");
     assert.equal(attentionCount(full), full.filter((i) => !i.weak).length, "weak suggestions are not counted");
     step(`reliability: ${ws.possible.length} near misses surfaced outside the pipeline, goodbye flagged`);
+    if (process.env.SEMANTIC_READER === "sample") {
+      // The scripted stand-in recognises the reference-request mail the rules cannot see, and doubts the course promotion.
+      const second = ws.possible.filter((e) => (e.reviewReasons ?? []).some((r) => /second reader/.test(r)) && !e.signals.includes("near-miss:weak"));
+      assert.equal(second.length >= 1, true, "the second reader surfaced mail the rules could not see");
+      assert.ok(second.every((e) => !inPipeline.has(e.gmailMessageId)), "and it is not in the pipeline");
+      assert.ok(ws.opportunities.some((o) => o.events.some((e) => (e.reviewReasons ?? []).some((r) => /second reader read this as not recruiting/.test(r)))), "a confident reading it doubts is in review");
+      assert.equal(sql(`select count(*) from event_predictions where decision = 'recruiting' and signals @> '["semantic:yes"]'`), "0", "the second reader's yes is never logged as a recruiting decision");
+      step("second reader (scripted stand-in): surfaced invisible mail and doubted a confident reading, structured values untouched");
+    }
 
     // 4c. a person's word brings a near miss into the pipeline
     strong = full.find((i) => i.possible && !i.weak)!;

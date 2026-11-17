@@ -6,6 +6,8 @@ import { isSampleUser } from "@/lib/gmail/sample";
 import { mailSourceFor } from "@/lib/gmail/source";
 import { outboundEvent, isContinuityCandidate } from "@/lib/recruiting/extract";
 import { readMail } from "@/lib/reliability/assess";
+import { cacheSemanticReader } from "@/lib/semantic/cache-reader";
+import { sampleSemanticReader } from "@/lib/semantic/sample-reader";
 import { buildPredictions } from "@/lib/recruiting/predictions";
 import { PRODUCT_READER_VERSION } from "@/lib/recruiting/product-version";
 import { contactAnchors, countEvents, evaluatedMessageIds, inheritStoredRoles, markSynced, pruneReclassified, recentThreadAnchors, saveExtractedEvents, savePredictions } from "@/lib/recruiting/store";
@@ -14,6 +16,18 @@ import { runSync, type EngineResult, type SyncStore } from "@/lib/recruiting/syn
 export type SyncResult =
   | ({ ok: true } & EngineResult)
   | { ok: false; reason: "not_connected" | "reconnect_required" | "temporary_error" };
+
+/**
+ * The second reader is OFF unless SEMANTIC_READER names an adapter, and never in production. "cache" serves verified outputs from the
+ * development harness cache; "sample" is a scripted stand-in for the synthetic sample mailbox only. No model is hosted, called or paid for.
+ */
+function semanticConfig(sub: string): Partial<Pick<Parameters<typeof runSync>[2], "semantic" | "selfNames">> {
+  if (process.env.NODE_ENV === "production") return {};
+  const selfNames = (process.env.READER_SELF_NAMES ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (process.env.SEMANTIC_READER === "cache") return { semantic: cacheSemanticReader(), selfNames };
+  if (process.env.SEMANTIC_READER === "sample" && isSampleUser(sub)) return { semantic: sampleSemanticReader(), selfNames };
+  return {};
+}
 
 /** One request reads at most this long, then reports what is left and lets the caller continue. */
 const BUDGET_MS = 150_000;
@@ -56,6 +70,9 @@ export async function syncRecruitingMail(userGoogleSub: string, opts: { /** Test
       embargoBefore: isSampleUser(userGoogleSub) ? null : embargoBefore(),
       extract: readMail,
       deferable: isContinuityCandidate,
+      // The second reader is OFF unless SEMANTIC_READER names an adapter. The only adapter is the development cache (never production):
+      // no model is hosted, called or paid for. See lib/semantic/port.ts for the contract any real adapter must honour.
+      ...semanticConfig(userGoogleSub),
       predict: (emails) => buildPredictions(emails, readerVersion),
       outboundEvent,
     });

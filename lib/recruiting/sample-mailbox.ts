@@ -157,6 +157,8 @@ export function buildSampleMailbox(anchor: Date, large = false): SampleEmail[] {
       "Hi Sam, about your candidacy for the Backend Engineer Intern role: the team has gone another direction for this cycle.\n", { type: null }, { uncertain: true }),
     mail("sg-nm-weak", "Casey Park <casey.park@quill-labs.example>", "grab a time", ago(2),
       "Hey Sam! Grab any slot that works for you here. Happy to tell you more about the Analytics Intern opening at Quill.\n", { type: null }, { uncertain: true }),
+    mail("sg-silent", "Elena Rossi <elena.rossi@harbor-io.example>", "Next on our side", ago(1),
+      "Hi Sam, we would like to speak with two references for your application. Could you send their names and email addresses when you can?\n", { type: null }, { uncertain: true }),
     mail("sg-conflict", "Robin Ames <robin.ames@summit-ai.example>", "Following up on your application", ago(4),
       "Hi Sam, thanks for your time on Thursday. After talking it over with the team, we are going to keep looking for someone with more production experience for the Backend Engineer Intern role. Best of luck with your search.\n",
       { type: "follow_up" }, { uncertain: true }),

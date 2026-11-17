@@ -2,6 +2,9 @@ import type { Prediction } from "./predictions.ts";
 import type { ReadContext, ThreadAnchor } from "./extract.ts";
 import { contactKeysOf, reconcilePredictions } from "../discovery/continuity.ts";
 import { isNearMiss } from "../reliability/flags.ts";
+import { applyConsensus } from "../semantic/consensus.ts";
+import type { SemanticReader } from "../semantic/port.ts";
+import { semanticInputs } from "../semantic/inputs.ts";
 import { minimizeSweepPredictions, tagEvents, viaMap } from "../discovery/strategy.ts";
 import type { ExtractedEvent, RecruitingEmail } from "./types.ts";
 
@@ -64,6 +67,13 @@ export type EngineParams = {
    * those chunks produced. Their prediction rows are written only after that final judgement, so the log never disagrees with the events.
    */
   deferable?: (email: RecruitingEmail) => boolean;
+  /**
+   * An optional second, semantic reader (lib/semantic/port.ts). Off unless supplied. It sees only redacted, truncated inputs for messages that
+   * pass the veto-only triage, and can only change what a person is asked, never a structured value.
+   */
+  semantic?: SemanticReader;
+  /** Name tokens of the account holder, removed from what the second reader sees. */
+  selfNames?: string[];
   predict: (emails: RecruitingEmail[]) => Prediction[];
   outboundEvent: (email: RecruitingEmail, anchor: ThreadAnchor) => ExtractedEvent;
 };
@@ -121,6 +131,7 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
   const via = viaMap(refs);
   const failedIds = new Set<string>();
   const deferred = new Map<string, RecruitingEmail>();
+  const opinionLog = new Map<string, import("../recruiting/reader/types.ts").VerifiedOutput>();
   let repliesUnchecked = 0;
   const outboundOf = async (threadIds: string[]) => {
     const r = await source.fetchOutbound(threadIds);
@@ -143,7 +154,16 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
     const inboundEvents = p.extract(inbound, context);
     const threadIds = [...new Set(inboundEvents.map((e) => e.gmailThreadId))];
     const outbound = threadIds.length ? (await outboundOf(threadIds)).filter(allowed) : [];
-    const events = tagEvents(p.extract([...inbound, ...outbound], context), via);
+    let events = tagEvents(p.extract([...inbound, ...outbound], context), via);
+    if (p.semantic) {
+      try {
+        const opinions = await p.semantic.opine(semanticInputs(inbound, p.selfNames));
+        for (const [k, v] of opinions) opinionLog.set(k, v); // kept for this run so the deferred pass can use them without a second call
+        events = applyConsensus(events, inbound, opinions);
+      } catch {
+        // A second opinion that fails is no opinion: the first reader's result stands and nothing is lost.
+      }
+    }
     await store.saveEvents(events);
     const eventIds = new Set(events.filter((e) => !isNearMiss(e)).map((e) => e.gmailMessageId)); // a near miss is still "no event" for continuity
     const held = p.deferable ? inbound.filter((e) => !eventIds.has(e.id) && deferred.size < DEFER_MAX && p.deferable!(e)) : [];
@@ -164,7 +184,8 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
   if (deferred.size > 0) {
     const held = [...deferred.values()];
     const keys = contactKeysOf(held);
-    const events = tagEvents(p.extract(held, { contacts: keys.length > 0 && store.contactAnchors ? await store.contactAnchors(keys) : new Map() }), via);
+    let events = tagEvents(p.extract(held, { contacts: keys.length > 0 && store.contactAnchors ? await store.contactAnchors(keys) : new Map() }), via);
+    if (p.semantic && opinionLog.size > 0) events = applyConsensus(events, held, new Map(held.flatMap((h) => (opinionLog.has(h.id) ? [[h.id, opinionLog.get(h.id)!] as const] : []))));
     await store.saveEvents(events);
     try {
       await store.savePredictions(minimizeSweepPredictions(reconcilePredictions(p.predict(held), events), via));

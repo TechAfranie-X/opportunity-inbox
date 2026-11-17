@@ -86,7 +86,15 @@ export function nearMiss(email: RecruitingEmail): ExtractedEvent | null {
   const strong = important && evidence.candidacy && !bulk;
   const weak = (important && about && !bulk && (person || platform)) || (platform && evidence.employment && !bulk);
   if (!unreadable && !strong && !weak) return null;
+  return candidateEvent(email, unreadable || strong ? "strong" : "weak", unreadable ? "possible: we could not read the text of this email" : "possible: this looks like part of a hiring process but we did not recognise what it says");
+}
 
+/**
+ * The event form of "possibly recruiting": not a recruiting decision, never in the pipeline until a person says so. Shared by the structural
+ * near-miss criteria above and by the second-reader consensus (lib/semantic/consensus.ts). Company comes from the deterministic resolver only.
+ */
+export function candidateEvent(email: RecruitingEmail, tier: "strong" | "weak", reason: string, extraSignals: string[] = []): ExtractedEvent {
+  const sender = parseSender(email.from);
   const rejected = extractWithReason(email).reason ?? "no_recruiting_signal";
   const audit = resolveCompany({ from: email.from, replyTo: email.replyTo, subject: email.subject.trim(), body: email.bodyText });
   return {
@@ -105,8 +113,8 @@ export function nearMiss(email: RecruitingEmail): ExtractedEvent | null {
     dateKind: null,
     confidence: 0.3,
     fieldConfidence: { type: 0.2, company: Math.round(audit.confidence * 100) / 100, role: 0 },
-    reviewReasons: [unreadable ? "possible: we could not read the text of this email" : "possible: this looks like part of a hiring process but we did not recognise what it says"],
-    signals: [NEAR_MISS, ...(unreadable || strong ? [] : [NEAR_MISS_WEAK]), `rejected:${rejected}`],
+    reviewReasons: [reason],
+    signals: [NEAR_MISS, ...(tier === "weak" ? [NEAR_MISS_WEAK] : []), ...extraSignals, `rejected:${rejected}`],
   };
 }
 
