@@ -129,3 +129,14 @@ export function refineEvents(events: EffectiveEvent[]): Refined {
   };
   return { events: kept.map((e) => (e.company && !settled(e) && canonical(e.company) !== e.company ? { ...e, company: canonical(e.company) } : e)), excluded };
 }
+
+const SCHOLARSHIP = /\b(?:scholarship|fellowship|grant)\b/i;
+const MENTORSHIP = /\bmentor(?:ship)?\b/i;
+/** Jobs and internships are the default; a scholarship, fellowship or mentorship application is typed so it is never mistaken for employer recruiting. */
+export function opportunityKind(events: Pick<EffectiveEvent, "subject" | "role">[]): "job" | "scholarship" | "mentorship" {
+  const text = events.map((e) => `${e.subject ?? ""} ${e.role ?? ""}`).join(" ");
+  if (/\b(?:intern(?:ship)?|software engineer|analyst|developer)\b/i.test(events.map((e) => e.role ?? "").join(" ")) && !SCHOLARSHIP.test(events.map((e) => e.role ?? "").join(" "))) return "job";
+  if (SCHOLARSHIP.test(text)) return "scholarship";
+  if (MENTORSHIP.test(text)) return "mentorship";
+  return "job";
+}

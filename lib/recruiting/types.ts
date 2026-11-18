@@ -125,7 +125,11 @@ export type Opportunity = {
   events: EffectiveEvent[]; // chronological
   /** Lowest-confidence event, so the UI can nudge "check this". */
   needsReview: boolean;
+  /** What kind of opportunity this is. Scholarships and mentorship programs are real applications but not employer recruiting. Absent = job or internship. */
+  kind?: OpportunityKind;
 };
+
+export type OpportunityKind = "job" | "scholarship" | "mentorship";
 
 export type ActionKind =
   | "assessment_deadline"

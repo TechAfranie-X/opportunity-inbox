@@ -40,7 +40,7 @@ export default async function TodayPage() {
 
   return (
     <AppShell active="today" user={session?.user} updated={updated} autoSync={isSyncLocked() ? false : neverSynced ? "first" : syncIsStale(workspace.lastSyncedAt, real) ? "stale" : false} opportunities={workspace.opportunities} possible={workspace.possible} now={now} width="wide">
-      <Greeting name={name} hour={real.getHours()} needsYou={needs}>
+      <Greeting name={name} hour={real.getHours()} needsYou={needs} toCheck={toCheck}>
         <span>{today}</span>
       </Greeting>
 

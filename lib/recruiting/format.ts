@@ -123,3 +123,9 @@ export function compactWhen(now: Date, date: Date, withTime: boolean): string {
   if (d > 1 && d < 7) return `${date.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short" })}${time ? ` ${time}` : ""}`;
   return date.toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
 }
+
+/** The line under a company name: the role, or what kind of application this is when no role applies, or an honest "No role detected". */
+export function roleLine(o: { role: string | null; kind?: "job" | "scholarship" | "mentorship" }): string {
+  if (o.role) return o.role;
+  return o.kind === "scholarship" ? "Scholarship application" : o.kind === "mentorship" ? "Mentorship application" : "No role detected";
+}

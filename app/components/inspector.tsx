@@ -13,6 +13,7 @@ import {
   formatWhen,
 
   relativeDay,
+  roleLine,
 } from "@/lib/recruiting/format";
 
 function shortDay(date: Date) {
@@ -51,7 +52,7 @@ export function Inspector() {
                   <EntityMark opportunity={opp} size="lg" />
                   <div className="min-w-0">
                     <h2 className="t-title break-words">{opp.company}</h2>
-                    <p className="t-meta mt-1 text-ink-2">{opp.role ?? "No role detected"}</p>
+                    <p className="t-meta mt-1 text-ink-2">{roleLine(opp)}</p>
                   </div>
                 </div>
                 <button

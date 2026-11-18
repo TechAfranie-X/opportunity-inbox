@@ -24,6 +24,7 @@ import {
 
   relativeDay,
   toInputValue,
+  roleLine,
 } from "@/lib/recruiting/format";
 import { annotateTimeline, nextMoment, peopleFor, pulse, stageSince } from "@/lib/recruiting/history";
 import { entityState, stageMilestones } from "@/lib/recruiting/presentation";
@@ -326,8 +327,9 @@ export function TodayComposition({
           ) : (
             <section aria-label="Needs you now">
               <div className="panel p-6">
-                <h2 className="t-title">You are all caught up.</h2>
+                <h2 className="t-title">{toCheck > 0 ? "Nothing is due right now." : "You are all caught up."}</h2>
                 <p className="mt-2 max-w-[44ch] text-ink-2">
+                  {toCheck > 0 ? <>{toCheck} {toCheck === 1 ? "email is" : "emails are"} waiting for a check below, so this list may be incomplete. </> : null}
                   {next ? <>Next up: {summaryLine(next, now)} with {next.company}.</> : "New emails and deadlines will appear here the moment they arrive."}
                 </p>
               </div>
@@ -602,7 +604,7 @@ export function OpportunityHistory({ opportunity, now, editable }: { opportunity
           <EntityMark opportunity={opportunity} size="xl" />
           <div className="min-w-0">
             <h1 className="t-display break-words">{opportunity.company}</h1>
-            <p className="t-lead mt-2 text-ink-2">{opportunity.role ?? "No role detected"}</p>
+            <p className="t-lead mt-2 text-ink-2">{roleLine(opportunity)}</p>
             {entityState(opportunity) !== "known" ? (
               <p className="t-meta mt-2 text-ink-3">{entityState(opportunity) === "likely" ? "We think this is the right company, but the evidence is weak. Correct it from the history if it is wrong." : "We could not tell which company this is."}</p>
             ) : null}

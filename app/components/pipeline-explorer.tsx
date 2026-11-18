@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { EntityMark } from "@/app/components/entity-mark";
 import { useWorkspace } from "@/app/components/workspace";
 import { eventNeedsReview } from "@/lib/recruiting/opportunity";
-import { STAGE_LABEL, compactWhen, relativeDay } from "@/lib/recruiting/format";
+import { STAGE_LABEL, compactWhen, relativeDay, roleLine } from "@/lib/recruiting/format";
 import { lastMeaningful, nextMoment } from "@/lib/recruiting/history";
 import type { Opportunity, Stage } from "@/lib/recruiting/types";
 
@@ -162,7 +162,7 @@ function OppCard({ opp, now, active, onOpen }: { opp: Opportunity; now: Date; ac
         <EntityMark opportunity={opp} size="sm" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[0.9375rem] font-medium leading-tight tracking-tight">{opp.company}</span>
-          <span className={`t-meta mt-0.5 block truncate ${opp.role ? "text-ink-2" : "text-ink-3"}`}>{opp.role ?? "No role detected"}</span>
+          <span className={`t-meta mt-0.5 block truncate ${opp.role ? "text-ink-2" : "text-ink-3"}`}>{roleLine(opp)}</span>
         </span>
         {unsure ? (
           <span className="status-dot mt-1.5 shrink-0" title="Needs review">

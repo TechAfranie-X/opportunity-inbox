@@ -126,3 +126,13 @@ test("course sessions after a rejection do not create a second, active opportuni
   assert.equal(opps.length, 1);
   assert.equal(opps[0].status, "closed");
 });
+
+test("scholarships and mentorship programs are typed, jobs and internships stay jobs", async () => {
+  const { opportunityKind } = await import("./refine.ts");
+  assert.equal(opportunityKind([{ subject: "General Application Submitted: Merit Scholarship", role: null }]), "scholarship");
+  assert.equal(opportunityKind([{ subject: "Mentor Application Received - Peer Mentorship Program", role: "Mentorship Program" }]), "mentorship");
+  assert.equal(opportunityKind([{ subject: "Thank you for applying", role: "Software Engineer Intern" }]), "job");
+  assert.equal(opportunityKind([{ subject: "Application received", role: null }]), "job");
+  const opps = buildOpportunities([ev({ type: "applied", day: 1, subject: "General Application Submitted: Merit Scholarship", company: "Fundco" })]);
+  assert.equal(opps[0].kind, "scholarship");
+});

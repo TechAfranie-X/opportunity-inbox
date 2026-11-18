@@ -7,8 +7,9 @@ export function dayPart(hour: number) {
   return "Good evening";
 }
 
-function countLine(n: number) {
-  if (n === 0) return "Nothing needs you today.";
+/** Nothing is due is not the same as nothing is wrong: while emails we are unsure about wait for a check, never say the person is clear. */
+function countLine(n: number, toCheck = 0) {
+  if (n === 0) return toCheck > 0 ? `Nothing is due today, but ${toCheck} ${toCheck === 1 ? "email needs" : "emails need"} a check.` : "Nothing needs you today.";
   if (n === 1) return "1 thing needs you today.";
   // A long list is not a verdict: say where to begin instead of announcing a number that reads as alarm.
   return n > 6 ? `${n} are open. Start with these.` : `${n} things need you today.`;
@@ -22,11 +23,14 @@ export function Greeting({
   name,
   hour,
   needsYou,
+  toCheck = 0,
   children,
 }: {
   name?: string;
   hour: number;
   needsYou: number | null;
+  /** Emails waiting for a person to confirm what they say (the review queue). */
+  toCheck?: number;
   /** Small line under the headline: date, freshness, refresh. */
   children?: ReactNode;
 }) {
@@ -39,7 +43,7 @@ export function Greeting({
           {name ? `, ${name}.` : "."}
         </span>
         <span className="settle settle-2 block text-ink-3">
-          {needsYou === null ? "Reading your recruiting emails." : countLine(needsYou)}
+          {needsYou === null ? "Reading your recruiting emails." : countLine(needsYou, toCheck)}
         </span>
       </h1>
     </div>
