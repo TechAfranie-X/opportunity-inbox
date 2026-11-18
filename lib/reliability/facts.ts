@@ -90,3 +90,62 @@ export function explicitOffer(email: RecruitingEmail): ExtractedEvent | null {
     signals: ["offer (ingestion)", "subject"],
   };
 }
+
+/**
+ * Body-act fact. General failure pattern: the rule reader needs hiring words in the SUBJECT or a platform sender, so a person at an employer who writes a plain
+ * subject ("Next steps", "Quick update") and says the hiring act in the body is read as "no recruiting language" and never reaches the pipeline. This fact
+ * reads a rejected message once more for one explicit act addressed to the reader, in the body only (never stored):
+ *   offer        "we'd like to offer you the <role>", "pleased to extend an offer", "welcome to the team ... start date"
+ *   invitation   "could you do a video interview", "we will move forward with scheduling a call", "schedule a first call"
+ *   confirmed    "you're booked for Thursday", "rescheduled your interview to <date>"
+ * Guards: not outbound, not a consumer-style sender list is unavailable so the act must sit next to hiring context (role, interview, application, cv,
+ * portfolio, assessment, cohort, start date ...). Advice, scam and marketing wording is excluded by the offer lists. Marketing footers do not veto an act that names the
+ * reader's own application, interview or assessment. The result is deliberately low-confidence and carries a review reason: it says what was read and why to check it.
+ */
+const HIRING_CONTEXT = /\b(?:role|position|internship|intern|job|interview|application|candidacy|assessment|cv|resume|r[eé]sum[eé]|portfolio|cohort|fellowship|scholarship|start date|onboarding|new[- ]grad)\b/i;
+const YOUR_OWN = /\b(?:your (?:application|interview|assessment|cv|resume|r[eé]sum[eé]|portfolio|profile)|interview with)\b/i;
+const MARKETING_FOOTER = /\b(?:unsubscribe|manage (?:your )?(?:email )?preferences|view (?:this )?(?:email )?in (?:your )?browser|you are receiving this)\b/i;
+const ACT_OFFER = /\b(?:we(?:['’]d| would) like to offer you|we (?:are|['’]re) (?:pleased|happy|delighted|thrilled|excited) to (?:offer you|extend (?:you )?an? (?:formal |job )?offer)|pleased to extend (?:you )?an? (?:formal |job )?offer|offer you the [^.\n]{3,70}\b(?:role|position|internship))\b|\bwelcome to the team\b[^\n]{0,140}\b(?:start date|first day|onboarding)\b/i;
+const ACT_INVITE = /\b(?:(?:could|can|would) you (?:do|join|make time for|schedule)[^.?\n]{0,50}\b(?:interview|call|chat|conversation)\b|(?:move|moving) forward with scheduling\b|(?:schedule|set up|arrange) (?:a |an )?(?:first |second |final |short |quick |\d+-min(?:ute)? )?(?:call|chat|interview|conversation)\b|(?:i|we)(?:['’]d| would) like to (?:invite you to|schedule) (?:an? )?(?:interview|call|chat))/i;
+const ACT_CONFIRMED = /\b(?:you(?:['’]re| are) booked for|(?:i|we)(?:['’]ve| have) rescheduled your (?:interview|call)(?: to)?|your (?:interview|call) (?:is|has been) (?:set|booked|confirmed|scheduled)(?: for)?)\b/i;
+const GREETING_WORD = /^\s*(?:hi|hello|hey|dear|good (?:morning|afternoon))\b/i;
+const NAME_LEAD = /^\s*[A-Z][\p{L}'’-]+[,!]\s/u;
+const GREETING = { test: (b: string) => GREETING_WORD.test(b) || NAME_LEAD.test(b) };
+
+export function bodyAct(email: RecruitingEmail): ExtractedEvent | null {
+  if (email.outbound) return null;
+  const body = email.bodyText;
+  const text = `${email.subject}\n${body}`;
+  if (!HIRING_CONTEXT.test(text) || !GREETING.test(body)) return null;
+  if (NOT_AN_OFFER.test(email.subject) || NOT_AN_OFFER_FOR_YOU.test(text)) return null;
+  if (MARKETING_FOOTER.test(body) && !YOUR_OWN.test(text)) return null;
+  let type: ExtractedEvent["type"] | null = null;
+  if (ACT_OFFER.test(body)) type = "offer";
+  else if (ACT_CONFIRMED.test(body)) type = "interview_scheduled";
+  else if (ACT_INVITE.test(body)) type = "interview_invite";
+  if (!type) return null;
+  const sender = parseSender(email.from);
+  const kind = classifySender(sender.domain);
+  if (kind === "job_board") return null;
+  const audit = resolveCompany({ from: email.from, replyTo: email.replyTo, subject: email.subject.trim(), body });
+  const role = type === "offer" ? (OFFER_ROLE.exec(body)?.[1]?.trim() ?? null) : null;
+  return {
+    gmailMessageId: email.id,
+    gmailThreadId: email.threadId,
+    occurredAt: email.receivedAt,
+    outbound: false,
+    senderName: email.from.replace(/<[^>]+>/g, "").replace(/["']/g, "").trim(),
+    senderDomain: sender.domain,
+    subject: email.subject.trim(),
+    type,
+    company: audit.entity?.name ?? null,
+    role,
+    eventDate: null,
+    eventDateHasTime: false,
+    dateKind: null,
+    confidence: 0.6,
+    fieldConfidence: { type: 0.6, company: Math.round(audit.confidence * 100) / 100, role: role ? 0.6 : 0 },
+    reviewReasons: ["type: read from the wording of the message body only, please check it"],
+    signals: ["body act (fact)"],
+  };
+}

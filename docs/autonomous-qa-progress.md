@@ -49,6 +49,13 @@ Owner approved the sweep and the re-sync. Signed in through Google's account cho
 - Role work-mode tags ("— Remote (US)") no longer split one role.
 Result for account 2 (replay of stored events): **15 active / 6 closed** (was 24 active at the second audit). Account 1 replay unchanged: 111/64.
 
+## Generalization track (permanent requirement, see docs/generalization-policy.md)
+- Code audit: no employer, sender or subject strings from either audited mailbox appear in rules; tests use invented `.example` names.
+- **Sealed fixture A** (14 fictional mailboxes, 136 scored messages, written by an independent subagent that never saw the repo; kept outside the repo). First run, before any change: in-pipeline precision 96.1%, recall 72.1%, stage type 75.5%, grouping precision 95.6% / recall 87.8%. Cause analysis: all 26 misses were "reader produced no event" (plain subjects, hiring act only in the body); the refinement gates excluded **no** legitimate look-alike. Fixture A is now **contaminated**.
+- General pattern fixed: **body-act fact** (`bodyAct`, lib/reliability/facts.ts): a person who writes a plain subject and states one explicit hiring act (offer, invitation to interview/call, confirmed or rescheduled interview) addressed to the reader in the body. Guards: greeting/addressee, hiring context words, advice/marketing/discount lists, marketing footer vetoes unless the act names the reader's own application/interview. Low confidence (0.6) with a review reason. Positive and negative tests use original wording. Re-run on contaminated A (not evidence): recall 79%, precision 96%.
+- Remaining recall gap is the deterministic reader's reliance on subject and platform cues. A second reader (a model) is the principled fix; it needs a separate decision on a hosted/paid model or private-data use, which this mission does not have. Nothing here is model training; all changes are deterministic rules.
+- **Sealed fixture B** (fresh author, tempting negatives) is the unbiased measurement for this change; result recorded below.
+
 ## Next executable tasks
 1. (done) accepted offers; (done) job-only counts with scholarships listed apart.
 3. Contradiction review item (missing offer, active/closed duplicates) and Today priority.

@@ -3,7 +3,7 @@ import test from "node:test";
 import type { RecruitingEmail } from "../recruiting/types.ts";
 import { isNearMiss } from "./flags.ts";
 import { readMail } from "./assess.ts";
-import { explicitOffer } from "./facts.ts";
+import { bodyAct, explicitOffer } from "./facts.ts";
 
 // Synthetic text, fictional employers. Negative cases matter as much as positive ones: a fact must not fire on look-alike wording.
 const mail = (id: string, from: string, subject: string, body: string, at: string): RecruitingEmail => ({ id, threadId: id, from, subject, bodyText: body, receivedAt: new Date(at), outbound: false });
@@ -62,4 +62,25 @@ test("explicitOffer ignores advice, non-employer senders and bodies without an o
   assert.equal(explicitOffer(offerMail("Congratulations on your job offer? 5 negotiation tips", "offer")), null);
   assert.equal(explicitOffer(offerMail("Congratulations on your job offer!", "offer", "Friend <a@gmail.com>")), null);
   assert.equal(explicitOffer(offerMail("Congratulations on your job offer!", "nothing here")), null);
+});
+
+const act = (subject: string, body: string, from = "Jo Park <jo@brightwell.example>") => bodyAct(offerMail(subject, body, from));
+
+test("bodyAct: a plain-subject message that makes an offer, invites or confirms an interview is read from the body", () => {
+  assert.equal(act("Update", "Hi Mia, we'd like to offer you the Support Analyst position. Details follow.")?.type, "offer");
+  assert.equal(act("Hello", "Hi Mia, we will move forward with scheduling a call about your application. Send me times.")?.type, "interview_invite");
+  assert.equal(act("Re: hello", "Hi Mia, you're booked for Tuesday at 3pm for the interview. Zoom link below.")?.type, "interview_scheduled");
+  assert.equal(act("Great news", "Hi Mia, we are pleased to extend an offer for the internship. Welcome aboard.")?.type, "offer");
+});
+
+test("bodyAct: marketing, sales, advice and other people's offers are not acts addressed to the reader", () => {
+  assert.equal(act("Special", "Hi Mia, we'd like to offer you 20% off our interview coaching. Unsubscribe here.")?.type, undefined);
+  assert.equal(act("Demo", "Hi Mia, can we schedule a call to show you our payroll software?")?.type, undefined, "no hiring context");
+  assert.equal(act("Weekly", "Hello, five tips for when you receive a job offer. Manage your preferences or unsubscribe.")?.type, undefined);
+  assert.equal(act("Hi", "We would like to offer you the position of reader of this newsletter")?.type, undefined, "no greeting or addressee");
+  assert.equal(act("Lunch", "Hi Mia, can we schedule a chat about lunch on Friday?")?.type, undefined, "no hiring context");
+});
+
+test("bodyAct: a marketing footer does not veto an act that names the reader's own interview or application", () => {
+  assert.equal(act("Hi", "Hi Mia, could you do a video interview with us next week about your application? Unsubscribe from marketing emails")?.type, "interview_invite");
 });
