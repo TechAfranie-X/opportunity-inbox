@@ -18,14 +18,14 @@ test("applicant-tracking and job-board vendors are never the employer", () => {
 });
 
 test("curated full-colour assets take priority, resolve through aliases, and carry their fit", () => {
-  assert.equal(brandFor("Harvey")?.kind, "image");
+  assert.equal(brandFor("Harvey")?.source, "curated");
   assert.equal(brandFor("Harvey AI")?.key, "harvey");
-  assert.equal(brandFor("Ramp")?.kind, "image");
+  assert.equal(brandFor("Ramp")?.source, "curated");
   assert.equal(brandFor("Google LLC")?.key, "google");
   assert.equal((brandFor("Harvey") as { fit: string }).fit, "bleed");
   const d = brandFor("Datadog");
-  assert.equal(d?.kind, "glyph");
-  assert.equal((d as { color: string }).color, "632CA6");
+  assert.equal(d?.source, "simple-icons");
+  assert.equal(d?.src, "/brands/si/datadog.svg");
   assert.equal(brandFor("Everpure"), null);
 });
 
@@ -35,4 +35,16 @@ test("light brands are flagged for a dark tile; dark brands stay on the neutral 
   assert.equal(isLightBrand("CCFF00"), true);
   assert.equal(isLightBrand("632CA6"), false);
   assert.equal(isLightBrand("000000"), false);
+});
+
+test("descriptors are removed from the ends of a name, never invented: News, years, legal and 'Insurance Company'", async () => {
+  const { lookupKeys } = await import("./names.ts");
+  assert.ok(lookupKeys("CodePath News").includes("codepath"));
+  assert.ok(lookupKeys("Ramp 2025").includes("ramp"));
+  assert.ok(lookupKeys("Arcesium LLC").includes("arcesium"));
+  assert.ok(lookupKeys("Allstate Insurance Company").includes("allstate"));
+  assert.ok(lookupKeys("Volunteer at CodePath").includes("codepath"));
+  assert.ok(lookupKeys("Stanford University").includes("stanford"));
+  assert.ok(lookupKeys("Susquehanna (Do Reply)").includes("susquehanna"));
+  assert.equal(brandFor("Ramp 2025")?.key, "ramp");
 });

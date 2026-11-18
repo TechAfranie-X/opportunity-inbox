@@ -1,4 +1,4 @@
-import { brandFor, isLightBrand } from "@/lib/identity/resolve";
+import { brandFor } from "@/lib/identity/resolve";
 import { entityState, monogram, type EntityState } from "@/lib/recruiting/presentation";
 import type { Opportunity } from "@/lib/recruiting/types";
 
@@ -25,16 +25,12 @@ export function EntityMark({ opportunity, name, state: given, size = "md" }: { o
   const company = opportunity ? opportunity.company : name ?? null;
   const brand = state === "unknown" ? null : brandFor(company);
   const s = SIZE[size];
-  const tone = brand?.kind === "glyph" && isLightBrand(brand.color) ? "dark" : brand ? (brand.kind === "image" && brand.fit === "bleed" ? "bleed" : "light") : state === "unknown" ? "none" : "plain";
+  const tone = brand?.light ? "dark" : brand ? (brand.fit === "bleed" ? "bleed" : "light") : state === "unknown" ? "none" : "plain";
   return (
     <span className={`logo-tile ${s.box}`} data-state={state} data-tone={tone === "dark" || tone === "plain" ? tone : undefined} title={LABEL[state] || undefined}>
-      {brand?.kind === "image" ? (
+      {brand ? (
         // eslint-disable-next-line @next/next/no-img-element -- bundled, fixed-size brand asset; nothing to optimize or lazy-load
-        <img src={brand.src} alt="" width={s.px} height={s.px} draggable={false} className={brand.fit === "bleed" ? "h-full w-full object-cover" : `${s.mark} object-contain`} />
-      ) : brand?.kind === "glyph" ? (
-        <svg viewBox="0 0 24 24" fill={`#${brand.color}`} aria-hidden className={s.mark}>
-          <path d={brand.path} />
-        </svg>
+        <img src={brand.src} alt="" width={s.px} height={s.px} draggable={false} loading="lazy" decoding="async" className={brand.fit === "bleed" ? "h-full w-full object-cover" : `${s.mark} object-contain`} />
       ) : (
         <span aria-hidden>{monogram(company)}</span>
       )}

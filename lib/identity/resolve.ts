@@ -1,5 +1,7 @@
 import { BRAND_ASSETS } from "./brand-assets.ts";
-import { LOGOS } from "./logos.ts";
+import { lookupKeys } from "./names.ts";
+import { SI_INDEX } from "./si-index.generated.ts";
+import { WD_LOGOS } from "./wd-logos.generated.ts";
 
 /**
  * Company identity as a presentation asset. Input: the already-resolved employer name (never email text). Output: a bundled public mark, or null.
@@ -61,26 +63,33 @@ const ALIASES: Record<string, string> = {
   "hashi corp": "hashicorp",
 };
 
-export type Brand =
-  | { kind: "image"; key: string; name: string; src: string; fit: "bleed" | "inset" }
-  | { kind: "glyph"; key: string; name: string; path: string; color: string };
+export type Brand = { kind: "image"; key: string; name: string; src: string; fit: "bleed" | "inset"; /** the mark is too light for the neutral tile: it goes on a dark one */ light: boolean; source: "curated" | "simple-icons" | "wikidata" };
 
 const ASSET_ALIAS = new Map<string, string>();
 for (const [k, a] of Object.entries(BRAND_ASSETS)) { ASSET_ALIAS.set(k, k); for (const al of a.aliases ?? []) ASSET_ALIAS.set(al, k); }
 
 /**
- * The mark for a company, from its CANONICAL resolved name (never the other way round: a mark never chooses a company). Order: curated full-colour
- * asset, then the bundled single-colour glyph in its brand colour, else null (the monogram). Exact normalized match only; vendors never match.
+ * The mark for a company, from its CANONICAL resolved name (never the other way round: a mark never chooses a company). Layers, in order:
+ *   1. curated full-colour assets (brand-assets.ts), 2. Simple Icons, the whole set (CC0), as one coloured SVG per brand,
+ *   3. the Wikidata/Commons logo pack (public-domain files, chosen by popularity), else null (the monogram).
+ * Lookup keys come from `lookupKeys` (descriptors such as "News", years and "Insurance Company" are removed from the ends, nothing is ever added);
+ * exact normalized match only; vendors never match. Everything is bundled: no network at run time.
  */
 export function brandFor(company: string | null | undefined): Brand | null {
   if (!company) return null;
   const n = normalizeCompany(company);
   if (!n || VENDOR_KEYS.has(n.replace(/ /g, ""))) return null;
-  const key = ALIASES[n] ?? n.replace(/ /g, "");
-  const asset = Object.hasOwn(BRAND_ASSETS, key) ? key : ASSET_ALIAS.get(key);
-  if (asset) { const a = BRAND_ASSETS[asset]; return { kind: "image", key: asset, name: a.name, src: a.src, fit: a.fit }; }
-  const hit = Object.hasOwn(LOGOS, key) ? LOGOS[key] : undefined;
-  return hit ? { kind: "glyph", key, name: hit.name, path: hit.path, color: hit.color } : null;
+  for (const k0 of lookupKeys(company)) {
+    const key = ALIASES[k0] ?? ALIASES[n] ?? k0;
+    if (VENDOR_KEYS.has(key)) continue;
+    const asset = Object.hasOwn(BRAND_ASSETS, key) ? key : ASSET_ALIAS.get(key);
+    if (asset) { const a = BRAND_ASSETS[asset]; return { kind: "image", key: asset, name: a.name, src: a.src, fit: a.fit, light: false, source: "curated" }; }
+    const si = Object.hasOwn(SI_INDEX, key) ? SI_INDEX[key] : undefined;
+    if (si) return { kind: "image", key, name: company, src: `/brands/si/${si[0]}.svg`, fit: "inset", light: isLightBrand(si[1]), source: "simple-icons" };
+    const wd = Object.hasOwn(WD_LOGOS, key) ? WD_LOGOS[key] : undefined;
+    if (wd) return { kind: "image", key, name: company, src: `/brands/wd/${wd}`, fit: "inset", light: false, source: "wikidata" };
+  }
+  return null;
 }
 
 /** Brands light enough that their colour would vanish on the neutral tile (Snapchat yellow, Robinhood lime, Sony white): they sit on a dark tile instead. */

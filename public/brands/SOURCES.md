@@ -20,3 +20,7 @@ Single-colour glyphs for ~90 other companies (drawn in their official brand colo
 
 Rejected after review: anduril, scale, janestreet, mercury, microsoft (placeholder, white-on-transparent or not a logo).
 To add a company: fetch, look at it, add an entry to brand-assets.ts, and say whether it is an app-style icon ("bleed") or a free-standing mark ("inset").
+
+## Packs
+- `si/`: all Simple Icons 14.15.0 (CC0), one SVG per brand with the official colour baked in; built by scripts/identity/build-icon-pack.py.
+- `wd/`: public-domain/CC0 logo files from Wikimedia Commons referenced by Wikidata (P154), ordered by popularity (Wikipedia sitelinks); built by scripts/identity/build-logo-pack.py (resumable) and indexed by wd-manifest.py. Trademarks remain their owners'.
