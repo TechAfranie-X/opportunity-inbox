@@ -108,7 +108,10 @@ export function refineEvents(events: EffectiveEvent[]): Refined {
   for (let i = 0; i < kept.length; i++) {
     const e = kept[i];
     const at = e.company ? offerAt.get(companyKey(e.company)) : undefined;
-    if (at !== undefined && !settled(e) && !e.outbound && e.signals.includes(NEAR_MISS) && e.occurredAt.getTime() >= at && ONBOARDING.test(e.subject ?? "")) {
+    if (at !== undefined && !settled(e) && !e.outbound && e.occurredAt.getTime() >= at && ONBOARDING.test(e.subject ?? "") && !e.signals.includes(NEAR_MISS) && (e.type === "interview_invite" || e.type === "follow_up" || e.type === "recruiter_outreach")) {
+      // after an offer, "welcome / screening satisfied / start date" is onboarding, not an interview or a goodbye: retype it and settle the doubt that read it as a farewell
+      kept[i] = { ...e, type: "status_update", signals: [...e.signals, "onboarding (refined)"], reviewReasons: (e.reviewReasons ?? []).filter((x) => !x.startsWith("conflict:")) };
+    } else if (at !== undefined && !settled(e) && !e.outbound && e.signals.includes(NEAR_MISS) && e.occurredAt.getTime() >= at && ONBOARDING.test(e.subject ?? "")) {
       kept[i] = { ...e, signals: withoutNearMiss(e.signals).concat("after offer (refined)"), reviewReasons: (e.reviewReasons ?? []).filter((x) => !x.startsWith("possible:")), confidence: Math.max(e.confidence, 0.7), fieldConfidence: { type: Math.max(0.7, e.fieldConfidence?.type ?? 0), company: e.fieldConfidence?.company ?? e.confidence, role: e.fieldConfidence?.role ?? e.confidence } };
     }
   }

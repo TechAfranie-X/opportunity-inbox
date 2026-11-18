@@ -136,3 +136,20 @@ test("scholarships and mentorship programs are typed, jobs and internships stay 
   const opps = buildOpportunities([ev({ type: "applied", day: 1, subject: "General Application Submitted: Merit Scholarship", company: "Fundco" })]);
   assert.equal(opps[0].kind, "scholarship");
 });
+
+test("after an offer, onboarding mail is not an interview and not a goodbye", () => {
+  const events = [
+    ev({ type: "offer", day: 10, subject: "Congratulations on your job offer!" }),
+    { ...ev({ type: "interview_invite", day: 40, subject: "Welcome to Acme - Pre-employment Screening Satisfied" }), reviewReasons: ["conflict: the wording reads like a goodbye, but it was read as \"interview invite\""] },
+  ];
+  const { events: refined } = refineEvents(events);
+  assert.equal(refined[1].type, "status_update");
+  assert.deepEqual(refined[1].reviewReasons, []);
+  const [o] = buildOpportunities(refined);
+  assert.equal(o.stage, "offer");
+});
+
+test("the same wording with no offer on record is left to the reader and the review queue", () => {
+  const e = { ...ev({ type: "interview_invite", day: 40, subject: "Welcome to Acme - Pre-employment Screening Satisfied" }), reviewReasons: ["conflict: x"] };
+  assert.equal(refineEvents([e]).events[0].type, "interview_invite");
+});
