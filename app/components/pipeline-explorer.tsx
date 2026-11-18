@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { EntityMark } from "@/app/components/entity-mark";
 import { useWorkspace } from "@/app/components/workspace";
 import { eventNeedsReview } from "@/lib/recruiting/opportunity";
-import { STAGE_LABEL, compactWhen, relativeDay, roleLine } from "@/lib/recruiting/format";
+import { STAGE_LABEL, compactWhen, relativeDay, roleLine, isJob } from "@/lib/recruiting/format";
 import { lastMeaningful, nextMoment } from "@/lib/recruiting/history";
 import type { Opportunity, Stage } from "@/lib/recruiting/types";
 
@@ -29,8 +29,10 @@ export function PipelineExplorer({ initialStage, controlledStage }: { initialSta
   const [query, setQuery] = useState("");
   const refs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
 
-  const activeOpps = useMemo(() => opportunities.filter((o) => o.status === "active"), [opportunities]);
-  const closedOpps = useMemo(() => opportunities.filter((o) => o.status === "closed"), [opportunities]);
+  const jobs = useMemo(() => opportunities.filter(isJob), [opportunities]);
+  const others = useMemo(() => opportunities.filter((o) => !isJob(o)), [opportunities]);
+  const activeOpps = useMemo(() => jobs.filter((o) => o.status === "active"), [jobs]);
+  const closedOpps = useMemo(() => jobs.filter((o) => o.status === "closed"), [jobs]);
   const byStage = useMemo(() => {
     const m = new Map<Stage, Opportunity[]>();
     for (const s of STAGES) m.set(s, []);
@@ -137,6 +139,13 @@ export function PipelineExplorer({ initialStage, controlledStage }: { initialSta
       <div id="stage-panel" role="tabpanel" aria-labelledby={`tab-${view}`} key={`${view}-${q}`} className="fade-in mt-6">
         {body}
       </div>
+      {others.length > 0 ? (
+        <section className="mt-10" aria-label="Scholarships, fellowships and programs">
+          <h2 className="t-heading">Scholarships, fellowships and programs</h2>
+          <p className="t-meta mt-1 max-w-[56ch] text-ink-2">Applications that are not jobs or internships. They are kept here and are not counted in your pipeline.</p>
+          <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">{others.filter(match).map(card)}</div>
+        </section>
+      ) : null}
     </div>
   );
 }

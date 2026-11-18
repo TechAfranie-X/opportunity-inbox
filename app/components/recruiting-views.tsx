@@ -24,6 +24,7 @@ import {
 
   relativeDay,
   toInputValue,
+  isJob,
   roleLine,
 } from "@/lib/recruiting/format";
 import { annotateTimeline, nextMoment, peopleFor, pulse, stageSince } from "@/lib/recruiting/history";
@@ -204,7 +205,7 @@ function ScheduleRows({ items, now }: { items: ActionItem[]; now: Date }) {
 /** Where everything stands: a count, one flat segmented bar (quantity, not rank), and the stages. Each row opens that stage. */
 function PipelineCard({ opportunities, pipelineHref }: { opportunities: Opportunity[]; pipelineHref: string }) {
   const rows = pulse(opportunities);
-  const active = opportunities.filter((o) => o.status === "active").length;
+  const active = opportunities.filter((o) => o.status === "active" && isJob(o)).length;
   const total = Math.max(1, rows.reduce((n, r) => n + r.count, 0));
   if (opportunities.length === 0) {
     return (

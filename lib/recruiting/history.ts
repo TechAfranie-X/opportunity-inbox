@@ -151,7 +151,7 @@ export const PULSE_STAGES: Stage[] = ["applied", "recruiter", "assessment", "int
 
 /** Active opportunities per stage, in funnel order. */
 export function pulse(opportunities: Opportunity[]): Array<{ stage: Stage; count: number }> {
-  const active = opportunities.filter((o) => o.status === "active");
+  const active = opportunities.filter((o) => o.status === "active" && (o.kind ?? "job") === "job");
   return PULSE_STAGES.map((stage) => ({ stage, count: active.filter((o) => o.stage === stage).length }));
 }
 

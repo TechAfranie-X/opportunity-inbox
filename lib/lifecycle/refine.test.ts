@@ -170,3 +170,15 @@ test("an offer followed by employer onboarding is accepted: no pending decision 
   assert.equal(open.outcome, "offer");
   assert.equal(buildActions([open], new Date(base + 12 * 86_400_000), new Set()).filter((a) => a.kind === "offer_decision").length, 1, "a bare offer still needs a decision");
 });
+
+test("pipeline counts include job applications only; scholarships stay available but apart", async () => {
+  const { pulse } = await import("../recruiting/history.ts");
+  const { isJob } = await import("../recruiting/format.ts");
+  const opps = buildOpportunities([
+    ev({ type: "applied", day: 1, subject: "Thank you for applying", company: "Acme", role: "Software Engineer Intern" }),
+    ev({ type: "applied", day: 2, subject: "General Application Submitted: Merit Scholarship", company: "Fundco" }),
+  ]);
+  assert.equal(opps.length, 2);
+  assert.equal(opps.filter(isJob).length, 1);
+  assert.equal(pulse(opps).find((r) => r.stage === "applied")!.count, 1);
+});
