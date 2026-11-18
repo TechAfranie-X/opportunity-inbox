@@ -31,8 +31,12 @@ One dominant thing per screen; everything else recedes or folds.
 | Landing | What is this and can I trust it? | The whole transformation as the picture: Gmail on the left, Pipeline cards in the middle, Today's actions on the right, built from the product's own styles; then Today, Pipeline, History in one line each, and four trust facts. |
 
 ## Company identity
-We never fetch or invent a logo (that would send company names to a third party, and guess when unsure). The mark is a monogram, and its treatment says how much we know:
-**known** (solid), **likely** (dashed, "needs confirmation"), **unknown** (dashed question mark). A strong suggestion never looks identical to having no information.
+A reusable, local system (`lib/identity`): the resolved employer name is normalised and matched exactly against a bundled registry of public brand marks
+(single-colour glyphs, CC0 artwork from simple-icons; trademarks remain their owners'). Nothing is fetched at run time, so no company name leaves the
+machine and a mark can never load slowly or break layout. Applicant-tracking and job-board vendors are never the employer and never get a mark.
+**Known** company with a mark: the mark in a quiet monochrome tile (ink on tint, so it works in both themes); without a mark: a monogram, never a guess.
+**Likely**: the same, dashed and softer, announced as needing confirmation. **Unknown**: a dashed placeholder. The name is always written beside the mark.
+To add a company, add an entry to `lib/identity/logos.ts`.
 
 ## Navigation
 Two destinations: Today and Pipeline. Search (⌘K), a review status ("3 need review", only when something important needs you), and the account menu. Activity is reached from Today ("All activity") and search.

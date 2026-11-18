@@ -2,10 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { EntityMark } from "@/app/components/entity-mark";
 import { useWorkspace } from "@/app/components/workspace";
+import type { Opportunity } from "@/lib/recruiting/types";
 import { STAGE_LABEL } from "@/lib/recruiting/format";
 
-type Entry = { id: string; title: string; hint: string; run: () => void };
+type Entry = { id: string; title: string; hint: string; opp?: Opportunity; run: () => void };
 
 /** ⌘K: jump to a page or open any opportunity. A control surface, so it carries the material. */
 export function CommandPalette() {
@@ -34,6 +36,7 @@ function PaletteDialog() {
     const opps: Entry[] = opportunities.map((o) => ({
       id: o.key,
       title: o.company,
+      opp: o,
       hint: `${o.role ?? "No role"} · ${o.status === "closed" ? "Closed" : STAGE_LABEL[o.stage]}`,
       run: () => {
         setPaletteOpen(false);
@@ -86,9 +89,12 @@ function PaletteDialog() {
                 type="button"
                 onMouseMove={() => setCursor(i)}
                 onClick={entry.run}
-                className={`flex w-full items-baseline justify-between gap-4 rounded-[var(--r-sm)] px-3 py-2 text-left transition-colors ${i === cursor ? "bg-wash" : ""}`}
+                className={`flex w-full items-center justify-between gap-4 rounded-[var(--r-sm)] px-3 py-2 text-left transition-colors ${i === cursor ? "bg-wash" : ""}`}
               >
-                <span className="font-medium tracking-tight">{entry.title}</span>
+                <span className="flex min-w-0 items-center gap-2.5">
+                  {entry.opp ? <EntityMark opportunity={entry.opp} size="sm" /> : null}
+                  <span className="truncate font-medium tracking-tight">{entry.title}</span>
+                </span>
                 <span className="t-meta truncate text-ink-3">{entry.hint}</span>
               </button>
             </li>

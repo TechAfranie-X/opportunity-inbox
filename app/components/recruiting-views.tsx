@@ -148,7 +148,7 @@ function ActionRows({ items, opportunities, now, editable }: { items: ActionItem
               <div className="flex min-w-0 flex-1 items-center gap-3.5">
                 {opp ? <EntityMark opportunity={opp} size="lg" /> : <EntityMark name={item.company} size="lg" />}
                 <div className="min-w-0">
-                  <OpenOpportunity opportunityKey={item.opportunityKey} className="row-link block truncate font-medium tracking-tight">
+                  <OpenOpportunity opportunityKey={item.opportunityKey} className="row-link block font-medium tracking-tight sm:truncate">
                     {summaryLine(item, now)}
                   </OpenOpportunity>
                   <p className="t-meta mt-0.5 truncate text-ink-2">
@@ -157,7 +157,7 @@ function ActionRows({ items, opportunities, now, editable }: { items: ActionItem
                   </p>
                 </div>
               </div>
-              <span className="pill shrink-0" data-tone={critical ? "critical" : pill.tone}>
+              <span className="pill shrink-0 max-sm:hidden" data-tone={critical ? "critical" : pill.tone}>
                 {pill.label}
               </span>
               <div className="row-end w-6 shrink-0">
