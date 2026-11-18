@@ -3,10 +3,11 @@
 Branch `mvp`. Updated 2026-11-18. "Implemented" = code and tests exist. "Verified" = how it was independently checked (unit / benchmark / stored replay / browser). Live Gmail and the second account in a browser were never available in this environment.
 
 ## Current metrics
-- Tests 593/593; typecheck, lint, build, e2e (keyword and sweep modes) pass.
-- Lifecycle benchmark (development): 56 pass, 1 known failure, 3 pending (was 34/23/3 at Milestone 1, 52/5/3 after Milestone 2). Held-out set: last run at Milestone 2 (grouping 100%/100%); not re-run since, release gate only.
-- Known failure: G04 (stored-shape case: cancelled interview persisted as `interview_scheduled`, type confidence 0.4). New mail is read correctly by the ingestion fact (I01 passes); rows stored before this change are not re-read.
-- Second account replayed read-only: 24 active -> 16 active. First account unchanged: 111 active / 64 closed.
+- Tests 595/595; typecheck, lint, build, e2e (keyword and sweep) pass.
+- Lifecycle benchmark (development): 57 pass, 0 known failures, 3 pending (was 34/23/3 at Milestone 1). `known-failures.json` is empty.
+- Held-out (synthetic, seed 20261118), run at this checkpoint: grouping precision/recall 100%/100%, terminal evidence 18/18, regression 55/55. Disclosure: the held-out "cancelled interview" family had been failing and its failure text was seen before the final rule (undated doubtful interview wording alone holds no pipeline place) was written; the rule is general and was also demanded by dev case G04, but this family is no longer a pristine, untouched measurement. A new held-out seed should be generated before any external claim.
+- Real data replayed read-only: account 2 24 -> 16 active; account 1 unchanged at 111/64 in the CLI (the browser shows 106/62 because scholarships/fellowships/programs are now listed apart).
+- Idempotency: the database enforces one row per (user, Gmail message id); no duplicates exist.
 
 ## Architecture now (read path)
 Gmail search (keyword; `DISCOVERY=sweep` optional) -> frozen rule reader + reliability layer (`lib/reliability/assess.ts`) -> **ingestion facts** (`lib/reliability/facts.ts`: cancellation, explicit deadline, generic results) -> stored events (metadata only) -> **evidence refinement** (`lib/lifecycle/refine.ts`: context gate, offers, entity cleanup, onboarding, kinds) -> Identity v2 grouping (`identity.ts`) -> lifecycle reducer (`reducer.ts`) -> actions / briefing / review.
@@ -35,11 +36,10 @@ Gmail search (keyword; `DISCOVERY=sweep` optional) -> frozen rule reader + relia
 F-01 G01 re-apply next cycle; F-02/F-09 G02 season merge + offer actions; F-03/F-09/F-11 G07 expired assessment; F-04 G08 expired after reminders; F-05/F-10 G03 two roles one thread; F-06/F-11 G04 cancelled interview (ingestion fixed; stored-shape case known-failing); F-07 G05 externship vs internship; F-08 G09 non-recruiting assessment; F-10/F-14 G06 two receipts one thread. F-12 and F-13 are not mapped to a benchmark case in the repository (the original report text is not in the repo): **status unknown, to be mapped when the report is available**. All mapped cases pass except G04.
 
 ## Commits (all pushed to `mvp`)
-f9ba482 Milestone 2 · 2ab821f Gmail routing · d7bafd2 refinement layer · 9958354 kinds + Today copy · 6a40fbd onboarding + tracker · (this record's commit adds ingestion facts)
+f9ba482 Milestone 2 · 2ab821f Gmail routing · d7bafd2 refinement layer · 9958354 kinds + Today copy · 6a40fbd onboarding + tracker · 6d752ec ingestion facts · 19b7aac accepted offers · 9f1c736 job-only counts · (next) doubtful undated interview rule
 
 ## Next executable tasks
-1. Accepted/completed lifecycle state (an accepted offer with onboarding should leave "Offer: needs decision", show as accepted).
-2. Count only job/internship kinds in pipeline totals; filter by kind.
+1. (done) accepted offers; (done) job-only counts with scholarships listed apart.
 3. Contradiction review item (missing offer, active/closed duplicates) and Today priority.
 4. Sodexo-class: persist small derived facts at ingestion (role from body) with a fresh-extraction pass.
 5. Mine duplicate stored rows (same message twice) and verify idempotency on real data.

@@ -125,8 +125,13 @@ test("reducer: doubtful readings never advance a stage while credible ones exist
   const doubtful = ev({ type: "interview_scheduled", day: 5, fc: 0.4 });
   assert.equal(reduceLifecycle([ev({ type: "applied", day: 0 }), doubtful]).stage, "applied");
   assert.equal(reduceLifecycle([ev({ type: "applied", day: 0 }), { ...doubtful, confirmed: true }]).stage, "interview");
-  // nothing credible at all: the doubtful reading is shown provisionally (and reviewed), not hidden
-  assert.deepEqual(reduceLifecycle([doubtful]).status, "active");
+  // nothing credible at all: a doubtful reading WITH a date is shown provisionally (and reviewed), not hidden
+  assert.deepEqual(reduceLifecycle([{ ...doubtful, eventDate: new Date(base + 9 * 86_400_000), dateKind: "scheduled" }]).status, "active");
+  // ...but an interview resting only on doubtful, UNDATED wording (typically a cancellation or a vague note) holds no place in the pipeline; review asks about it
+  const undated = reduceLifecycle([doubtful]);
+  assert.equal(undated.status, "closed");
+  assert.equal(undated.closedBy, "not_recruiting");
+  assert.equal(reduceLifecycle([{ ...doubtful, confirmed: true }]).status, "active", "a person's confirmation brings it back");
 });
 
 test("reducer: assessment results alone are not a candidacy; with any other evidence they are", () => {

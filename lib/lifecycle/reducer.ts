@@ -61,6 +61,11 @@ export function reduceLifecycle(events: EffectiveEvent[], policy: Policy = DEFAU
     const firstOffer = events.find((e) => e.type === "offer" && !e.outbound && usable(e));
     if (firstOffer && events.some((e) => !e.outbound && e.occurredAt.getTime() > firstOffer.occurredAt.getTime() && (e.signals.includes("onboarding (refined)") || e.signals.includes("after offer (refined)")))) outcome = "accepted";
   }
+  // An interview that rests ONLY on doubtful, undated wording ("interview" with no time, read at low confidence: typically a cancellation or a vague note) is not evidence
+  // that an interview exists. It is kept as history and put to the person in review; it does not hold a place in the pipeline until they confirm it.
+  if (!ended && !credibleStage && events.length > 0 && events.every((e) => (e.type === "interview_scheduled" || e.type === "interview_invite") && !e.eventDate && !isCredible(e, policy))) {
+    return { stage, outcome: null, status: "closed", closedBy: "not_recruiting" };
+  }
   if (ended) return { stage: "closed", outcome, status: "closed", closedBy: ended };
   if (expired) return { stage, outcome: "expired", status: "closed", closedBy: "expired" };
   // results and receipts for an assessment are not, by themselves, evidence of an application; an employer's update or nudge is (the review queue decides the rest)

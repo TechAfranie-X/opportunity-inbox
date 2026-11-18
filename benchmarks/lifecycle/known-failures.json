@@ -1,6 +1,4 @@
 {
  "note": "Failing tests at the recorded baseline. A test leaves this list only when it passes. `--check` fails on new failures and on entries that now pass.",
- "failing": [
-  "[terminal] G04-cancelled-interview: active g04-a1 - an interview the employer cancelled must not leave an active Interview opportunity"
- ]
+ "failing": []
 }
