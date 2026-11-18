@@ -27,6 +27,8 @@ type WorkspaceContext = {
   setPaletteOpen: (open: boolean) => void;
   /** company key -> URL of a first-party brand asset cached locally (lib/brand). Read-only for rendering. */
   brands: Record<string, string>;
+  /** The connected Google account, so source links open the right Gmail account. Null for the demo and the sample mailbox. */
+  gmailAccount: string | null;
 };
 
 const Ctx = createContext<WorkspaceContext | null>(null);
@@ -80,6 +82,7 @@ export function WorkspaceProvider({
   editable,
   persistSelection = true,
   brands = NO_BRANDS,
+  gmailAccount = null,
   children,
 }: {
   opportunities: Opportunity[];
@@ -89,6 +92,7 @@ export function WorkspaceProvider({
   /** Mirror the open opportunity in `?o=`. The scripted presentation turns this off so a refresh always starts clean. */
   persistSelection?: boolean;
   brands?: Record<string, string>;
+  gmailAccount?: string | null;
   children: ReactNode;
 }) {
   const param = useSyncExternalStore(subscribeUrl, readSelection, noSelection);
@@ -119,8 +123,8 @@ export function WorkspaceProvider({
   }, [paletteOpen, selectedKey, close]);
 
   const value = useMemo(
-    () => ({ opportunities, now, basePath, editable, selectedKey, open, close, paletteOpen, setPaletteOpen, brands }),
-    [opportunities, now, basePath, editable, selectedKey, open, close, paletteOpen, brands],
+    () => ({ opportunities, now, basePath, editable, selectedKey, open, close, paletteOpen, setPaletteOpen, brands, gmailAccount }),
+    [opportunities, now, basePath, editable, selectedKey, open, close, paletteOpen, brands, gmailAccount],
   );
 
   return (

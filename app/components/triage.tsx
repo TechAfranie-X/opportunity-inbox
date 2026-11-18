@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { confirmEventAction, ignoreEventAction } from "@/app/actions";
 import { EntityMark } from "@/app/components/entity-mark";
+import { GmailLink } from "@/app/components/gmail-link";
 import { IconCheck, IconPencil, IconSlash } from "@/app/components/icons";
 import type { EntityState } from "@/lib/recruiting/presentation";
 
@@ -21,7 +22,8 @@ export type TriageItem = {
   entity: EntityState;
   reasons: string[];
   source: string;
-  gmailHref: string | null;
+  /** The Gmail conversation to open, or null (sample mailbox). The link itself is built client-side for the connected account. */
+  gmailThread: string | null;
 };
 
 /**
@@ -116,8 +118,8 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
           <div className="min-w-0">
             <p className="t-meta text-ink-3">From the email</p>
             <p className="mt-1 truncate text-ink-2">{current.source}</p>
-            {current.gmailHref ? (
-              <a className="link-quiet t-meta mt-1 inline-block" href={current.gmailHref} target="_blank" rel="noreferrer">Open in Gmail</a>
+            {current.gmailThread ? (
+              <GmailLink className="link-quiet t-meta mt-1 inline-block" threadId={current.gmailThread}>Open in Gmail</GmailLink>
             ) : null}
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { EntityMark } from "@/app/components/entity-mark";
+import { GmailLink } from "@/app/components/gmail-link";
 import { JourneyLine } from "@/app/components/journey-line";
 import { useWorkspace } from "@/app/components/workspace";
 import { annotateTimeline, nextMoment, peopleFor, stageSince } from "@/lib/recruiting/history";
@@ -10,7 +11,7 @@ import {
   daysBetween,
   formatFloating,
   formatWhen,
-  gmailThreadUrl,
+
   relativeDay,
 } from "@/lib/recruiting/format";
 
@@ -127,9 +128,9 @@ export function Inspector() {
 
             <div className="flex items-center justify-between gap-4 border-t border-line px-6 py-3.5">
               {editable && latestInbound ? (
-                <a className="link-quiet t-meta" href={gmailThreadUrl(latestInbound.gmailThreadId)} target="_blank" rel="noreferrer">
+                <GmailLink className="link-quiet t-meta" threadId={latestInbound.gmailThreadId}>
                   Open latest email
-                </a>
+                </GmailLink>
               ) : (
                 <span />
               )}

@@ -5,7 +5,7 @@ import { EventEditor } from "@/app/components/recruiting-views";
 import { Triage } from "@/app/components/triage";
 import { isDatabaseConfigured } from "@/lib/db";
 import { toFloating } from "@/lib/recruiting/actions";
-import { EVENT_NOUN, formatDay, gmailThreadUrl } from "@/lib/recruiting/format";
+import { EVENT_NOUN, formatDay } from "@/lib/recruiting/format";
 import { entityState } from "@/lib/recruiting/presentation";
 import { buildReviewQueue } from "@/lib/recruiting/review";
 import { loadWorkspace } from "@/lib/recruiting/store";
@@ -42,7 +42,7 @@ export default async function ReviewPage() {
     entity: item.possible ? (item.event.company ? "likely" : "unknown") : (workspace.opportunities.find((o) => o.key === item.opportunityKey) ? entityState(workspace.opportunities.find((o) => o.key === item.opportunityKey)!) : "unknown"),
     reasons: item.reasons,
     source: `${item.event.senderName || item.event.senderDomain}: ${item.event.subject}`,
-    gmailHref: sample ? null : gmailThreadUrl(item.event.gmailThreadId),
+    gmailThread: sample ? null : item.event.gmailThreadId,
   }));
   const editors = Object.fromEntries(queue.map((item) => [item.event.id, <EventEditor key={item.event.id} event={item.event} compact />]));
 

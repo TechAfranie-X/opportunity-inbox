@@ -1,12 +1,14 @@
 "use client";
 
 import { useId, useState, type ReactNode } from "react";
+import { useGmailUrl } from "@/app/components/gmail-link";
 
 /**
  * Secondary controls for one timeline entry. "Open email" and "Correct" stay out of sight until the
  * entry is hovered or focused (always visible on touch), and the correction form opens in place.
  */
-export function EventTools({ emailHref, children }: { emailHref?: string; children: ReactNode }) {
+export function EventTools({ threadId, children }: { threadId?: string; children: ReactNode }) {
+  const gmailUrl = useGmailUrl();
   const [open, setOpen] = useState(false);
   const id = useId();
   return (
@@ -16,8 +18,8 @@ export function EventTools({ emailHref, children }: { emailHref?: string; childr
           open ? "opacity-100" : "opacity-0"
         }`}
       >
-        {emailHref ? (
-          <a className="link-quiet t-meta" href={emailHref} target="_blank" rel="noreferrer">
+        {threadId ? (
+          <a className="link-quiet t-meta" href={gmailUrl(threadId)} target="_blank" rel="noreferrer">
             Open email
           </a>
         ) : null}

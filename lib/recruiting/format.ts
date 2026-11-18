@@ -50,8 +50,21 @@ export function fromInputValue(value: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-export function gmailThreadUrl(threadId: string) {
-  return `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(threadId)}`;
+const GMAIL_ADDRESS = /^[A-Za-z0-9._%+'-]{1,64}@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
+
+/** The address to put in a Gmail link, or null: only a well-formed address of a real connected account (never the synthetic sample mailbox). */
+export function gmailAccountForLinks(email: string | null | undefined, sample = false): string | null {
+  return !sample && email && GMAIL_ADDRESS.test(email.trim()) ? email.trim() : null;
+}
+
+/**
+ * A link to a Gmail conversation that opens in the CONNECTED account. Gmail numbers signed-in accounts by slot (`/u/0/`, `/u/1/`...) and the slot differs by browser
+ * profile and changes when a person signs in or out, so a slot is never assumed. `authuser=<address>` names the account itself and works in every profile that
+ * has it signed in; if it is not signed in Gmail asks which account to use. Without an account (sample mailbox, demo) the link carries no account hint.
+ */
+export function gmailThreadUrl(threadId: string, account?: string | null) {
+  const who = gmailAccountForLinks(account);
+  return `https://mail.google.com/mail/${who ? `?authuser=${encodeURIComponent(who)}` : ""}#all/${encodeURIComponent(threadId)}`;
 }
 
 const WEEKDAY_LONG: Intl.DateTimeFormatOptions = { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" };

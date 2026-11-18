@@ -12,6 +12,7 @@ import { SyncControl } from "@/app/components/sync-control";
 import { ThemeControl } from "@/app/components/theme-control";
 import { WorkspaceProvider } from "@/app/components/workspace";
 import { cachedBrandUrls } from "@/lib/brand/cache";
+import { connectedGmailAccount } from "@/lib/gmail/account";
 import { lookupKeys } from "@/lib/identity/names";
 import { attentionCount, buildReviewQueue } from "@/lib/recruiting/review";
 import type { EffectiveEvent, Opportunity } from "@/lib/recruiting/types";
@@ -37,7 +38,7 @@ export function firstName(name?: string | null, email?: string | null) {
  * The persistent frame. On large screens a quiet sidebar (Today, Pipeline, Review with its count, Search, and the account at the bottom) and a slim
  * top bar with a wide search; on smaller screens a compact top bar and a plain bottom tab bar.
  */
-export function AppShell({
+export async function AppShell({
   active,
   demo = false,
   user,
@@ -51,7 +52,7 @@ export function AppShell({
 }: {
   active: NavId;
   demo?: boolean;
-  user?: { name?: string | null; email?: string | null };
+  user?: { name?: string | null; email?: string | null; googleSub?: string | null };
   /** Preformatted time of the last sync. */
   updated?: string;
   autoSync?: false | "first" | "stale";
@@ -66,6 +67,7 @@ export function AppShell({
   const reviewCount = demo ? 0 : attentionCount(buildReviewQueue(opportunities, undefined, possible));
   const hrefOf = (item: (typeof NAV)[number]) => (demo ? item.demoHref : item.href);
   const initial = firstName(user?.name, user?.email).charAt(0);
+  const gmailAccount = demo || !user?.googleSub ? null : await connectedGmailAccount(user.googleSub);
   const accountItems = (
     <>
       {user?.email ? <p className="t-meta px-2.5 pb-1 pt-1.5 text-ink-3">{user.email}</p> : null}
@@ -91,7 +93,7 @@ export function AppShell({
   const SIDE_ICON = { today: <IconToday />, pipeline: <IconPipeline /> } as const;
 
   return (
-    <WorkspaceProvider opportunities={opportunities} now={now} basePath={demo ? "/demo" : "/opportunities"} editable={!demo} brands={demo ? undefined : cachedBrandUrls(opportunities.flatMap((o) => lookupKeys(o.company)))}>
+    <WorkspaceProvider opportunities={opportunities} now={now} basePath={demo ? "/demo" : "/opportunities"} editable={!demo} gmailAccount={gmailAccount} brands={demo ? undefined : cachedBrandUrls(opportunities.flatMap((o) => lookupKeys(o.company)))}>
       <aside className="sidebar" aria-label="Primary">
         <Link href={demo ? "/demo" : "/today"} className="flex items-center gap-2.5 px-2.5 pb-5 pt-1 text-[0.9375rem] font-semibold tracking-tight">
           <Mark />

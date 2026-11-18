@@ -9,6 +9,7 @@ import {
 } from "@/app/actions";
 import { Disclose } from "@/app/components/disclose";
 import { EventTools } from "@/app/components/event-tools";
+import { GmailLink } from "@/app/components/gmail-link";
 import { Menu } from "@/app/components/menu";
 import { EntityMark } from "@/app/components/entity-mark";
 import { IconChevron, IconClock, IconPipeline } from "@/app/components/icons";
@@ -20,7 +21,7 @@ import {
   daysBetween,
   formatFloating,
   formatWhen,
-  gmailThreadUrl,
+
   relativeDay,
   toInputValue,
 } from "@/lib/recruiting/format";
@@ -64,9 +65,9 @@ function ActionMenu({
         View history
       </OpenOpportunity>
       {item.sourceThreadId && editable && !lean ? (
-        <a className="menu-item" role="menuitem" href={gmailThreadUrl(item.sourceThreadId)} target="_blank" rel="noreferrer">
+        <GmailLink className="menu-item" role="menuitem" threadId={item.sourceThreadId}>
           Open email
-        </a>
+        </GmailLink>
       ) : null}
       {editable ? (
         <form action={dismissActionAction}>
@@ -543,7 +544,7 @@ function TimelineEntry({ item, previous, now, editable }: { item: ReturnType<typ
           </p>
         </div>
         {editable ? (
-          <EventTools emailHref={gmailThreadUrl(event.gmailThreadId)}>
+          <EventTools threadId={event.gmailThreadId}>
             <EventEditor event={event} />
           </EventTools>
         ) : null}
@@ -655,9 +656,9 @@ export function OpportunityHistory({ opportunity, now, editable }: { opportunity
             </div>
           ) : null}
           {editable && latestInbound ? (
-            <a className="link-quiet inline-block" href={gmailThreadUrl(latestInbound.gmailThreadId)} target="_blank" rel="noreferrer">
+            <GmailLink className="link-quiet inline-block" threadId={latestInbound.gmailThreadId}>
               Open latest email
-            </a>
+            </GmailLink>
           ) : null}
         </div>
       </section>
