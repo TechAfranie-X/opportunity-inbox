@@ -42,6 +42,13 @@ f9ba482 Milestone 2 · 2ab821f Gmail routing · d7bafd2 refinement layer · 9958
 Found and fixed (with regression tests): offer promotion on advice/scam/webinar/template wording; employer merges on generic suffixes (Bank, Financial, Technologies, Services, Group); a past cancellation inside a live confirmation; non-deadline dates ("before November 30") taken as deadlines; newsletter/practice/course/consumer gates firing on genuine employer mail (interview invitations, ATS login codes, a bank employer's application receipt). Tests 599.
 Open, observed on real data: the same fellowship program appears as three cards ("Open Quantum Initiative" with roles "Fellow", "OQI Fellowship", "...Undergraduate Fellowship") because employer and role names differ without a generic-suffix relation; and "SLAC National Accelerator Laboratory" and "Stanford" are one internship split by employer alias (knowledge-based alias; needs the identity graph, not suffix rules).
 
+## Live re-sync of account 2 with DISCOVERY=sweep (2026-11-18)
+Owner approved the sweep and the re-sync. Signed in through Google's account chooser (an already-signed-in browser account; no password entered). 819 messages evaluated, 121 events. Findings that only the sweep exposes, all fixed with tests:
+- **Summer 2027 offer** (Oct 23, MyHR): read and rejected by the frozen reader; `explicitOffer` fact. Live check in Gmail confirmed the message; the Offer card merges with the application; "Open latest email" opens that message under the second account (click-through verified).
+- **Sweep noise**: Expedia fare alerts (8), Slack "sent you messages" (5), American Airlines trip/benefits mail, a flight confirmation typed "interview scheduled", CodePath marketing typed "interview scheduled". Fixed by (a) `marketing` gate for a program's own non-candidacy mail, (b) demotion of weak sweep-only evidence with no candidacy wording in the subject to the folded "possibly recruiting" list.
+- Role work-mode tags ("— Remote (US)") no longer split one role.
+Result for account 2 (replay of stored events): **15 active / 6 closed** (was 24 active at the second audit). Account 1 replay unchanged: 111/64.
+
 ## Next executable tasks
 1. (done) accepted offers; (done) job-only counts with scholarships listed apart.
 3. Contradiction review item (missing offer, active/closed duplicates) and Today priority.

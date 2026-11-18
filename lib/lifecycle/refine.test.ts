@@ -210,3 +210,46 @@ test("review regressions: distinct employers do not merge on a generic suffix", 
   assert.deepEqual(refineEvents(events).events.map((e) => e.company), ["Apple", "Apple Bank", "Stripe Technologies", "Stripe"]);
   assert.equal(cleanCompany("Bank of the"), "Bank of the");
 });
+
+test("a program's own marketing is not interview or follow-up mail, but its application receipts and rejections stay", () => {
+  const d = "learnco.example";
+  const events = [
+    ev({ type: "applied", day: 1, subject: "Application Received: Launchpad", domain: d, company: "LearnCo" }),
+    ev({ type: "assessment_completed", day: 5, subject: "Weekly assessment submission reminder", domain: d, company: "LearnCo" }),
+    ev({ type: "interview_scheduled", day: 9, subject: "Your peers are building with AI this fall", domain: d, company: "LearnCo" }),
+    ev({ type: "follow_up", day: 10, subject: "Seats are filling. Don't wait.", domain: d, company: "LearnCo" }),
+    ev({ type: "interview_scheduled", day: 11, subject: "Interview details for your Launchpad interview", domain: d, company: "LearnCo" }),
+    ev({ type: "rejection", day: 12, subject: "Update on your Launchpad application", domain: d, company: "LearnCo" }),
+  ];
+  const { events: kept, excluded } = refineEvents(events);
+  assert.deepEqual(excluded.map((x) => x.reason).sort(), ["course", "marketing", "marketing"]);
+  assert.equal(kept.length, 3);
+});
+
+test("a domain with no course or practice mail is never treated as a program", () => {
+  const events = [ev({ type: "interview_scheduled", day: 3, subject: "Your peers are building with AI", domain: "employer.example", company: "Employer" })];
+  assert.equal(refineEvents(events).excluded.length, 0);
+});
+
+test("sweep-found mail with only continuity evidence and no candidacy in the subject becomes a possible item, not a pipeline stage", () => {
+  const sweep = (subject: string, signals: string[], type: EventType = "status_update", domain = "shop.example") => ev({ type, day: 20, subject, domain, company: "Shop", signals: [...signals, "via:sweep"] });
+  const events = [
+    sweep("Flights to LGA are up $20", ["known-contact-continuity"]),
+    sweep("Flight purchase confirmation", ["interview confirmed", "body"], "interview_scheduled"),
+    sweep("Update to select benefits", ["rejection", "body"], "rejection"),
+    sweep("Your interview with Shop is confirmed", ["interview confirmed", "body"], "interview_scheduled"),
+    ev({ type: "status_update", day: 21, subject: "Flights are up $5", domain: "shop.example", company: "Shop", signals: ["known-contact-continuity"] }),
+  ];
+  const { events: kept } = refineEvents(events);
+  const weak = kept.filter((e) => e.signals.includes("sweep-weak (refined)"));
+  assert.deepEqual(weak.map((e) => e.subject).sort(), ["Flight purchase confirmation", "Flights to LGA are up $20", "Update to select benefits"]);
+  assert.ok(weak.every((e) => e.signals.includes("near-miss") && e.type === "status_update"));
+  assert.equal(kept.find((e) => e.subject === "Your interview with Shop is confirmed")?.type, "interview_scheduled");
+  assert.ok(!kept.find((e) => e.subject === "Flights are up $5")?.signals.includes("sweep-weak (refined)"), "keyword-found mail is untouched");
+});
+
+test("a work-mode tag is not part of the role, so two receipts for one role are one opportunity", () => {
+  assert.equal(cleanRole("Software Engineer Intern 2026 — Remote (US)"), "Software Engineer Intern 2026");
+  assert.equal(cleanRole("Remote Sensing Analyst"), "Remote Sensing Analyst");
+  assert.equal(cleanRole("Data Intern - Hybrid"), "Data Intern");
+});
