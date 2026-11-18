@@ -1,6 +1,7 @@
 import { groupEventsV2, groupRole } from "../lifecycle/identity.ts";
 import { assignKeys } from "../lifecycle/keys.ts";
 import { legacyKeyHeads } from "../lifecycle/legacy.ts";
+import { refineEvents } from "../lifecycle/refine.ts";
 import { reduceLifecycle } from "../lifecycle/reducer.ts";
 import { repairText } from "../lifecycle/text.ts";
 import { decide, DEFAULT_POLICY, type Policy } from "./policy.ts";
@@ -90,6 +91,7 @@ export function buildOpportunities(
   overrides: Map<string, OpportunityOverride> = new Map(),
   policy: Policy = DEFAULT_POLICY,
 ): Opportunity[] {
+  events = refineEvents(events).events; // evidence checks that need the whole record (lib/lifecycle/refine.ts)
   const groups = groupEventsV2(events);
   const keys = assignKeys(groups);
   // Keys the previous scheme gave: each old key belongs to the opportunity that holds its most recent event, so old overrides, dismissals and bookmarks resolve.

@@ -2,6 +2,7 @@ import "server-only";
 
 import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
+import { refineEvents } from "@/lib/lifecycle/refine";
 import {
   actionDismissals,
   eventPredictions,
@@ -87,10 +88,12 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
     db.select().from(recruitingSync).where(eq(recruitingSync.userGoogleSub, userGoogleSub)).limit(1),
   ]);
 
-  const all: EffectiveEvent[] = rows.flatMap((row) => {
-    const effective = applyCorrection(rowToExtracted(row), parseCorrection(row.correction));
-    return effective ? [effective] : [];
-  });
+  const all: EffectiveEvent[] = refineEvents(
+    rows.flatMap((row) => {
+      const effective = applyCorrection(rowToExtracted(row), parseCorrection(row.correction));
+      return effective ? [effective] : [];
+    }),
+  ).events; // evidence checks over the whole record, before near misses are set aside (lib/lifecycle/refine.ts)
   // A near miss joins the pipeline only when a person says it is recruiting ("Looks right" or an edit); hiding it removes it.
   const possible = all.filter((e) => isNearMiss(e) && !e.confirmed && !e.corrected);
   const events = all.filter((e) => !possible.includes(e));
