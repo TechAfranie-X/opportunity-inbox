@@ -1,0 +1,28 @@
+{
+ "note": "Failing tests at the recorded baseline. A test leaves this list only when it passes. `--check` fails on new failures and on entries that now pass.",
+ "failing": [
+  "[actions] G02-season-merge-offer-actions: action g02-b10 - an explicit 'Action Needed' offer message two days old must surface on Today",
+  "[deadline] I02: an explicit absolute deadline wins over a relative window in the same message (audit #18)",
+  "[deadline] I03: an explicit deadline that has already passed is still recorded (audit #4)",
+  "[false-positive] G09-non-recruiting-assessment: active g09-1 - without evidence of a candidacy this is not a pipeline opportunity",
+  "[false-positive] I06: generic personality-assessment results with a paid upsell do not enter the pipeline as an event (audit #13)",
+  "[grouping] G01-reapply-next-cycle: cannotLink g01-a1/g01-b1 - an application eight months later for the next season is a new opportunity",
+  "[grouping] G01-reapply-next-cycle: cannotLink g01-a4/g01-b4 - the Nov 20 interview does not belong to the Summer 2026 cycle",
+  "[grouping] G02-season-merge-offer-actions: cannotLink g02-a2/g02-b1 - Summer 2026 and Summer 2027 applications for the same role are separate cycles",
+  "[grouping] G03-two-roles-one-thread: cannotLink g03-a1/g03-b1 - the 2026 and 2027 applications are different roles and cycles",
+  "[grouping] G03-two-roles-one-thread: cannotLink g03-b1/g03-b2 - two different specific roles are two applications even when Gmail threaded the receipts together",
+  "[grouping] G04-cancelled-interview: cannotLink g04-a1/g04-b1 - a 2025 interview thread and a 2026 community interest form are different programs",
+  "[grouping] G05-externship-vs-internship: cannotLink g05-a1/g05-b1 - the externship and the later internship conversation are different programs",
+  "[grouping] G05-externship-vs-internship: cannotLink g05-a5/g05-b1 - an externship assessment and a 2027 internship invite are different lifecycles",
+  "[presentation] I07: UTF-8 text mislabeled as iso-8859-1 does not produce mojibake (audit #16)",
+  "[review] G07-expired-assessment: contradictionFlagged g07-4 - if the product still calls it active it must raise an important review item; it may never say 'nothing important'",
+  "[review] G08-expired-after-reminders: contradictionFlagged g08-4 - stage contradicts terminal evidence",
+  "[role] G01-reapply-next-cycle: role g01-b4 - the current opportunity's title must come from the latest applicable source",
+  "[role] G02-season-merge-offer-actions: role g02-b10 - the offer is for Summer 2027, so is the title",
+  "[role] G06-two-receipts-one-thread: role g06-1 - no mojibake in a displayed role (indeterminate case: invariant only)",
+  "[terminal] G04-cancelled-interview: active g04-a1 - an interview the employer cancelled must not leave an active Interview opportunity",
+  "[terminal] G07-expired-assessment: active g07-4 - an explicitly expired request that would archive the application is not an active assessment",
+  "[terminal] G08-expired-after-reminders: active g08-4 - expiry supersedes earlier reminders",
+  "[terminal] I01: a message cancelling an upcoming interview is not read as a scheduled interview (audit #10)"
+ ]
+}
