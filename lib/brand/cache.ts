@@ -51,10 +51,15 @@ export function shouldFetch(entry: CacheEntry | undefined, now = Date.now()): bo
   return now - Date.parse(entry.at) > RETRY_DAYS * 86_400_000;
 }
 
-/** company key -> URL of its cached mark, for the UI. */
-export function cachedBrandUrls(index = readIndex()): Record<string, string> {
+/**
+ * company key -> URL of its cached mark, for the UI. The cache is shared by everyone on an install, so a caller must pass `only`: the company keys that
+ * THIS person's own opportunities contain. Without it nothing is returned: one person's employers are never sent to another's browser.
+ */
+export function cachedBrandUrls(only: Iterable<string>, index = readIndex()): Record<string, string> {
   const out: Record<string, string> = {};
+  const mine = new Set(only);
   for (const [key, domain] of Object.entries(index.companies)) {
+    if (!mine.has(key)) continue;
     const e = index.domains[domain];
     if (e?.status === "ok") out[key] = `/brands/cache/${e.file}?v=${Date.parse(e.at) || 0}`; // the version keeps a browser from showing a stale or superseded asset
   }

@@ -1,5 +1,7 @@
 import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
+import https from "node:https";
+import { BlockList, isIP } from "node:net";
+import type { LookupFunction } from "node:net";
 import { registrable } from "../identity/graph.ts";
 import { flat } from "../identity/names.ts";
 import type { CacheEntry } from "./cache.ts";
@@ -23,53 +25,82 @@ const TIMEOUT_MS = 8000;
 
 export type Fetched = { entry: CacheEntry; data?: Buffer | string; file?: string };
 
-function privateIp(ip: string): boolean {
-  if (ip.includes(":")) return ip === "::1" || ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe80") || ip.startsWith("::ffff:127.") || ip.startsWith("::ffff:10.") || ip.startsWith("::ffff:192.168.");
-  const [a, b] = ip.split(".").map(Number);
-  return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+const BLOCKED = new BlockList();
+for (const [net, prefix] of [["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.0.2.0", 24], ["192.88.99.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["198.51.100.0", 24], ["203.0.113.0", 24], ["224.0.0.0", 4], ["240.0.0.0", 4]] as const) BLOCKED.addSubnet(net, prefix, "ipv4");
+for (const [net, prefix] of [["::", 128], ["::1", 128], ["64:ff9b::", 96], ["64:ff9b:1::", 48], ["100::", 64], ["2001::", 23], ["2001:db8::", 32], ["2002::", 16], ["fc00::", 7], ["fe80::", 10], ["fec0::", 10], ["ff00::", 8]] as const) BLOCKED.addSubnet(net, prefix, "ipv6");
+
+/** Not a globally routable unicast address. IPv4-mapped/compatible IPv6 forms are normalized to their embedded IPv4 and judged by the IPv4 rules. */
+export function privateIp(ip: string): boolean {
+  const v = ip.toLowerCase().replace(/^\[|\]$/g, "").split("%")[0];
+  const dotted = /^(?:::ffff:|::)(\d+\.\d+\.\d+\.\d+)$/.exec(v);
+  if (dotted) return privateIp(dotted[1]);
+  const hex = /^(?:::ffff:|::)([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(v);
+  if (hex) { const n = (parseInt(hex[1], 16) << 16) | parseInt(hex[2], 16); return privateIp([n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join(".")); }
+  const kind = isIP(v);
+  if (!kind) return true;
+  return BLOCKED.check(v, kind === 4 ? "ipv4" : "ipv6");
 }
 
-async function publicHost(host: string): Promise<boolean> {
+/** DNS lookup used for the actual connection: the address that is connected to is the address that was checked (no rebinding window). */
+const pinnedLookup: LookupFunction = (hostname, options, callback) => {
+  lookup(hostname, { all: true, verbatim: true }).then(
+    (addrs) => {
+      const ok = addrs.filter((a) => !privateIp(a.address));
+      if (addrs.length === 0 || ok.length !== addrs.length) return callback(new Error("refused: non-public address") as NodeJS.ErrnoException, "", 4);
+      if (options && (options as { all?: boolean }).all) return (callback as unknown as (e: null, a: Array<{ address: string; family: number }>) => void)(null, ok);
+      callback(null, ok[0].address, ok[0].family);
+    },
+    (e) => callback(e, "", 4),
+  );
+};
+
+function hostLooksValid(host: string): boolean {
   if (isIP(host)) return !privateIp(host);
-  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(host)) return false;
-  try {
-    const addrs = await lookup(host, { all: true });
-    return addrs.length > 0 && addrs.every((a) => !privateIp(a.address));
-  } catch {
-    return false;
-  }
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(host);
 }
 
-/** GET with manual, checked redirects (same registrable domain only), a size cap and a timeout. */
+/** GET over HTTPS with the connection pinned to a validated public address, manual redirects (same registrable domain only), a size cap and a time limit. */
 async function get(url: string, domain: string, maxBytes: number, accept: string, truncate = false, hops = 4): Promise<{ body: Buffer; type: string; url: string } | null> {
   for (let i = 0; i <= hops; i++) {
     const u = new URL(url);
-    if (u.protocol !== "https:" || registrable(u.hostname) !== domain || !(await publicHost(u.hostname))) {
-      if (process.env.BRAND_DEBUG) console.error("refused", u.hostname, u.protocol, registrable(u.hostname), domain);
+    if (u.protocol !== "https:" || registrable(u.hostname) !== domain || !hostLooksValid(u.hostname)) {
+      if (process.env.BRAND_DEBUG) console.error("refused", u.hostname, u.protocol);
       return null;
     }
-    let res: Response;
-    try {
-      res = await fetch(u, { redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS), headers: { "user-agent": UA, accept }, referrerPolicy: "no-referrer", credentials: "omit" });
-    } catch (e) {
-      if (process.env.BRAND_DEBUG) console.error("fetch error", u.hostname, (e as Error).message, (e as { cause?: { code?: string } }).cause?.code);
-      return null;
+    const res = await new Promise<{ status: number; location: string | null; type: string; body: Buffer } | null>((resolve) => {
+      const chunks: Buffer[] = [];
+      let n = 0, done = false;
+      const finish = (v: { status: number; location: string | null; type: string; body: Buffer } | null) => { if (!done) { done = true; resolve(v); } };
+      const req = https.request(u, { method: "GET", lookup: pinnedLookup, headers: { "user-agent": UA, accept }, timeout: TIMEOUT_MS, agent: false }, (r) => {
+        const status = r.statusCode ?? 0;
+        const location = typeof r.headers.location === "string" ? r.headers.location : null;
+        const type = String(r.headers["content-type"] ?? "");
+        if (status >= 300 && status < 400) { r.resume(); return finish({ status, location, type, body: Buffer.alloc(0) }); }
+        if (status < 200 || status >= 300) { r.resume(); return finish(null); }
+        r.on("data", (c: Buffer) => {
+          n += c.length;
+          if (n > maxBytes) {
+            if (!truncate) { req.destroy(); return finish(null); }
+            chunks.push(c); // a page is read only as far as its <head>, where icons are declared
+            req.destroy();
+            return finish({ status, location: null, type, body: Buffer.concat(chunks) });
+          }
+          chunks.push(c);
+        });
+        r.on("end", () => finish({ status, location: null, type, body: Buffer.concat(chunks) }));
+        r.on("error", () => finish(null));
+      });
+      req.on("timeout", () => { req.destroy(); finish(null); });
+      req.on("error", (e) => { if (process.env.BRAND_DEBUG) console.error("fetch error", u.hostname, (e as Error).message); finish(null); });
+      req.end();
+    });
+    if (!res) return null;
+    if (res.status >= 300 && res.status < 400) {
+      if (!res.location) return null;
+      url = new URL(res.location, u).toString();
+      continue;
     }
-    if (process.env.BRAND_DEBUG) console.error("fetch", u.hostname, res.status);
-    if (res.status >= 300 && res.status < 400 && res.headers.get("location")) { url = new URL(res.headers.get("location")!, u).toString(); continue; }
-    if (!res.ok || !res.body) return null;
-    const chunks: Uint8Array[] = [];
-    let n = 0;
-    for await (const c of res.body as unknown as AsyncIterable<Uint8Array>) {
-      n += c.byteLength;
-      if (n > maxBytes) {
-        if (!truncate) return null;
-        chunks.push(c);
-        break; // a page is read only as far as its <head>, where icons are declared
-      }
-      chunks.push(c);
-    }
-    return { body: Buffer.concat(chunks), type: res.headers.get("content-type") ?? "", url: u.toString() };
+    return { body: res.body, type: res.type, url: u.toString() };
   }
   return null;
 }

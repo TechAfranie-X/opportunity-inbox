@@ -25,7 +25,8 @@ When an employer is **Known**, has **no bundled mark**, and has a trustworthy ca
 - **What is sent:** only an HTTPS GET to the company's registrable domain (apex/www and same-domain assets), a fixed generic user agent, no cookies, no referrer. No name, role, email text, thread or account data. The company sees one request from the machine's IP.
 - **What is refused:** non-HTTPS; hosts resolving to private/loopback/link-local ranges; every redirect is re-checked and a cross-domain redirect is refused (e.g. a rebrand redirect); assets on other domains (CDNs) are refused; size and time limits; SVG only if inert (no script, handlers, external references, foreign objects); dark-scheme CSS blocks are stripped so a mark is never white-on-white on the fixed light tile.
 - **Quality:** SVG icon > web-app-manifest icon >= 192 px > apple-touch-icon >= 120 px > PNG icon >= 96 px. Favicons of 16-48 px, `.ico` files, mask icons (silhouettes) and non-square images are rejected: the monogram is better than a blurry mark.
-- **Serving:** `/brands/cache/<file>` serves only files in the cache, with `nosniff` and a sandboxing CSP; path traversal returns 404. Rendering never triggers a fetch.
+- **Connection pinning:** the connection is made to the address that was validated (a custom DNS lookup on the HTTPS request, so there is no rebinding window), and every non-public range is refused, including IPv4-mapped IPv6, NAT64, unique-local, link-local, multicast and documentation ranges.
+- **Serving and tenancy:** `/brands/cache/<file>` is signed-in only, serves only cache files, with `nosniff` and a sandboxing CSP; path traversal returns 404. The cache is shared on an install, so each page receives only the marks for the company keys of the signed-in person's own opportunities. Rendering never triggers a fetch.
 - **Cache:** `./.data/brands` (git-ignored, `BRAND_CACHE_DIR` to move it).
 
 ## 5. Measurement (real, non-sample development pipeline; aggregates)

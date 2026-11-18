@@ -10,7 +10,7 @@ import { applyIdentity } from "../identity/reconcile.ts";
 import type { EffectiveEvent, ExtractedEvent, Opportunity, RecruitingEmail } from "../recruiting/types.ts";
 import { cachedBrandUrls, readIndex, shouldFetch } from "./cache.ts";
 import { ensureFirstPartyBrands } from "./ensure.ts";
-import { inertSvg, lightOnlySvg, pageNamesCompany } from "./first-party.ts";
+import { inertSvg, lightOnlySvg, pageNamesCompany, privateIp } from "./first-party.ts";
 
 const ev = (over: Partial<EffectiveEvent>): EffectiveEvent => ({ id: "e", gmailMessageId: "m", gmailThreadId: "t", occurredAt: new Date("2026-11-10"), outbound: false, senderName: "Acme Recruiting", senderDomain: "acmerobotics.com", subject: "s", type: "applied", company: "Acme Robotics", role: null, eventDate: null, eventDateHasTime: false, dateKind: null, confidence: 0.9, fieldConfidence: { type: 0.9, company: 0.9, role: 0.5 }, signals: [], corrected: false, ...over });
 const opp = (company: string, events: EffectiveEvent[]): Opportunity => ({ key: company, company, role: null, stage: "applied", outcome: null, status: "active", firstActivityAt: new Date(), lastActivityAt: new Date(), events, needsReview: false } as unknown as Opportunity);
@@ -83,7 +83,9 @@ test("ensure: only KNOWN employers with no bundled mark and a trustworthy domain
   assert.equal(r.skipped["bundled mark exists"], 1);
   assert.equal(r.skipped["not a known employer"], 1);
   assert.equal(readIndex().companies["acmerobotics"], "acmerobotics.com");
-  assert.match(cachedBrandUrls()["acmerobotics"], /^\/brands\/cache\/acmerobotics\.com\.png\?v=\d+$/);
+  assert.deepEqual(cachedBrandUrls([]), {}, "no company keys, no marks: another person's employers are never returned");
+  assert.deepEqual(cachedBrandUrls(["someoneelse"]), {});
+  assert.match(cachedBrandUrls(["acmerobotics"])["acmerobotics"], /^\/brands\/cache\/acmerobotics\.com\.png\?v=\d+$/);
   assert.ok(existsSync(join(process.env.BRAND_CACHE_DIR!, "acmerobotics.com.png")));
   const again = await ensureFirstPartyBrands(opps, { fetcher: fetcher as never });
   assert.equal(calls.length, 1, "never fetched twice");
@@ -105,4 +107,9 @@ test("dark-scheme blocks are removed from fetched SVGs so a mark never turns whi
   const out = lightOnlySvg(svg);
   assert.ok(!/prefers-color-scheme/.test(out));
   assert.ok(out.includes("path{fill:#111}") && out.includes("circle{fill:red}"));
+});
+
+test("SSRF filter: every non-public address form is refused, including IPv4-mapped IPv6", () => {
+  for (const ip of ["127.0.0.1", "10.1.2.3", "169.254.169.254", "172.20.0.1", "192.168.1.1", "100.64.0.1", "0.0.0.0", "224.0.0.1", "::1", "::", "::ffff:127.0.0.1", "::ffff:7f00:1", "::ffff:a9fe:a9fe", "64:ff9b::7f00:1", "fc00::1", "fd12::1", "fe80::1", "ff02::1", "2001:db8::1", "not-an-ip"]) assert.equal(privateIp(ip), true, ip);
+  for (const ip of ["8.8.8.8", "1.1.1.1", "151.101.1.1", "2606:4700::1111", "2a00:1450:4001::200e"]) assert.equal(privateIp(ip), false, ip);
 });
