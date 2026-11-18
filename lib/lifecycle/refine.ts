@@ -17,7 +17,7 @@ import type { EffectiveEvent } from "../recruiting/types.ts";
  *                    not part of an employer, and a legal/industry suffix variant of an employer already seen is the same employer.
  *  4. polarity       "complete your application"/"incomplete application" is a nudge about an unfinished application, not recruiter interest.
  */
-export type ExclusionReason = "newsletter" | "practice" | "course" | "consumer-account" | "marketing";
+export type ExclusionReason = "newsletter" | "practice" | "course" | "consumer-account" | "marketing" | "non-employment";
 export type Excluded = { event: EffectiveEvent; reason: ExclusionReason };
 export type Refined = { events: EffectiveEvent[]; excluded: Excluded[] };
 
@@ -32,6 +32,13 @@ const ACTION_WORDS = /\b(?:interview|assessment|offer|your application|next step
 const COURSE = /\bTIP\d{2,3}\b|\bweekly assessment (?:submission )?reminder\b|\bunit \d+ assessment\b|\bcourse (?:assessment|project)\b|\bcapstone(?::| (?:application|course|program)\b)|\breadiness assessment\b/i;
 const CONSUMER_SUBJECT = /\bverification code\b|\baccount has been linked\b|\blink(?:ed|ing)? (?:a|your) bank\b|\bfund(?:ing)? your account\b|\bstatement is ready\b/i;
 const CONSUMER_DOMAIN = /(?:^|\.)(?:robinhood|coinbase|venmo|paypal|cash|wellsfargo|chase|bankofamerica|schwab|fidelity|sofi|chime|stripe-?pay)\.com$/i;
+/**
+ * "Application" is also what a visa office, a lender, a landlord, a club or a volunteer group says. General pattern: the thing being applied for is a
+ * service, tenancy, membership or status, not a job, internship, fellowship or scholarship. The object noun must sit next to "application"/"interview", and
+ * any employment word in the same subject ("Loan Officer position", "Membership Coordinator role") keeps the message.
+ */
+const NON_EMPLOYMENT_OBJECT = "(?:visa|immigration|passport|green card|loan|mortgage|credit card|rental|lease|tenancy|apartment|housing|membership|club|society|council|volunteer(?:ing)?|insurance|tax|license|licence|permit|parking)";
+const NON_EMPLOYMENT = new RegExp(`\\b${NON_EMPLOYMENT_OBJECT}\\b[^.!?]{0,25}\\b(?:application|interview|appointment)\\b|\\bapplication (?:to|for) (?:join |the |our |a |an )?(?:[\\w-]+ ){0,2}${NON_EMPLOYMENT_OBJECT}\\b|\\bapplying as (?:a |an )?volunteer\\b|\\bapplication to join\\b`, "i");
 const EMPLOYMENT_WORDS = /\b(?:job|role|position|internship|intern|career|candidate|interview|recruit\w*|hiring|employment)\b/i;
 const ATS_SENDER = /(?:^|\.)(?:greenhouse(?:-mail)?\.io|lever\.co|myworkday\.com|ashbyhq\.com|icims\.com|smartrecruiters\.com|workable\.com|jobvite\.com|modernhire\.com)$/i;
 
@@ -39,6 +46,7 @@ const ATS_SENDER = /(?:^|\.)(?:greenhouse(?:-mail)?\.io|lever\.co|myworkday\.com
 export function exclusionReason(e: Pick<EffectiveEvent, "subject" | "senderName" | "senderDomain" | "company">): ExclusionReason | null {
   const subject = e.subject ?? "";
   if (ATS_SENDER.test(e.senderDomain)) return null;
+  if (NON_EMPLOYMENT.test(subject) && !EMPLOYMENT_WORDS.test(subject.replace(/\b(?:volunteer(?:ing)?|club|council|society|interview)\b/gi, ""))) return "non-employment";
   if (PRACTICE.test(subject) || (PRACTICE_SOFT.test(subject) && !YOURS.test(subject))) return "practice";
   // a digest or event promotion that also names an interview, assessment, offer or "your application" may be an employer writing to you: the wording alone does not exclude it
   const addressedToYou = ACTION_WORDS.test(subject.replace(/\binterview week\b/gi, ""));

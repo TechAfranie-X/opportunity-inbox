@@ -253,3 +253,9 @@ test("a work-mode tag is not part of the role, so two receipts for one role are 
   assert.equal(cleanRole("Remote Sensing Analyst"), "Remote Sensing Analyst");
   assert.equal(cleanRole("Data Intern - Hybrid"), "Data Intern");
 });
+
+test("applications for a service, tenancy, membership or status are not candidacies; the same words in a job title keep the message", () => {
+  for (const s of ["Your visa application has been received", "Your rental application - documents missing", "Student loan application status", "Application to join the chess club", "Thanks for applying as a volunteer", "Your visa interview is scheduled", "Your credit card application is under review"]) assert.equal(reasonOf(s), "non-employment", s);
+  for (const s of ["Application received: Loan Officer position", "Thank you for applying: Membership Coordinator role", "Your application for the Visa Operations Intern", "Application received - Housing Analyst internship", "Interview invitation: Insurance Underwriter role", "Your application to Acme"]) assert.notEqual(reasonOf(s), "non-employment", s);
+  assert.equal(reasonOf("Your visa application", { domain: "mail.myworkday.com" }), null, "an employer's applicant-tracking system is never excluded on wording");
+});
