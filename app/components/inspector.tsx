@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { EntityMark } from "@/app/components/entity-mark";
 import { JourneyLine } from "@/app/components/journey-line";
 import { useWorkspace } from "@/app/components/workspace";
 import { annotateTimeline, nextMoment, peopleFor, stageSince } from "@/lib/recruiting/history";
@@ -45,9 +46,12 @@ export function Inspector() {
           <div className="flex min-h-0 flex-1 flex-col" key={opp.key}>
             <div className="inspector-body min-h-0 flex-1 overflow-y-auto px-6 pb-4 pt-5">
               <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <h2 className="t-title break-words">{opp.company}</h2>
-                  <p className="t-meta mt-1 text-ink-2">{opp.role ?? "No role detected"}</p>
+                <div className="flex min-w-0 items-center gap-3.5">
+                  <EntityMark opportunity={opp} size="lg" />
+                  <div className="min-w-0">
+                    <h2 className="t-title break-words">{opp.company}</h2>
+                    <p className="t-meta mt-1 text-ink-2">{opp.role ?? "No role detected"}</p>
+                  </div>
                 </div>
                 <button
                   type="button"

@@ -583,7 +583,7 @@ export function OpportunityHistory({ opportunity, now, editable }: { opportunity
     <div>
       <header className="flex items-start justify-between gap-6">
         <div className="flex min-w-0 items-start gap-4">
-          <EntityMark opportunity={opportunity} size="lg" />
+          <EntityMark opportunity={opportunity} size="xl" />
           <div className="min-w-0">
             <h1 className="t-display break-words">{opportunity.company}</h1>
             <p className="t-lead mt-2 text-ink-2">{opportunity.role ?? "No role detected"}</p>

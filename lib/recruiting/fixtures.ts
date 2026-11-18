@@ -118,6 +118,28 @@ export function buildDemoMailbox(now: Date): FixtureEmail[] {
       "Hi Sam, I'm a recruiter at Vercel. I came across your profile and your background looks great for our Frontend Engineer Intern role. Open to a quick chat?\n",
       { type: "recruiter_outreach", company: "Vercel", role: "Frontend Engineer Intern" }),
 
+    // --- More well-known employers, so identity and logos are exercised in the sample product
+    mail("t-harvey", "Priya Nair <priya.nair@harvey.ai>",
+      "Next steps: schedule your interview with Harvey", ago(2),
+      "Hi Sam, we'd like to invite you to interview for the Software Engineer Intern position at Harvey. Please use the link to select a time that works for you.\n",
+      { type: "interview_invite", company: "Harvey", role: "Software Engineer Intern" }),
+    mail("t-dropbox", "Dropbox Recruiting <recruiting@dropbox.com>",
+      "Thank you for applying to Dropbox", ago(9),
+      "Hi Sam,\n\nThank you for applying to the Product Design Intern position at Dropbox. We received your application and will be in touch.\n",
+      { type: "applied", company: "Dropbox", role: "Product Design Intern" }),
+    mail("t-nvidia", "NVIDIA University Recruiting <university@nvidia.com>",
+      "Thank you for applying to NVIDIA", ago(14),
+      "Hi Sam,\n\nThank you for applying to the Deep Learning Software Intern position at NVIDIA. We received your application and will be in touch.\n",
+      { type: "applied", company: "NVIDIA", role: "Deep Learning Software Intern" }),
+    mail("t-salesforce", "Alex Kim <alex.kim@salesforce.com>",
+      "Business Analyst Intern at Salesforce", ago(4, 14),
+      "Hi Sam, I'm a recruiter at Salesforce. I came across your profile and your background looks great for our Business Analyst Intern role. Open to a quick chat?\n",
+      { type: "recruiter_outreach", company: "Salesforce", role: "Business Analyst Intern" }),
+    mail("t-lyft", "Lyft Recruiting <recruiting@lyft.com>",
+      "Thank you for applying to Lyft", ago(18),
+      "Hi Sam,\n\nThank you for applying to the Product Management Intern position at Lyft. We received your application and will be in touch.\n",
+      { type: "applied", company: "Lyft", role: "Product Management Intern" }),
+
     // --- Noise (must NOT be extracted)
     mail("n1", "Nike <deals@nike.com>", "Our best offer: 50% off ends tonight", ago(2),
       "Shop now and save. Unsubscribe anytime.\n", { type: null }),

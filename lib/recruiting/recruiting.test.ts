@@ -48,7 +48,7 @@ test("outbound mail is kept only inside recruiting threads", () => {
 test("events group into one opportunity per company/role with correct stages", () => {
   const opps = buildOpportunities(effective());
   const by = Object.fromEntries(opps.map((o) => [o.company, o]));
-  assert.deepEqual(Object.keys(by).sort(), ["Airbnb", "Datadog", "Notion", "Ramp", "Roblox", "Stripe", "Vercel"]);
+  assert.deepEqual(Object.keys(by).sort(), ["Airbnb", "Datadog", "Dropbox", "Harvey", "Lyft", "NVIDIA", "Notion", "Ramp", "Roblox", "Salesforce", "Stripe", "Vercel"]);
   assert.equal(by.Stripe.stage, "assessment");
   assert.equal(by.Stripe.events.length, 2, "HackerRank email joins the Stripe opportunity");
   assert.equal(by.Datadog.stage, "interview");
@@ -58,6 +58,9 @@ test("events group into one opportunity per company/role with correct stages", (
   assert.equal(by.Roblox.outcome, "rejected");
   assert.equal(by.Ramp.stage, "offer");
   assert.equal(by.Vercel.stage, "recruiter");
+  assert.equal(by.Harvey.stage, "interview");
+  assert.equal(by.NVIDIA.stage, "applied");
+  assert.equal(by.Salesforce.stage, "recruiter");
 });
 
 test("Today actions are prioritised and exclude closed opportunities", () => {

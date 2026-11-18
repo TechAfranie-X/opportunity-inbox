@@ -31,12 +31,10 @@ One dominant thing per screen; everything else recedes or folds.
 | Landing | What is this and can I trust it? | The whole transformation as the picture: Gmail on the left, Pipeline cards in the middle, Today's actions on the right, built from the product's own styles; then Today, Pipeline, History in one line each, and four trust facts. |
 
 ## Company identity
-A reusable, local system (`lib/identity`): the resolved employer name is normalised and matched exactly against a bundled registry of public brand marks
-(single-colour glyphs, CC0 artwork from simple-icons; trademarks remain their owners'). Nothing is fetched at run time, so no company name leaves the
-machine and a mark can never load slowly or break layout. Applicant-tracking and job-board vendors are never the employer and never get a mark.
-**Known** company with a mark: the mark in a quiet monochrome tile (ink on tint, so it works in both themes); without a mark: a monogram, never a guess.
-**Likely**: the same, dashed and softer, announced as needing confirmation. **Unknown**: a dashed placeholder. The name is always written beside the mark.
-To add a company, add an entry to `lib/identity/logos.ts`.
+Identity first, mark second (`lib/identity`): the resolved, canonical employer name decides everything; a mark never chooses a company. The mark is looked up by that name: (1) a curated full-colour asset in `public/brands` (Harvey, Ramp, Plaid, Figma, Google, Slack, Toast, Waymo, Neuralink, Brex), else (2) a bundled glyph drawn in the company's official brand colour (about 90 companies, simple-icons CC0), else (3) a monogram. Nothing is fetched at run time.
+One component (`EntityMark`), one size scale (sm 28, md 36, lg 44, xl 56 on the detail page), used on every surface. The mark sits on a neutral tile (white in light theme, a soft paper tone in dark: never pure white), inset with padding; app-style icons (Harvey, Neuralink, Brex) fill the tile; marks too light for the tile (Snapchat, Robinhood, Sony) sit on a dark tile; near-black brands (Notion, Vercel, GitHub) are simply black, which is their identity. No per-brand backgrounds, no glow, no tints.
+**Known**: the mark, no decoration. **Likely**: the same mark, untouched, in a dashed ring (and "Likely company, needs confirmation" for assistive technology). **Unknown**: a dashed placeholder. A company without a public mark keeps the monogram. Never a guessed logo.
+To add a company: add an entry to `lib/identity/brand-assets.ts` (and the file to `public/brands`, with its source in `SOURCES.md`).
 
 ## Navigation
 Two destinations: Today and Pipeline. Search (⌘K), a review status ("3 need review", only when something important needs you), and the account menu. Activity is reached from Today ("All activity") and search.

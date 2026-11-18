@@ -15,6 +15,8 @@
   /* warm paper, warm ink */
   --paper: #f5f3ee;
   --tint: #ebe8e1; /* hover and selected fills */
+  --logo-bg: #ffffff; /* the neutral tile company marks sit on: white in light theme */
+  --logo-line: rgb(28 26 23 / 0.1);
   --raised: #fbfaf7; /* the one working surface: panels, menus, inspector */
   --ink: #1c1a17;
   --ink-2: #56524a;
@@ -64,6 +66,8 @@
 :root[data-theme="dark"] {
   --paper: #151413;
   --tint: #242220;
+  --logo-bg: #ece9e2; /* in dark theme the tile is a soft paper tone (never pure white): brand colours stay true, black marks stay legible */
+  --logo-line: rgb(255 248 235 / 0.12);
   --raised: #1c1b19;
   --ink: #ebe8e1;
   --ink-2: #aaa69c;
@@ -91,6 +95,8 @@
   :root[data-theme="system"] {
     --paper: #151413;
     --tint: #242220;
+  --logo-bg: #ece9e2; /* in dark theme the tile is a soft paper tone (never pure white): brand colours stay true, black marks stay legible */
+  --logo-line: rgb(255 248 235 / 0.12);
     --raised: #1c1b19;
     --ink: #ebe8e1;
     --ink-2: #aaa69c;
@@ -1522,4 +1528,44 @@ html[data-presentation] .inspector ol > li:nth-child(8) {
 }
 .inbox-pane {
   background: var(--tint);
+}
+
+
+/* Company identity tile: one component, one size scale, everywhere. A neutral tile with the mark inset (or, for app-style icons, filling it). */
+.logo-tile {
+  position: relative;
+  display: inline-grid;
+  flex-shrink: 0;
+  place-items: center;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: 1px solid var(--logo-line);
+  border-radius: var(--r-md);
+  background: var(--logo-bg);
+  color: var(--ink-2);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.logo-tile[data-tone="dark"] {
+  background: #1d1c1a;
+  border-color: rgb(255 248 235 / 0.14);
+}
+.logo-tile[data-tone="plain"] {
+  background: var(--tint);
+  border-color: transparent;
+}
+/* likely: the mark is untouched; the ring says "please confirm" */
+.logo-tile[data-state="likely"],
+.logo-tile[data-state="unknown"] {
+  border-style: dashed;
+  border-color: var(--ink-3);
+}
+.logo-tile[data-state="unknown"] {
+  background: transparent;
+  color: var(--ink-3);
+}
+.logo-tile img,
+.logo-tile svg {
+  display: block;
+  user-select: none;
 }
