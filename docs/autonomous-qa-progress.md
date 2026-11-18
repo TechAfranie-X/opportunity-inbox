@@ -3,7 +3,7 @@
 Branch `mvp`. Updated 2026-11-18. "Implemented" = code and tests exist. "Verified" = how it was independently checked (unit / benchmark / stored replay / browser). Live Gmail and the second account in a browser were never available in this environment.
 
 ## Current metrics
-- Tests 595/595; typecheck, lint, build, e2e (keyword and sweep) pass.
+- Tests 599/599; typecheck, lint, build, e2e (keyword and sweep) pass.
 - Lifecycle benchmark (development): 57 pass, 0 known failures, 3 pending (was 34/23/3 at Milestone 1). `known-failures.json` is empty.
 - Held-out (synthetic, seed 20261118), run at this checkpoint: grouping precision/recall 100%/100%, terminal evidence 18/18, regression 55/55. Disclosure: the held-out "cancelled interview" family had been failing and its failure text was seen before the final rule (undated doubtful interview wording alone holds no pipeline place) was written; the rule is general and was also demanded by dev case G04, but this family is no longer a pristine, untouched measurement. A new held-out seed should be generated before any external claim.
 - Real data replayed read-only: account 2 24 -> 16 active; account 1 unchanged at 111/64 in the CLI (the browser shows 106/62 because scholarships/fellowships/programs are now listed apart).
@@ -37,6 +37,10 @@ F-01 G01 re-apply next cycle; F-02/F-09 G02 season merge + offer actions; F-03/F
 
 ## Commits (all pushed to `mvp`)
 f9ba482 Milestone 2 · 2ab821f Gmail routing · d7bafd2 refinement layer · 9958354 kinds + Today copy · 6a40fbd onboarding + tracker · 6d752ec ingestion facts · 19b7aac accepted offers · 9f1c736 job-only counts · (next) doubtful undated interview rule
+
+## Independent adversarial review (subagent, read-only)
+Found and fixed (with regression tests): offer promotion on advice/scam/webinar/template wording; employer merges on generic suffixes (Bank, Financial, Technologies, Services, Group); a past cancellation inside a live confirmation; non-deadline dates ("before November 30") taken as deadlines; newsletter/practice/course/consumer gates firing on genuine employer mail (interview invitations, ATS login codes, a bank employer's application receipt). Tests 599.
+Open, observed on real data: "SLAC National Accelerator Laboratory" and "Stanford" are one internship split by employer alias (knowledge-based alias; needs the identity graph, not suffix rules).
 
 ## Next executable tasks
 1. (done) accepted offers; (done) job-only counts with scholarships listed apart.

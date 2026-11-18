@@ -24,8 +24,12 @@ export type Refined = { events: EffectiveEvent[]; excluded: Excluded[] };
 const NEWSLETTER_SUBJECT = /^[\w .&'’-]{1,40}\s(?:news|newsletter|digest|weekly|roundup)\s*[:|–-]|\bnewsletter\b|\bunsubscribe\b/i;
 const NEWSLETTER_SENDER = /\b(?:news|newsletter|digest|updates?)\b/i;
 const DIGEST_EVENT = /\bmeet the .{1,50}\bteam\b|\bbefore (?:the )?(?:\w+ ){0,3}(?:recruiting|applications?) (?:opens?|open)\b|\b(?:applications?|recruiting) (?:are |is )?(?:now |officially )?(?:open|opens|opening)\b.*\b(?:join|meet|alums?)\b|\bjoin .{1,60}\+ |\balums?\b.*\bjoin\b/i;
-const PRACTICE = /\b(?:mock|practice) interviews?\b|\bbehavioral interview week\b|\binterview (?:prep|practice)\b|\bpeer interview\b/i;
-const COURSE = /\bTIP\d{2,3}\b|\bweekly assessment\b|\bunit \d+ assessment\b|\bcourse (?:assessment|project)\b|\bcapstone\b|\breadiness assessment\b/i;
+const PRACTICE = /\b(?:mock|practice) interviews?\b|\bbehavioral interview week\b|\bpeer interview\b/i;
+/** "Interview prep" is practice when a program sends it, but an employer's own prep call about YOUR interview is recruiting. */
+const PRACTICE_SOFT = /\binterview (?:prep|practice)\b/i;
+const YOURS = /\b(?:your (?:application|interview)|invitation|with (?:the |our )?(?:recruit|hiring|talent)|call with)\b/i;
+const ACTION_WORDS = /\b(?:interview|assessment|offer|your application|next steps|invitation)\b/i;
+const COURSE = /\bTIP\d{2,3}\b|\bweekly assessment (?:submission )?reminder\b|\bunit \d+ assessment\b|\bcourse (?:assessment|project)\b|\bcapstone(?::| (?:application|course|program)\b)|\breadiness assessment\b/i;
 const CONSUMER_SUBJECT = /\bverification code\b|\baccount has been linked\b|\blink(?:ed|ing)? (?:a|your) bank\b|\bfund(?:ing)? your account\b|\bstatement is ready\b/i;
 const CONSUMER_DOMAIN = /(?:^|\.)(?:robinhood|coinbase|venmo|paypal|cash|wellsfargo|chase|bankofamerica|schwab|fidelity|sofi|chime|stripe-?pay)\.com$/i;
 const EMPLOYMENT_WORDS = /\b(?:job|role|position|internship|intern|career|candidate|interview|recruit\w*|hiring|employment)\b/i;
@@ -35,24 +39,29 @@ const ATS_SENDER = /(?:^|\.)(?:greenhouse(?:-mail)?\.io|lever\.co|myworkday\.com
 export function exclusionReason(e: Pick<EffectiveEvent, "subject" | "senderName" | "senderDomain" | "company">): ExclusionReason | null {
   const subject = e.subject ?? "";
   if (ATS_SENDER.test(e.senderDomain)) return null;
-  if (PRACTICE.test(subject)) return "practice";
-  if (NEWSLETTER_SUBJECT.test(subject) || DIGEST_EVENT.test(subject) || (e.company && /\bnews(?:letter)?$/i.test(e.company)) || (NEWSLETTER_SENDER.test(e.senderName ?? "") && /\b(?:news|newsletter)\b/i.test(e.senderName ?? "") && !EMPLOYMENT_WORDS.test(subject.replace(/\bnews\b/gi, "")))) return "newsletter";
-  if (COURSE.test(subject)) return "course";
-  if (CONSUMER_SUBJECT.test(subject) && !EMPLOYMENT_WORDS.test(subject.replace(/\bverification code\b/i, ""))) return "consumer-account";
+  if (PRACTICE.test(subject) || (PRACTICE_SOFT.test(subject) && !YOURS.test(subject))) return "practice";
+  // a digest or event promotion that also names an interview, assessment, offer or "your application" may be an employer writing to you: the wording alone does not exclude it
+  const addressedToYou = ACTION_WORDS.test(subject.replace(/\binterview week\b/gi, ""));
+  if (/\bnewsletter\b/i.test(subject) || (!addressedToYou && (NEWSLETTER_SUBJECT.test(subject) || DIGEST_EVENT.test(subject) || (e.company && /\bnews(?:letter)?$/i.test(e.company)) || (NEWSLETTER_SENDER.test(e.senderName ?? "") && /\b(?:news|newsletter)\b/i.test(e.senderName ?? "") && !EMPLOYMENT_WORDS.test(subject.replace(/\bnews\b/gi, "")))))) return "newsletter";
+  if (COURSE.test(subject) && !/\binterview (?:invitation|scheduled)\b/i.test(subject)) return "course";
+  if (CONSUMER_SUBJECT.test(subject) && !EMPLOYMENT_WORDS.test(subject.replace(/\bverification code\b/i, "")) && !/\bapplication\b/i.test(subject)) return "consumer-account";
   // A bank or broker's "your application is pending / expires" is an ACCOUNT application unless it names a job, role or "applying to <employer>"; a finance employer's real
   // application mail ("Thank you for applying to <employer>") is never excluded.
-  if (CONSUMER_DOMAIN.test(e.senderDomain) && /\byour application (?:is pending|expires in|has been (?:approved|received))\b/i.test(subject) && !/\bapplying\b|\bapplication (?:to|for|at)\b|\bapplied\b/i.test(subject) && !EMPLOYMENT_WORDS.test(subject)) return "consumer-account";
+  if (CONSUMER_DOMAIN.test(e.senderDomain) && /\byour application (?:is pending|expires in|has been approved)\b/i.test(subject) && !/\bapplying\b|\bapplication (?:to|for|at)\b|\bapplied\b/i.test(subject) && !EMPLOYMENT_WORDS.test(subject)) return "consumer-account";
   return null;
 }
 
-const OFFER_SUBJECT = /\bcongratulations\b[^.]{0,60}\b(?:job |internship |employment |full[- ]time )?offer\b|\b(?:job|internship|employment) offer\b|\boffer of employment\b|\boffer letter\b|\bpleased to (?:extend|offer)\b/i;
+const OFFER_SUBJECT = /\bcongratulations\b[^.!?]{0,40}\b(?:job |internship |employment |full[- ]time )offer\b|\bcongratulations\b[^.!?]{0,30}\byour offer\b|\boffer of employment\b|\bpleased to extend (?:you )?(?:an? )?(?:job |internship |full[- ]time |formal )?offer\b/i;
+/** Wording that names an offer without making one: advice, scams, webinars, templates, questions, process stages. */
+const NOT_AN_OFFER = /\b(?:search|tips|scam|webinar|template|question|timeline|reminder|stage|advanced|info session|invitation to|hunt)\b/i;
 const NOT_AN_OFFER_FOR_YOU = /\b(?:offers? (?:you )?(?:a )?(?:free|discount)|% off|special offer|limited[- ]time offer|refer a friend|offer expires? (?:soon )?on sale)\b/i;
 const OFFER_FROM = new Set<string>(["status_update", "follow_up", "interview_invite", "recruiter_outreach"]);
 
 const TRAILING_CONNECTORS = /\s+(?:and|the|of|for|at|&|to)(?:\s+the)?$/i;
 const LEADING_CONNECTORS = /^(?:and|the|of|for|&)\s+(?:the\s+)?(?=[A-Z0-9])/;
 const TEAM_ONLY = /^(?:the\s+)?(?:[\w&-]+\s+){0,2}(?:team|teams|department|group)$/i;
-const COMPANY_SUFFIX_WORDS = new Set(["insurance", "company", "inc", "corp", "corporation", "llc", "ltd", "group", "holdings", "financial", "bank", "technologies", "technology", "solutions", "services"]);
+/** Only words that are legal form or a generic descriptor of the same business. "Bank", "Financial", "Technologies", "Services" and "Group" often name a DIFFERENT company, so they never merge by themselves. */
+const COMPANY_SUFFIX_WORDS = new Set(["insurance", "company", "inc", "corp", "corporation", "llc", "ltd", "holdings"]);
 const NUDGE = /\b(?:incomplete application|complete your application|finish your application|you (?:started|haven'?t finished|have not finished) (?:an |your )?application|application (?:is )?(?:still )?(?:incomplete|pending completion))\b/i;
 
 export function cleanRole(role: string | null): string | null {
@@ -67,7 +76,7 @@ export function cleanRole(role: string | null): string | null {
 export function cleanCompany(company: string | null): string | null {
   if (!company) return company;
   let c = company.replace(/\s+/g, " ").trim();
-  for (let i = 0; i < 3 && TRAILING_CONNECTORS.test(c); i++) c = c.replace(TRAILING_CONNECTORS, "").trim();
+  for (let i = 0; i < 3 && TRAILING_CONNECTORS.test(c) && !/\b(?:of|&)\s+(?:and|the|of|for|at|&|to)$/i.test(c) && !/\b(?:of|&)(?:\s+the)?$/i.test(c); i++) c = c.replace(TRAILING_CONNECTORS, "").trim();
   c = c.replace(/\s+(?:19|20)\d{2}$/, "").trim(); // "Ramp 2025": the assessment's name, not the employer
   return c || null;
 }
@@ -90,7 +99,7 @@ export function refineEvents(events: EffectiveEvent[]): Refined {
     if (company !== e.company) r.company = company;
     const role = cleanRole(e.role);
     if (role !== e.role) r.role = role;
-    if (OFFER_FROM.has(r.type) && OFFER_SUBJECT.test(e.subject ?? "") && !NOT_AN_OFFER_FOR_YOU.test(e.subject ?? "")) {
+    if (OFFER_FROM.has(r.type) && OFFER_SUBJECT.test(e.subject ?? "") && !NOT_AN_OFFER_FOR_YOU.test(e.subject ?? "") && !NOT_AN_OFFER.test(e.subject ?? "")) {
       r.type = "offer";
       r.signals = withoutNearMiss(e.signals).concat("offer (refined)");
       r.reviewReasons = (e.reviewReasons ?? []).filter((x) => !x.startsWith("possible:"));

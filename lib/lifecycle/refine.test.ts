@@ -182,3 +182,31 @@ test("pipeline counts include job applications only; scholarships stay available
   assert.equal(opps.filter(isJob).length, 1);
   assert.equal(pulse(opps).find((r) => r.stage === "applied")!.count, 1);
 });
+
+test("review regressions: offer-like wording that is not an offer", () => {
+  for (const subject of ["Offer letter template for your review", "Re: Question about the offer letter timeline", "Have a question about your job offer? Join our webinar", "Job offer scam warning: how to spot fake offers", "Congratulations on your job offer search! Resume tips", "Congratulations, you've advanced! Next: job offer stage details", "We are pleased to extend an invitation to interview", "Pleased to offer you a spot in our info session"]) {
+    assert.equal(refineEvents([ev({ type: "recruiter_outreach", day: 1, subject })]).events[0].type, "recruiter_outreach", subject);
+  }
+  for (const subject of ["Congratulations on your job offer!", "Congratulations on your internship offer from Acme", "We are pleased to extend you an offer of employment"]) {
+    assert.equal(refineEvents([ev({ type: "status_update", day: 1, subject })]).events[0].type, "offer", subject);
+  }
+});
+
+test("review regressions: genuine recruiting mail with look-alike words is kept", () => {
+  for (const subject of ["Capstone Bank: Interview invitation for Summer Analyst", "Invitation: Interview Prep call with Acme recruiting", "Your interview practice session is confirmed", "Interview invitation – meet the Acme engineering team", "Acme Digest: Your interview on Monday", "Verification code for your Acme application", "Complete your interview before recruiting opens on Jan 5"]) {
+    assert.equal(reasonOf(subject, { domain: "acme.example" }), null, subject);
+  }
+  assert.equal(reasonOf("Your application has been received", { domain: "chase.com" }), null);
+  assert.equal(reasonOf("Interview scheduled: Acme Capstone Project team"), null);
+});
+
+test("review regressions: distinct employers do not merge on a generic suffix", () => {
+  const events = [
+    ev({ type: "applied", day: 0, subject: "Thank you for applying", company: "Apple", role: "Software Engineer Intern" }),
+    ev({ type: "applied", day: 1, subject: "Thank you for applying", company: "Apple Bank", role: "Analyst" }),
+    ev({ type: "applied", day: 2, subject: "Thank you for applying", company: "Stripe Technologies", role: "Engineer" }),
+    ev({ type: "applied", day: 3, subject: "Thank you for applying", company: "Stripe", role: "Engineer" }),
+  ];
+  assert.deepEqual(refineEvents(events).events.map((e) => e.company), ["Apple", "Apple Bank", "Stripe Technologies", "Stripe"]);
+  assert.equal(cleanCompany("Bank of the"), "Bank of the");
+});

@@ -12,8 +12,9 @@ export function useGmailUrl() {
 
 export function GmailLink({ threadId, children, ...rest }: { threadId: string; children: ReactNode } & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href" | "target" | "rel">) {
   const url = useGmailUrl();
+  const { gmailAccount } = useWorkspace();
   return (
-    <a {...rest} href={url(threadId)} target="_blank" rel="noreferrer">
+    <a {...rest} href={url(threadId)} target="_blank" rel="noreferrer" title={gmailAccount ? `Opens in Gmail as ${gmailAccount}` : undefined}>
       {children}
     </a>
   );

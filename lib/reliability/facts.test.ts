@@ -40,3 +40,10 @@ test("generic personality results with an upsell are not a candidacy; an employe
   const real = readMail([mail("g2", "Talent <no-reply@us.greenhouse-mail.io>", "Next steps for your Arbor application", "Thanks for applying to the Software Engineer role at Arbor. Please complete the online assessment (a short personality and coding exercise) by October 20 to move to the next round.", "2026-10-10T10:00:00Z")]);
   assert.ok(real.length === 1 && !isNearMiss(real[0]));
 });
+
+test("review regressions: a past cancellation inside a live confirmation, and non-deadline dates", () => {
+  const live = one(mail("r1", "Priya <priya@northpeak.example>", "Interview confirmed", "Hi Sam, your interview is confirmed. The previous meeting was cancelled, so see you Nov 20 at 2:00 PM.", "2026-11-10T15:00:00Z"));
+  assert.equal(live?.type, "interview_scheduled");
+  const a = one(mail("r2", "Kestrel via CodeSignal <no-reply@codesignal.com>", "Your Kestrel assessment", "Interviews take place before November 30. Please complete the assessment by December 5.", "2026-11-10T14:00:00Z"));
+  assert.equal(a?.eventDate?.toISOString().slice(0, 10), "2026-12-05");
+});

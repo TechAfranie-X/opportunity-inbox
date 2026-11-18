@@ -15,7 +15,7 @@ const SCHEDULED = new Set<string>(["interview_scheduled", "interview_invite"]);
 const CANCELLED = /\b(?:interview|meeting|call|session|conversation|screen(?:ing)?)\b[^.!?\n]{0,80}\b(?:has|have|had|is|was|were|been|will be)\s+(?:been\s+)?(?:cancel(?:l)?ed|called off)\b|\b(?:cancel(?:l)?ed|cancel(?:l)?ing|cancel(?:l)?ation of)\b[^.!?\n]{0,50}\b(?:interview|meeting|call|session)\b|\bno longer (?:be )?(?:moving forward with|proceeding with|holding|scheduling) (?:the |your |an )?(?:upcoming )?interview\b/i;
 const RESCHEDULED = /\breschedul(?:e|ed|ing)\b|\bnew (?:time|date|slot)\b|\bfind (?:a )?(?:new|another) time\b|\bpick (?:a )?(?:new|another) (?:time|date|slot)\b/i;
 
-const DEADLINE_CUE = /\b(?:deadline(?: is| was)?|due(?: on| by)?|expires?(?: on)?|no later than|complete(?:d)? (?:it )?by|submit (?:it )?by|must be (?:completed|submitted) by|before)\b[^.\n]{0,25}$/i;
+const DEADLINE_CUE = /\b(?:deadline(?: is| was)?|due (?:on|by|date)|due:|expires? (?:on)?|no later than|complete(?:d)? (?:it |this |the \w+ )?by|submit(?:ted)? (?:it )?by|must be (?:completed|submitted) by|(?:finish|complete|submit)[^.\n]{0,40}\bbefore)\b[^.\n]{0,25}$/i;
 const RELATIVE = /\bwithin\s+\d+\s*(?:hours?|days?|weeks?)(?:\s+of\s+[^.,;\n]{0,40})?|\bin\s+\d+\s+days?\b/gi;
 const DEADLINE_TYPES = new Set<string>(["assessment", "assessment_completed", "interview_invite", "recruiter_outreach", "offer", "follow_up", "status_update"]);
 
@@ -28,7 +28,8 @@ export function applyFacts(email: Pick<RecruitingEmail, "subject" | "bodyText" |
   let out = event;
   const set = (patch: Partial<ExtractedEvent>, signal: string) => { out = { ...out, ...patch, signals: [...out.signals, signal] }; };
 
-  if (SCHEDULED.has(out.type) && CANCELLED.test(text) && !RESCHEDULED.test(text)) {
+  const stillOn = /\b(?:see you|is confirmed|are confirmed|has been confirmed|confirmed for|scheduled for|looking forward to (?:speaking|meeting|seeing))\b/i.test(text);
+  if (SCHEDULED.has(out.type) && CANCELLED.test(text) && !RESCHEDULED.test(text) && !stillOn) {
     set({ type: "status_update", eventDate: null, eventDateHasTime: false, dateKind: null, fieldConfidence: { type: Math.max(out.fieldConfidence?.type ?? 0, 0.7), company: out.fieldConfidence?.company ?? out.confidence, role: out.fieldConfidence?.role ?? out.confidence } }, "cancellation (fact)");
   }
 
