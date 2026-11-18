@@ -16,7 +16,7 @@ Gmail search (keyword; `DISCOVERY=sweep` optional) -> frozen rule reader + relia
 | ID | Sev | Status | Verified |
 |---|---|---|---|
 | F01 wrong Gmail account | Crit | implemented `2ab821f` (`authuser=<connected address>`) | unit; browser (link shape only, no click-through) |
-| F02 missed offers | Crit | **partly**: Allstate 2026 offer recovered (near-miss promotion). Summer 2027 offer message absent from stored data: unresolved, needs Gmail-side check / re-sync | unit; stored |
+| F02 missed offers | Crit | implemented: 2026 offer via near-miss promotion; **Summer 2027 offer (Oct 23, MyHR) was fetched but rejected by the frozen reader ("no recruiting language") and never stored.** Fixed by an ingestion offer fact (`explicitOffer`, `lib/reliability/facts.ts`). Verified live on account 2 (Gmail confirmed the message; after a targeted re-read it is an Offer card merged with its application) | unit; **live re-sync, account 2** |
 | F03 false Capital One offer | Crit | implemented (context gate) | unit; stored |
 | F04 stale Allstate x2 | Crit | implemented (offer + entity merge + onboarding) | unit; stored |
 | F05 Futureforce active+closed | High | implemented (course sessions excluded) | unit; stored |
@@ -50,8 +50,9 @@ Open, observed on real data: the same fellowship program appears as three cards 
 6. Held-out run at the release gate; browser pass on both accounts when access exists.
 
 ## Blockers / limitations
-- No browser session for the second account; no live Gmail access: real-account verification for account 2 is stored-data replay only.
-- Summer 2027 Allstate offer: cannot determine from stored data whether it was never fetched.
+- (resolved 2026-11-18) Account 2 is now reachable: owner approved `DISCOVERY=sweep` + re-sync; signed in via Google account chooser (no password entered), sweep sync completed (819 messages evaluated, 121 events), Gmail checked in the browser. Replay: 20 active / 7 closed (was 16/6 before the sweep).
+- Existing installs do not re-read mail already evaluated as not recruiting; one prediction row was deleted (derived data) to re-read the missed offer. A broader backfill would need a re-read pass.
+- (resolved) Summer 2027 Allstate offer: was read and rejected by the frozen reader; fixed and verified live.
 
 ## Acceptance criteria (release for external student testing)
 All critical/high audit findings fixed or explicitly blocked; offers detected and attached; zero newsletter offers; grouping benchmark at target; links verified in a multi-account browser profile; held-out gate run once; both accounts browser-tested.

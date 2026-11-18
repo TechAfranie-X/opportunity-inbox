@@ -1,5 +1,9 @@
 import { findDateMentions } from "../recruiting/dates.ts";
 import type { ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
+import { parseSender } from "../opportunities/normalize.ts";
+import { resolveCompany } from "../recruiting/entity/resolve.ts";
+import { classifySender } from "../recruiting/entity/vendors.ts";
+import { NOT_AN_OFFER, NOT_AN_OFFER_FOR_YOU, OFFER_SUBJECT } from "../lifecycle/refine.ts";
 import { NEAR_MISS } from "./flags.ts";
 
 /**
@@ -45,4 +49,44 @@ export function applyFacts(email: Pick<RecruitingEmail, "subject" | "bodyText" |
     set({ confidence: Math.min(out.confidence, 0.3), eventDate: null, dateKind: null, reviewReasons: [...(out.reviewReasons ?? []), "possible: a generic assessment result, not tied to an application"] }, NEAR_MISS);
   }
   return out;
+}
+
+const OFFER_ROLE = /\boffer you the (?:position|role|internship) of\s+([^\n.]{3,110}?)\s+(?:at|with)\s+[A-Z]/;
+
+/**
+ * Offer fact: a message the rule reader rejected ("no recruiting language") whose subject plainly congratulates the reader on a job offer, sent by an
+ * employer or an applicant-tracking platform, and whose body says so too. Missing an offer is the costliest silent miss, so this is read from the text
+ * while it is in memory; advice, scam and marketing wording is excluded by the same lists the refinement layer uses. Role is taken only from the
+ * "offer you the position of ... at ..." sentence and left empty otherwise.
+ */
+export function explicitOffer(email: RecruitingEmail): ExtractedEvent | null {
+  if (email.outbound) return null;
+  const subject = email.subject.trim();
+  if (!OFFER_SUBJECT.test(subject) || NOT_AN_OFFER.test(subject) || NOT_AN_OFFER_FOR_YOU.test(subject)) return null;
+  if (!/\boffer\b/i.test(email.bodyText)) return null;
+  const sender = parseSender(email.from);
+  const kind = classifySender(sender.domain);
+  if (kind !== "ats" && kind !== "employer") return null;
+  const audit = resolveCompany({ from: email.from, replyTo: email.replyTo, subject, body: email.bodyText });
+  const role = OFFER_ROLE.exec(email.bodyText)?.[1]?.trim() ?? null;
+  const companyConf = Math.round(audit.confidence * 100) / 100;
+  return {
+    gmailMessageId: email.id,
+    gmailThreadId: email.threadId,
+    occurredAt: email.receivedAt,
+    outbound: false,
+    senderName: email.from.replace(/<[^>]+>/g, "").replace(/["']/g, "").trim(),
+    senderDomain: sender.domain,
+    subject,
+    type: "offer",
+    company: audit.entity?.name ?? null,
+    role,
+    eventDate: null,
+    eventDateHasTime: false,
+    dateKind: null,
+    confidence: 0.9,
+    fieldConfidence: { type: 0.9, company: companyConf, role: role ? 0.8 : 0 },
+    reviewReasons: audit.entity ? [] : ["company: the name could not be found in the email"],
+    signals: ["offer (ingestion)", "subject"],
+  };
 }

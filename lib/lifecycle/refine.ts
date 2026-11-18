@@ -51,10 +51,10 @@ export function exclusionReason(e: Pick<EffectiveEvent, "subject" | "senderName"
   return null;
 }
 
-const OFFER_SUBJECT = /\bcongratulations\b[^.!?]{0,40}\b(?:job |internship |employment |full[- ]time )offer\b|\bcongratulations\b[^.!?]{0,30}\byour offer\b|\boffer of employment\b|\bpleased to extend (?:you )?(?:an? )?(?:job |internship |full[- ]time |formal )?offer\b/i;
+export const OFFER_SUBJECT = /\bcongratulations\b[^.!?]{0,40}\b(?:job |internship |employment |full[- ]time )offer\b|\bcongratulations\b[^.!?]{0,30}\byour offer\b|\boffer of employment\b|\bpleased to extend (?:you )?(?:an? )?(?:job |internship |full[- ]time |formal )?offer\b/i;
 /** Wording that names an offer without making one: advice, scams, webinars, templates, questions, process stages. */
-const NOT_AN_OFFER = /\b(?:search|tips|scam|webinar|template|question|timeline|reminder|stage|advanced|info session|invitation to|hunt)\b/i;
-const NOT_AN_OFFER_FOR_YOU = /\b(?:offers? (?:you )?(?:a )?(?:free|discount)|% off|special offer|limited[- ]time offer|refer a friend|offer expires? (?:soon )?on sale)\b/i;
+export const NOT_AN_OFFER = /\b(?:search|tips|scam|webinar|template|question|timeline|reminder|stage|advanced|info session|invitation to|hunt)\b/i;
+export const NOT_AN_OFFER_FOR_YOU = /\b(?:offers? (?:you )?(?:a )?(?:free|discount)|% off|special offer|limited[- ]time offer|refer a friend|offer expires? (?:soon )?on sale)\b/i;
 const OFFER_FROM = new Set<string>(["status_update", "follow_up", "interview_invite", "recruiter_outreach"]);
 
 const TRAILING_CONNECTORS = /\s+(?:and|the|of|for|at|&|to)(?:\s+the)?$/i;

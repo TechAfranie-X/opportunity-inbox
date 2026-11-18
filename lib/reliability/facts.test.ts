@@ -3,6 +3,7 @@ import test from "node:test";
 import type { RecruitingEmail } from "../recruiting/types.ts";
 import { isNearMiss } from "./flags.ts";
 import { readMail } from "./assess.ts";
+import { explicitOffer } from "./facts.ts";
 
 // Synthetic text, fictional employers. Negative cases matter as much as positive ones: a fact must not fire on look-alike wording.
 const mail = (id: string, from: string, subject: string, body: string, at: string): RecruitingEmail => ({ id, threadId: id, from, subject, bodyText: body, receivedAt: new Date(at), outbound: false });
@@ -46,4 +47,19 @@ test("review regressions: a past cancellation inside a live confirmation, and no
   assert.equal(live?.type, "interview_scheduled");
   const a = one(mail("r2", "Kestrel via CodeSignal <no-reply@codesignal.com>", "Your Kestrel assessment", "Interviews take place before November 30. Please complete the assessment by December 5.", "2026-11-10T14:00:00Z"));
   assert.equal(a?.eventDate?.toISOString().slice(0, 10), "2026-12-05");
+});
+
+const offerBase = { id: "m1", threadId: "t1", to: "me@x.com", receivedAt: new Date("2026-10-23T17:56:00Z"), outbound: false, labels: [] };
+const offerMail = (subject: string, bodyText: string, from = "Allstate <allstate@myworkday.com>") => ({ ...offerBase, subject, bodyText, from }) as unknown as RecruitingEmail;
+
+test("explicitOffer reads an offer the reader rejected, with the role from the offer sentence", () => {
+  const e = explicitOffer(offerMail("Congratulations on your job offer!", "Congratulations! We're thrilled to offer you the position of Allstate Technology Solutions Internship - Summer 2027 at Allstate Insurance Company. Log in."));
+  assert.equal(e?.type, "offer");
+  assert.equal(e?.role, "Allstate Technology Solutions Internship - Summer 2027");
+});
+
+test("explicitOffer ignores advice, non-employer senders and bodies without an offer", () => {
+  assert.equal(explicitOffer(offerMail("Congratulations on your job offer? 5 negotiation tips", "offer")), null);
+  assert.equal(explicitOffer(offerMail("Congratulations on your job offer!", "offer", "Friend <a@gmail.com>")), null);
+  assert.equal(explicitOffer(offerMail("Congratulations on your job offer!", "nothing here")), null);
 });
