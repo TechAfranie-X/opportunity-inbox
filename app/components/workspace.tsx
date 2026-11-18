@@ -25,9 +25,17 @@ type WorkspaceContext = {
   close: () => void;
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
+  /** company key -> URL of a first-party brand asset cached locally (lib/brand). Read-only for rendering. */
+  brands: Record<string, string>;
 };
 
 const Ctx = createContext<WorkspaceContext | null>(null);
+
+const NO_BRANDS: Record<string, string> = {};
+/** Cached first-party marks, or none outside a workspace (landing page): never throws. */
+export function useCachedBrands(): Record<string, string> {
+  return useContext(Ctx)?.brands ?? NO_BRANDS;
+}
 
 export function useWorkspace() {
   const ctx = useContext(Ctx);
@@ -71,6 +79,7 @@ export function WorkspaceProvider({
   basePath,
   editable,
   persistSelection = true,
+  brands = NO_BRANDS,
   children,
 }: {
   opportunities: Opportunity[];
@@ -79,6 +88,7 @@ export function WorkspaceProvider({
   editable: boolean;
   /** Mirror the open opportunity in `?o=`. The scripted presentation turns this off so a refresh always starts clean. */
   persistSelection?: boolean;
+  brands?: Record<string, string>;
   children: ReactNode;
 }) {
   const param = useSyncExternalStore(subscribeUrl, readSelection, noSelection);
@@ -108,8 +118,8 @@ export function WorkspaceProvider({
   }, [paletteOpen, selectedKey, close]);
 
   const value = useMemo(
-    () => ({ opportunities, now, basePath, editable, selectedKey, open, close, paletteOpen, setPaletteOpen }),
-    [opportunities, now, basePath, editable, selectedKey, open, close, paletteOpen],
+    () => ({ opportunities, now, basePath, editable, selectedKey, open, close, paletteOpen, setPaletteOpen, brands }),
+    [opportunities, now, basePath, editable, selectedKey, open, close, paletteOpen, brands],
   );
 
   return (

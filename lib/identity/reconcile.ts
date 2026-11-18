@@ -3,6 +3,10 @@ import type { ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
 import type { VerifiedReading } from "../semantic/reading.ts";
 import { flat, registrable } from "./graph.ts";
 import type { LearnedMap } from "./learned.ts";
+import { classifyOrgName } from "./classify.ts";
+import { canonicalOrg, orgsNamed } from "./graph.ts";
+import { lookupKeys } from "./names.ts";
+import { brandFor } from "./resolve.ts";
 import { extendsVendor, notEmployerReason, resolveIdentity } from "./resolver.ts";
 
 export type IdentityContext = {
@@ -51,9 +55,21 @@ export function applyIdentity(events: ExtractedEvent[], emails: Map<string, Recr
     const fc = vetoed ? { ...fc0, company: 0 } : fc0;
     const rulesConf = fc.company;
     if (vetoed) e = { ...e, company: null, fieldConfidence: fc, signals: [...e.signals, "identity:vetoed"] };
+    const reason = (text: string) => [...new Set([...(e.reviewReasons ?? []), text])];
+    // A program, event, fellowship or publication is not an employer (structural: its head noun, lib/identity/classify.ts). Run by a known organization, it is
+    // that organization, as a hypothesis; with no known sponsor it stays as named but is never Known.
+    // (a name the graph already knows as an employer is one: "Khan Academy" is an organization, not a program)
+    const program = e.company && !lookupKeys(e.company).some((k) => orgsNamed(k).some((o) => o.kind === "employer")) ? classifyOrgName(e.company) : null;
+    if (e.company && program?.kind === "program") {
+      const sponsor = program.sponsor;
+      const known = sponsor ? lookupKeys(sponsor).map((k) => orgsNamed(k).find((o) => o.kind === "employer")).find(Boolean) : undefined;
+      const sponsorName = known ? canonicalOrg(known).name : sponsor && brandFor(sponsor) ? sponsor : null;
+      const base = { ...e, signals: [...e.signals, "identity:program"] };
+      if (sponsorName) return { ...base, company: sponsorName, fieldConfidence: { ...fc, company: FC_LIKELY }, reviewReasons: reason(`"${e.company}" is a program or event run by ${sponsorName}. Please confirm the organization.`) };
+      return { ...base, fieldConfidence: { ...fc, company: Math.min(fc.company, FC_LIKELY) }, reviewReasons: reason(`"${e.company}" looks like a program or event rather than an employer. The organization behind it may be different.`) };
+    }
     const signals = [...e.signals, `identity:${r.state}`, ...r.classes.map((c) => `identity:class:${c}`)];
     const team = r.team ? [...signals, "identity:team"] : signals;
-    const reason = (text: string) => [...new Set([...(e.reviewReasons ?? []), text])];
     const via = r.intermediaries.filter((i) => i.kind !== "recruiter" && i.kind !== "team").map((i) => i.name);
     const channel = via.length > 0 ? `Sent through ${via.join(" and ")}, which ${via.length > 1 ? "are" : "is"} not the employer. ` : "";
 

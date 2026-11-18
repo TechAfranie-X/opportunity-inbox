@@ -1,4 +1,8 @@
-import { brandFor } from "@/lib/identity/resolve";
+"use client";
+
+import { useCachedBrands } from "@/app/components/workspace";
+import { isAmbiguousName, lookupKeys } from "@/lib/identity/names";
+import { brandFor, type Brand } from "@/lib/identity/resolve";
 import { entityState, monogram, type EntityState } from "@/lib/recruiting/presentation";
 import type { Opportunity } from "@/lib/recruiting/types";
 
@@ -23,7 +27,12 @@ const SIZE = {
 export function EntityMark({ opportunity, name, state: given, size = "md" }: { opportunity?: Pick<Opportunity, "company" | "events">; name?: string | null; state?: EntityState; size?: "sm" | "md" | "lg" | "xl" }) {
   const state: EntityState = given ?? (opportunity ? entityState(opportunity) : name ? "known" : "unknown");
   const company = opportunity ? opportunity.company : name ?? null;
-  const brand = state === "unknown" ? null : brandFor(company);
+  const cached = useCachedBrands();
+  // identity first: a cached first-party mark is only consulted for a company that is already resolved (not unknown) and has no bundled mark
+  const cachedSrc = state === "unknown" || !company ? undefined : lookupKeys(company).map((k) => cached[k]).find(Boolean);
+  // an ordinary-word name ("Sage", "Scale") gets a mark only when the company is KNOWN: a likely guess must not borrow a famous namesake's logo
+  const bundled = state === "unknown" || (state === "likely" && company && isAmbiguousName(company)) ? null : brandFor(company);
+  const brand: Brand | null = bundled ?? (cachedSrc ? { kind: "image", key: "first-party", name: company ?? "", src: cachedSrc, fit: "inset", light: false, source: "first-party" } : null);
   const s = SIZE[size];
   const tone = brand?.light ? "dark" : brand ? (brand.fit === "bleed" ? "bleed" : "light") : state === "unknown" ? "none" : "plain";
   return (

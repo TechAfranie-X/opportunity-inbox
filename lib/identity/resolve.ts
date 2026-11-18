@@ -63,7 +63,7 @@ const ALIASES: Record<string, string> = {
   "hashi corp": "hashicorp",
 };
 
-export type Brand = { kind: "image"; key: string; name: string; src: string; fit: "bleed" | "inset"; /** the mark is too light for the neutral tile: it goes on a dark one */ light: boolean; source: "curated" | "simple-icons" | "wikidata" };
+export type Brand = { kind: "image"; key: string; name: string; src: string; fit: "bleed" | "inset"; /** the mark is too light for the neutral tile: it goes on a dark one */ light: boolean; source: "curated" | "simple-icons" | "wikidata" | "first-party" };
 
 const ASSET_ALIAS = new Map<string, string>();
 for (const [k, a] of Object.entries(BRAND_ASSETS)) { ASSET_ALIAS.set(k, k); for (const al of a.aliases ?? []) ASSET_ALIAS.set(al, k); }

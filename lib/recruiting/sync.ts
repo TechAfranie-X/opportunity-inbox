@@ -5,6 +5,7 @@ import { embargoBefore } from "@/lib/gmail/embargo";
 import { isSampleUser } from "@/lib/gmail/sample";
 import { mailSourceFor } from "@/lib/gmail/source";
 import { outboundEvent, isContinuityCandidate } from "@/lib/recruiting/extract";
+import { ensureFirstPartyBrands } from "@/lib/brand/ensure";
 import { applyIdentity } from "@/lib/identity/reconcile";
 import { learnedMappings } from "@/lib/identity/learned";
 import { readMail } from "@/lib/reliability/assess";
@@ -48,6 +49,22 @@ async function identityConfig(sub: string): Promise<Pick<Parameters<typeof runSy
   } catch {
     return {}; // no identity layer is better than no sync
   }
+}
+
+/**
+ * After a sync, fetch each KNOWN employer's own public icon once (lib/brand): identity decides, then at most one anonymous request to that company's own
+ * domain, cached locally forever. Fire-and-forget (a sync never waits for it or fails because of it). Off for the synthetic sample mailbox and with BRAND_FETCH=off.
+ */
+function fetchBrandsInBackground(sub: string) {
+  if (isSampleUser(sub) || process.env.BRAND_FETCH === "off" || process.env.NODE_ENV === "test") return;
+  void (async () => {
+    try {
+      const ws = await loadWorkspace(sub);
+      await ensureFirstPartyBrands(ws.opportunities);
+    } catch {
+      // brand marks are cosmetic: any failure leaves the monogram
+    }
+  })();
 }
 
 /** One request reads at most this long, then reports what is left and lets the caller continue. */
@@ -98,6 +115,7 @@ export async function syncRecruitingMail(userGoogleSub: string, opts: { /** Test
       predict: (emails) => buildPredictions(emails, readerVersion),
       outboundEvent,
     });
+    fetchBrandsInBackground(userGoogleSub);
     return { ok: true, ...result };
   } catch (error) {
     if (error instanceof GmailAccessError) {

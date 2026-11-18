@@ -11,6 +11,7 @@ import { SideSearch } from "@/app/components/side-search";
 import { SyncControl } from "@/app/components/sync-control";
 import { ThemeControl } from "@/app/components/theme-control";
 import { WorkspaceProvider } from "@/app/components/workspace";
+import { cachedBrandUrls } from "@/lib/brand/cache";
 import { attentionCount, buildReviewQueue } from "@/lib/recruiting/review";
 import type { EffectiveEvent, Opportunity } from "@/lib/recruiting/types";
 
@@ -89,7 +90,7 @@ export function AppShell({
   const SIDE_ICON = { today: <IconToday />, pipeline: <IconPipeline /> } as const;
 
   return (
-    <WorkspaceProvider opportunities={opportunities} now={now} basePath={demo ? "/demo" : "/opportunities"} editable={!demo}>
+    <WorkspaceProvider opportunities={opportunities} now={now} basePath={demo ? "/demo" : "/opportunities"} editable={!demo} brands={demo ? undefined : cachedBrandUrls()}>
       <aside className="sidebar" aria-label="Primary">
         <Link href={demo ? "/demo" : "/today"} className="flex items-center gap-2.5 px-2.5 pb-5 pt-1 text-[0.9375rem] font-semibold tracking-tight">
           <Mark />

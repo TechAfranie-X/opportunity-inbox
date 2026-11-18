@@ -67,3 +67,6 @@ demo-video/audio/clean-product-confidence-1.mp3
 public/demo/soundtrack.mp3
 demo-video/audio/*.mp3
 demo-video/audio/*.wav
+
+# first-party brand cache (fetched icons; local to each install)
+/.data/

@@ -80,13 +80,8 @@ const CURATED: Curated[] = [
   ["Alphabet", "employer", ["abc.xyz"], { parent: "Google", recruitsAs: "parent" }],
 ];
 
-/** Ordinary words and very short names that are also companies. Not a name list: a list of names that need extra care. */
-const COMMON_WORDS = new Set("scale toast ramp gem block linear square apple notion stripe plaid slack zoom mercury bolt ridge lattice snap bench pilot relay loop flex mode vault spark shift arc atlas beacon bridge canvas cloud compass crest delta drift ember fable flow forge frame ghost harbor honey iris jet kite lever lumen maple mesh nest north oak orbit pixel pulse quartz raven river rocket sage scout shore signal sky slate stack summit swift tide trail unity vector wave wise yield zero".split(" "));
-
-export const isAmbiguousName = (name: string) => {
-  const f = flat(name);
-  return f.length <= 3 || COMMON_WORDS.has(f);
-};
+export { isAmbiguousName } from "./names.ts";
+import { isAmbiguousName } from "./names.ts";
 
 const orgs: Org[] = [];
 const byKey = new Map<string, Org[]>();
