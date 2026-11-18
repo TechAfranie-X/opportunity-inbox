@@ -361,6 +361,17 @@ export function TodayComposition({
               </ul>
             </Disclose>
           ) : null}
+
+          {briefing.dormant.length > 0 ? (
+            <Disclose summary={`${briefing.dormant.length} quiet for two months or more`} openSummary="Hide quiet applications">
+              <p className="t-meta mb-1 mt-3 text-ink-3">Still open: nothing was closed. Worth a look only if they still matter.</p>
+              <ul className="list">
+                {briefing.dormant.map((a) => (
+                  <WaitingRow key={a.id} item={a} editable={editable} />
+                ))}
+              </ul>
+            </Disclose>
+          ) : null}
         </div>
 
         <aside className="min-w-0 space-y-4" aria-label="State of things">
@@ -570,7 +581,11 @@ export function OpportunityHistory({ opportunity, now, editable }: { opportunity
   const latestInbound = [...opportunity.events].reverse().find((e) => !e.outbound);
   const closedNote =
     opportunity.status === "closed"
-      ? opportunity.outcome === "rejected"
+      ? opportunity.closedBy === "expired"
+        ? "Closed: the request expired"
+        : opportunity.closedBy === "not_recruiting"
+          ? "Not in your pipeline: nothing here shows an application"
+          : opportunity.outcome === "rejected"
         ? "Closed after a rejection"
         : opportunity.outcome === "offer"
           ? "Closed with an offer"

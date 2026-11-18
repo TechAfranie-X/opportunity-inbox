@@ -64,10 +64,20 @@ test("generic-role events do not attach to an opportunity idle for more than 90 
   assert.equal(opps.length, 2);
 });
 
-test("same thread always links, even across roles", () => {
-  const opps = buildOpportunities([
+test("a Gmail thread is evidence, not a command: it links compatible mail and never merges different roles or cycles", () => {
+  // same thread, one role stated once and a neutral follow-up: linked
+  assert.equal(buildOpportunities([
     ev({ type: "applied", role: "Software Engineer", day: 0, thread: "same" }),
-    ev({ type: "interview_invite", role: "Data Analyst", day: 3, thread: "same" }),
-  ]);
-  assert.equal(opps.length, 1);
+    ev({ type: "interview_invite", role: null, day: 3, thread: "same" }),
+  ]).length, 1);
+  // same thread (Gmail threads automated mail by subject) but two different specific roles: two applications
+  assert.equal(buildOpportunities([
+    ev({ type: "applied", role: "Software Engineer", day: 0, thread: "same" }),
+    ev({ type: "applied", role: "Data Analyst", day: 0, thread: "same" }),
+  ]).length, 2);
+  // same thread, same role family, different cycle: the next season is a new opportunity
+  assert.equal(buildOpportunities([
+    ev({ type: "applied", role: "Software Engineer Intern (Summer 2026)", day: 0, thread: "same" }),
+    ev({ type: "applied", role: "Software Engineer Intern (Summer 2027)", day: 200, thread: "same" }),
+  ]).length, 2);
 });

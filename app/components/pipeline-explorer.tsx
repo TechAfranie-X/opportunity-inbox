@@ -150,7 +150,7 @@ function OppCard({ opp, now, active, onOpen }: { opp: Opportunity; now: Date; ac
   const last = lastMeaningful(opp);
   const next = nextMoment(opp, now);
   const unsure = opp.events.some((e) => !e.outbound && eventNeedsReview(e));
-  const closedNote = opp.status === "closed" ? (opp.outcome === "rejected" ? "Rejected" : opp.outcome === "offer" ? "Offer" : opp.outcome === "withdrawn" ? "Withdrawn" : "Closed") : null;
+  const closedNote = opp.status === "closed" ? (opp.closedBy === "expired" ? "Expired" : opp.closedBy === "not_recruiting" ? "Not recruiting" : opp.outcome === "rejected" ? "Rejected" : opp.outcome === "offer" ? "Offer" : opp.outcome === "withdrawn" ? "Withdrawn" : "Closed") : null;
   return (
     <button
       type="button"

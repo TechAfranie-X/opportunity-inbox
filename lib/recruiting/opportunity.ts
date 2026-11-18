@@ -1,4 +1,8 @@
-import { companyKey, roleRelation, roleTokens } from "./company.ts";
+import { groupEventsV2, groupRole } from "../lifecycle/identity.ts";
+import { assignKeys } from "../lifecycle/keys.ts";
+import { legacyKeyHeads } from "../lifecycle/legacy.ts";
+import { reduceLifecycle } from "../lifecycle/reducer.ts";
+import { repairText } from "../lifecycle/text.ts";
 import { decide, DEFAULT_POLICY, type Policy } from "./policy.ts";
 import { hasDoubt } from "../reliability/flags.ts";
 import type {
@@ -6,7 +10,6 @@ import type {
   EventType,
   ExtractedEvent,
   Opportunity,
-  Outcome,
   Stage,
 } from "./types.ts";
 
@@ -15,6 +18,9 @@ export type EventCorrection = {
   ignored?: boolean;
   /** "Looks right": the person checked what we read. Changes no value; it settles the doubt so the item leaves the review queue. */
   confirmed?: boolean;
+  /** Durable link constraints (lib/lifecycle/identity.ts): they survive re-reading and regrouping because they live on the event. */
+  linkedTo?: string;
+  separate?: boolean;
   type?: EventType;
   company?: string;
   role?: string | null;
@@ -30,7 +36,7 @@ export function applyCorrection(
 ): EffectiveEvent | null {
   if (!correction) return { ...event, corrected: false };
   if (correction.ignored) return null;
-  const merged: EffectiveEvent = { ...event, corrected: false, ...(correction.confirmed ? { confirmed: true } : {}) };
+  const merged: EffectiveEvent = { ...event, corrected: false, ...(correction.confirmed ? { confirmed: true } : {}), ...(correction.linkedTo ? { linkedTo: correction.linkedTo } : {}), ...(correction.separate ? { separate: true } : {}) };
   if (correction.type !== undefined) { merged.type = correction.type; merged.corrected = true; }
   if (correction.company !== undefined) { merged.company = correction.company; merged.corrected = true; }
   if (correction.role !== undefined) { merged.role = correction.role; merged.corrected = true; }
@@ -60,124 +66,12 @@ export function stageOfEvent(type: EventType): Stage | null {
   return STAGE_OF[type] ?? null;
 }
 
-type Group = {
-  company: string | null;
-  role: string | null;
-  events: EffectiveEvent[];
-  threads: Set<string>;
-};
-
-function lastActivity(group: Group) {
-  return group.events[group.events.length - 1].occurredAt.getTime();
-}
-
-/** A generic-role event only joins an opportunity that was active within this window. */
-const GENERIC_ROLE_WINDOW_MS = 90 * 86_400_000;
-/** After a rejection/withdrawal only these (neutral) events can still belong to the same opportunity. */
-const NEUTRAL_AFTER_CLOSE = new Set<EventType>(["status_update", "follow_up", "user_reply"]);
-
-function endedByUser(group: Group) {
-  const last = [...group.events].reverse().find((e) => stageOfEvent(e.type) !== null);
-  return last?.type === "rejection" || last?.type === "withdrawn";
-}
-
 /**
- * Group chronological events into opportunities.
- *
- * Linking rules, strongest first:
- *  1. Same Gmail thread -> same opportunity.
- *  2. Same company + matching role -> same opportunity (unless it already ended).
- *  3. Same company + generic role ("Intern", unknown) -> the most recently active
- *     opportunity at that company within 90 days. Both-specific-and-different roles
- *     are never merged ("Software Engineer" vs "Data Analyst").
- *  4. Otherwise start a new opportunity.
+ * Group chronological events into opportunities (lib/lifecycle/identity.ts). A Gmail thread is evidence, never a command; cycle (season and year), specific
+ * role and program are identity; a person's `linkedTo` / `separate` constraints are applied first. See docs/lifecycle-identity-v2-design.md.
  */
-export function groupEvents(events: EffectiveEvent[]): Group[] {
-  const sorted = [...events].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
-  const groups: Group[] = [];
-  const byThread = new Map<string, Group>();
-
-  for (const event of sorted) {
-    let target = byThread.get(event.gmailThreadId);
-
-    if (!target) {
-      if (event.company) {
-        const ck = companyKey(event.company);
-        const candidates = groups.filter((g) => g.company && companyKey(g.company) === ck);
-        target =
-          candidates.find(
-            (g) =>
-              roleRelation(g.role, event.role) === "match" &&
-              g.role !== null &&
-              event.role !== null &&
-              // A new application for the same role after a rejection is a new opportunity.
-              (!endedByUser(g) || NEUTRAL_AFTER_CLOSE.has(event.type)),
-          ) ??
-          candidates
-            .filter(
-              (g) =>
-                roleRelation(g.role, event.role) === "generic" &&
-                event.occurredAt.getTime() - lastActivity(g) <= GENERIC_ROLE_WINDOW_MS &&
-                // A new application/assessment/interview after a rejection is a new application.
-                (!endedByUser(g) || NEUTRAL_AFTER_CLOSE.has(event.type)),
-            )
-            .sort((a, b) => lastActivity(b) - lastActivity(a))[0];
-      } else if (event.senderDomain) {
-        target = groups.find((g) => !g.company && g.events.some((e) => e.senderDomain === event.senderDomain));
-      }
-    }
-
-    if (!target) {
-      target = { company: event.company, role: event.role, events: [], threads: new Set() };
-      groups.push(target);
-    }
-    target.events.push(event);
-    target.threads.add(event.gmailThreadId);
-    byThread.set(event.gmailThreadId, target);
-    if (!target.company && event.company) target.company = event.company;
-    if (!target.role && event.role) target.role = event.role;
-  }
-  return groups;
-}
-
-const STAGE_RANK: Record<Exclude<Stage, "closed">, number> = { applied: 0, recruiter: 1, assessment: 2, interview: 3, offer: 4 };
-
-/**
- * Where an opportunity stands. A pipeline moves forward: a later "thank you for applying" receipt, a resent assessment link or a
- * nudge from a recruiter must not drag an interview back to "applied". Only an ending (rejection, withdrawal) changes direction,
- * and a later, non-ending stage event in the same conversation reopens it (a rejection that was reversed).
- */
-function deriveState(events: EffectiveEvent[]): { stage: Stage; outcome: Outcome } {
-  let stage: Stage = "applied";
-  let outcome: Outcome = null;
-  let ended = false;
-  for (const e of events) {
-    const s = stageOfEvent(e.type);
-    if (!s) continue;
-    if (s === "closed") {
-      stage = "closed";
-      ended = true;
-      outcome = e.type === "rejection" ? "rejected" : "withdrawn";
-      continue;
-    }
-    if (ended || stage === "closed") {
-      stage = s; // reopened
-      ended = false;
-      outcome = e.type === "offer" ? "offer" : null;
-      continue;
-    }
-    if (STAGE_RANK[s] >= STAGE_RANK[stage as Exclude<Stage, "closed">]) stage = s;
-    if (e.type === "offer") outcome = "offer";
-  }
-  return { stage, outcome };
-}
-
-export function opportunityKey(company: string | null, role: string | null, used: Set<string>) {
-  const base = `${company ? companyKey(company) : "unknown"}~${roleTokens(role).slice(0, 4).join("-") || "general"}`;
-  let key = base;
-  for (let n = 2; used.has(key); n += 1) key = `${base}~${n}`;
-  used.add(key);
-  return key;
+export function groupEvents(events: EffectiveEvent[]) {
+  return groupEventsV2(events).map((g) => ({ company: g.company, role: groupRole(g), events: g.events, threads: g.threads }));
 }
 
 /**
@@ -196,25 +90,33 @@ export function buildOpportunities(
   overrides: Map<string, OpportunityOverride> = new Map(),
   policy: Policy = DEFAULT_POLICY,
 ): Opportunity[] {
-  const used = new Set<string>();
-  const opportunities = groupEvents(events).map((group): Opportunity => {
-    const key = opportunityKey(group.company, group.role, used);
-    const { stage, outcome } = deriveState(group.events);
-    const override = overrides.get(key);
+  const groups = groupEventsV2(events);
+  const keys = assignKeys(groups);
+  // Keys the previous scheme gave: each old key belongs to the opportunity that holds its most recent event, so old overrides, dismissals and bookmarks resolve.
+  const ownerOfEvent = new Map<string, number>();
+  groups.forEach((g, i) => g.events.forEach((e) => ownerOfEvent.set(e.id, i)));
+  const legacy: string[][] = groups.map(() => []);
+  for (const [oldKey, head] of legacyKeyHeads(events)) { const i = ownerOfEvent.get(head); if (i !== undefined) legacy[i].push(oldKey); }
+  const opportunities = groups.map((group, i): Opportunity => {
+    const key = keys[i];
+    const { stage, outcome, status: derived, closedBy } = reduceLifecycle(group.events, policy);
+    const override = overrides.get(key) ?? legacy[i].map((k) => overrides.get(k)).find(Boolean);
     const closedByUser = override?.status === "closed";
     const reopened = override?.status === "active";
-    const status = (stage === "closed" && !reopened) || closedByUser ? "closed" : "active";
+    const status = (derived === "closed" && !reopened) || closedByUser ? "closed" : "active";
     return {
       key,
       company: group.company ?? "Unknown company",
-      role: group.role,
+      role: repairText(groupRole(group)),
       stage,
       outcome,
       status,
+      closedBy: status === "closed" ? (closedBy ?? "rejected") : null,
+      legacyKeys: legacy[i],
       firstActivityAt: group.events[0].occurredAt,
       lastActivityAt: group.events[group.events.length - 1].occurredAt,
       events: group.events,
-      needsReview: !group.company || group.events.some((e) => eventNeedsReview(e, policy)),
+      needsReview: !group.company || group.events.some((e) => eventNeedsReview(e, policy)) || closedBy === "not_recruiting",
     };
   });
   return opportunities.sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());

@@ -15,6 +15,8 @@ export type Briefing = {
   comingUp: ActionItem[];
   /** Quiet follow-up suggestions. Never allowed to compete with the rest. */
   waiting: ActionItem[];
+  /** Open applications silent for 60+ days: a low-priority "worth a look", kept apart so it can never inflate "waiting on replies". */
+  dormant: ActionItem[];
   recent: RecentChange[];
 };
 
@@ -36,9 +38,10 @@ export function buildBriefing(opportunities: Opportunity[], actions: ActionItem[
   const needsYou = actions.filter(urgent);
   const rest = actions.filter((a) => !urgent(a));
   const comingUp = rest.filter((a) => a.bucket === "soon");
-  const waiting = rest.filter((a) => a.bucket === "worth_a_look");
+  const waiting = rest.filter((a) => a.bucket === "worth_a_look" && !a.dormant);
+  const dormant = rest.filter((a) => a.bucket === "worth_a_look" && a.dormant);
 
-  return { needsYou, comingUp, waiting, recent: recentChanges(opportunities, now) };
+  return { needsYou, comingUp, waiting, dormant, recent: recentChanges(opportunities, now) };
 }
 
 /** The latest inbound event per opportunity within the last week, newest first. */

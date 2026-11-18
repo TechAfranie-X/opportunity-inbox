@@ -9,7 +9,7 @@ export default async function DemoOpportunity({ params }: PageProps<"/demo/[key]
   await connection();
   const { key } = await params;
   const { opportunities, now } = loadDemoWorkspace();
-  const opportunity = opportunities.find((o) => o.key === decodeURIComponent(key));
+  const opportunity = opportunities.find((o) => o.key === decodeURIComponent(key) || o.legacyKeys?.includes(decodeURIComponent(key)));
   if (!opportunity) notFound();
   return (
     <AppShell demo active="pipeline" opportunities={opportunities} now={now}>

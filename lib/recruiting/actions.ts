@@ -45,6 +45,11 @@ const OFFER_GRACE_DAYS = 7;
 /** Unanswered invites/outreach count as overdue only this long; after that they are probably gone. */
 const INVITE_OVERDUE_MAX_DAYS = 14;
 
+/** Silence of this many days makes an open application a low-priority suggestion (decision 2026-11-18). Never a status. */
+export const DORMANT_AFTER_DAYS = 60;
+/** Beyond this the suggestion stops: a record this old is history, not a nudge. */
+const DORMANT_UNTIL_DAYS = 180;
+
 const PROGRESS_AFTER_ASSESSMENT = new Set(["assessment_completed", "interview_invite", "interview_scheduled", "offer", "rejection", "withdrawn"]);
 
 /**
@@ -69,7 +74,8 @@ export function buildActions(
     opts: { due?: Date | null; dueHasTime?: boolean; daysUntil?: number; bucket?: ActionItem["bucket"] },
   ) => {
     const id = `${kind}:${opp.key}:${source.gmailMessageId}`;
-    if (dismissed.has(id)) return;
+    // a dismissal made under an earlier key of this application still counts
+    if (dismissed.has(id) || (opp.legacyKeys ?? []).some((k) => dismissed.has(`${kind}:${k}:${source.gmailMessageId}`))) return;
     const d = opts.daysUntil;
     let bucket = opts.bucket;
     if (!bucket) {
@@ -166,19 +172,20 @@ export function buildActions(
       }
     }
 
-    // 5. Offer decision. Later activity (a reply, "congrats on accepting") means it is being handled.
-    const offer = lastOf("offer");
+    // 5. Offer decision. An offer stays open until it is explicitly resolved (withdrawn, rejected, or the opportunity closed): replying to the recruiter does not
+    // resolve it, and an "Action needed: next steps" message after the dated offer is still an open action. Every offer message counts, not just the last.
+    const offers = events.filter((e) => e.type === "offer" && !e.outbound);
+    const offer = offers[offers.length - 1];
     if (offer && !laterThan(offer).some((e) => e.type === "withdrawn" || e.type === "rejection")) {
-      const after = laterThan(offer);
-      if (offer.eventDate) {
-        const d = Math.round((dayStart(offer.eventDate) - today) / DAY);
-        if (d >= -OFFER_GRACE_DAYS) {
-          add(opp, offer, "offer_decision", "Offer decision due",
-            d < 0 ? `Deadline was ${when(d)}.` : `Respond ${when(d)}.`,
-            { due: offer.eventDate, dueHasTime: offer.eventDateHasTime, daysUntil: d });
-        }
-      } else if (after.length === 0 && ageDays(offer) <= 30) {
-        add(opp, offer, "offer_decision", "You have an offer", "No deadline detected — confirm the response date.",
+      const dated = [...offers].reverse().find((e) => e.eventDate);
+      const d = dated?.eventDate ? Math.round((dayStart(dated.eventDate) - today) / DAY) : null;
+      if (dated && d !== null && d >= -OFFER_GRACE_DAYS) {
+        add(opp, dated, "offer_decision", "Offer decision due",
+          d < 0 ? `Deadline was ${when(d)}.` : `Respond ${when(d)}.`,
+          { due: dated.eventDate, dueHasTime: dated.eventDateHasTime, daysUntil: d });
+      } else if (ageDays(offer) <= 30) {
+        add(opp, offer, "offer_decision", "Next steps on your offer",
+          dated ? "The response date has passed; check the latest message for what is still needed." : "No deadline detected — confirm the response date and next steps.",
           { bucket: "today", daysUntil: 0 });
       }
     }
@@ -195,6 +202,19 @@ export function buildActions(
         add(opp, last, "check_in", "Still waiting to hear back", `You last wrote ${quiet} days ago with no reply.`, { bucket: "worth_a_look" });
       } else if (opp.stage === "assessment" && last.type === "assessment_completed" && quiet >= 7 && quiet <= 45) {
         add(opp, last, "check_in", "Assessment submitted, no update", `Submitted ${quiet} days ago — consider checking in.`, { bucket: "worth_a_look" });
+      }
+    }
+
+    // 7. Dormancy: after DORMANT_AFTER_DAYS of silence an open application is only a low-priority "worth a look" suggestion, in its own collapsed group. It is never a
+    // status (nothing is closed by silence), and it is never shown for: an offer (open until resolved), a known upcoming interview, a deadline that has not passed, or
+    // anything newer than the quiet period (any message, including the person's own reply, resets the clock).
+    if (!items.some((i) => i.opportunityKey === opp.key) && opp.stage !== "offer" && quiet >= DORMANT_AFTER_DAYS && quiet <= DORMANT_UNTIL_DAYS) {
+      const upcoming = events.some((e) => e.eventDate && dayStart(e.eventDate) >= today);
+      if (!upcoming) {
+        add(opp, last, "check_in", `Quiet for ${quiet} days`, `Last news ${quiet} days ago. Still open; nothing was closed. Worth a look if it still matters.`, { bucket: "worth_a_look" });
+        const added = items[items.length - 1];
+        added.dormant = true;
+        added.priority = 5 - Math.min(4, (quiet - DORMANT_AFTER_DAYS) / 30);
       }
     }
   }

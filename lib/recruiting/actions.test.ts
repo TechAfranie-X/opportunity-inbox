@@ -21,7 +21,10 @@ const dayOffset = (d: number) => new Date(Date.UTC(2026, 10, 2) + d * DAY);
 const run = (events: EffectiveEvent[]) => buildActions(buildOpportunities(events), NOW);
 
 test("an assessment deadline long past is history, not an overdue action", () => {
-  assert.equal(run([ev("assessment", 120, { eventDate: dayOffset(-113), dateKind: "deadline" })]).length, 0);
+  const a = run([ev("assessment", 120, { eventDate: dayOffset(-113), dateKind: "deadline" })]);
+  assert.ok(!a.some((x) => x.kind === "assessment_deadline"), "no deadline action");
+  // 120 silent days: only the low-priority, collapsed "quiet" suggestion remains (decision 2026-11-18); nothing is closed
+  assert.deepEqual(a.map((x) => `${x.kind}:${x.bucket}:${x.dormant === true}`), ["check_in:worth_a_look:true"]);
 });
 
 test("an assessment just past its deadline is still flagged (extension window)", () => {
@@ -59,5 +62,6 @@ test("a fresh interview invite is overdue, an old one becomes a quiet nudge", ()
 
 test("quiet-application nudges are bounded to the 14-45 day window and ranked around three weeks", () => {
   const a = run([ev("applied", 5, { company: "A" }), ev("applied", 21, { company: "B" }), ev("applied", 44, { company: "C" }), ev("applied", 70, { company: "D" })]);
-  assert.deepEqual(a.map((x) => x.company), ["B", "C"]);
+  assert.deepEqual(a.filter((x) => !x.dormant).map((x) => x.company), ["B", "C"]);
+  assert.deepEqual(a.filter((x) => x.dormant).map((x) => x.company), ["D"], "70 silent days is the 60-day dormant suggestion, not a nudge");
 });

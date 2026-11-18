@@ -51,7 +51,7 @@ export const STAGES: Stage[] = [
   "closed",
 ];
 
-export type Outcome = "offer" | "rejected" | "withdrawn" | null;
+export type Outcome = "offer" | "rejected" | "withdrawn" | "expired" | null;
 
 /** A single message as handed to the extractor. Body is transient. */
 export type RecruitingEmail = {
@@ -102,6 +102,10 @@ export type EffectiveEvent = ExtractedEvent & {
   corrected: boolean;
   /** The person pressed "Looks right" on this event. */
   confirmed?: boolean;
+  /** The person said this message belongs with that one (a Gmail message id): applied before any automatic linking. */
+  linkedTo?: string;
+  /** The person said this message is its own opportunity: it never links automatically to earlier ones. */
+  separate?: boolean;
 };
 
 export type Opportunity = {
@@ -110,7 +114,12 @@ export type Opportunity = {
   role: string | null;
   stage: Stage;
   outcome: Outcome;
+  /** Whether the opportunity is still open. Separate from `stage`, which is how far it got. */
   status: "active" | "closed";
+  /** Why it is closed: an employer/person ending, an expired request, or no evidence of a candidacy. Null while active. */
+  closedBy?: "rejected" | "withdrawn" | "expired" | "not_recruiting" | null;
+  /** Keys the previous scheme gave to the applications this one continues, so old overrides, dismissals and links still resolve. */
+  legacyKeys?: string[];
   firstActivityAt: Date;
   lastActivityAt: Date;
   events: EffectiveEvent[]; // chronological
@@ -141,6 +150,8 @@ export type ActionItem = {
   bucket: "overdue" | "today" | "soon" | "worth_a_look";
   /** True when the evidence behind this action is too uncertain to show it as urgent. */
   uncertain?: boolean;
+  /** A quiet-for-60-days suggestion (never a status: nothing is closed by silence). Shown low, inside its own collapsed group. */
+  dormant?: boolean;
   priority: number;
   sourceThreadId: string | null;
 };

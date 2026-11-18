@@ -26,6 +26,12 @@ function decode(data: string | undefined, charset: string | null = null) {
   if (!data) return "";
   const bytes = Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64");
   if (charset && charset !== "utf-8" && charset !== "utf8") {
+    // Some senders declare a single-byte charset but send UTF-8 (a non-breaking space then reads "Â" and an apostrophe "â€™"). Bytes that are valid UTF-8 and
+    // contain multi-byte sequences are overwhelmingly UTF-8 whatever the label says; genuine single-byte text is almost never valid UTF-8, so it still decodes as declared.
+    try {
+      const strict = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      if (/[^\x00-\x7f]/.test(strict)) return strict;
+    } catch { /* not UTF-8: honour the declared charset */ }
     try {
       return new TextDecoder(charset).decode(bytes);
     } catch {

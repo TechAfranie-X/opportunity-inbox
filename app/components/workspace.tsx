@@ -94,7 +94,8 @@ export function WorkspaceProvider({
   const param = useSyncExternalStore(subscribeUrl, readSelection, noSelection);
   const [local, setLocal] = useState<string | null>(null);
   const raw = persistSelection ? param : local;
-  const selectedKey = raw && opportunities.some((o) => o.key === raw) ? raw : null;
+  // a bookmarked or shared link made under an earlier key scheme still opens the application it continues
+  const selectedKey = raw ? (opportunities.find((o) => o.key === raw || o.legacyKeys?.includes(raw))?.key ?? null) : null;
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const open = useCallback((key: string) => (persistSelection ? writeSelection(key) : setLocal(key)), [persistSelection]);
