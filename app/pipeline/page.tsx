@@ -5,6 +5,7 @@ import { PipelineExplorer } from "@/app/components/pipeline-explorer";
 import { isDatabaseConfigured } from "@/lib/db";
 import { toFloating } from "@/lib/recruiting/actions";
 import { loadWorkspace } from "@/lib/recruiting/store";
+import { isJob } from "@/lib/recruiting/format";
 
 export const metadata = { title: "Pipeline · Opportunity Inbox" };
 
@@ -23,8 +24,8 @@ export default async function PipelinePage({ searchParams }: PageProps<"/pipelin
     <AppShell active="pipeline" user={session?.user} updated={updated} opportunities={workspace.opportunities} possible={workspace.possible} now={now} width="wide">
       <h1 className="t-display">Pipeline</h1>
       <p className="t-lead tnum mt-3 text-ink-2">
-        {workspace.opportunities.filter((o) => o.status === "active").length} active
-        {workspace.opportunities.some((o) => o.status === "closed") ? `, ${workspace.opportunities.filter((o) => o.status === "closed").length} closed` : ""}
+        {workspace.opportunities.filter((o) => isJob(o) && o.status === "active").length} active
+        {workspace.opportunities.some((o) => isJob(o) && o.status === "closed") ? `, ${workspace.opportunities.filter((o) => isJob(o) && o.status === "closed").length} closed` : ""}
       </p>
       <div className="mt-10">
         <PipelineExplorer initialStage={stage} />

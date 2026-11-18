@@ -40,7 +40,7 @@ f9ba482 Milestone 2 · 2ab821f Gmail routing · d7bafd2 refinement layer · 9958
 
 ## Independent adversarial review (subagent, read-only)
 Found and fixed (with regression tests): offer promotion on advice/scam/webinar/template wording; employer merges on generic suffixes (Bank, Financial, Technologies, Services, Group); a past cancellation inside a live confirmation; non-deadline dates ("before November 30") taken as deadlines; newsletter/practice/course/consumer gates firing on genuine employer mail (interview invitations, ATS login codes, a bank employer's application receipt). Tests 599.
-Open, observed on real data: "SLAC National Accelerator Laboratory" and "Stanford" are one internship split by employer alias (knowledge-based alias; needs the identity graph, not suffix rules).
+Open, observed on real data: the same fellowship program appears as three cards ("Open Quantum Initiative" with roles "Fellow", "OQI Fellowship", "...Undergraduate Fellowship") because employer and role names differ without a generic-suffix relation; and "SLAC National Accelerator Laboratory" and "Stanford" are one internship split by employer alias (knowledge-based alias; needs the identity graph, not suffix rules).
 
 ## Next executable tasks
 1. (done) accepted offers; (done) job-only counts with scholarships listed apart.
