@@ -4,6 +4,7 @@ import { classifySender } from "../recruiting/entity/vendors.ts";
 import { extractAll, extractWithReason, isContinuityCandidate, stripQuoted, type ReadContext } from "../recruiting/extract.ts";
 import { processEvidence } from "../recruiting/signals.ts";
 import type { ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
+import { applyFacts } from "./facts.ts";
 import { CONFLICT_PREFIX, MEMBERSHIP_PREFIX, NEAR_MISS, NEAR_MISS_WEAK, hasDoubt, isNearMiss } from "./flags.ts";
 import { groundingOf, isLinkedEvent } from "./grounding.ts";
 
@@ -141,7 +142,7 @@ export function readMail(emails: RecruitingEmail[], context?: ReadContext): Extr
     if (doubt) out.reviewReasons!.push(doubt);
     const conflict = outcomeConflict(email, out);
     if (conflict) out.reviewReasons!.push(conflict);
-    return out;
+    return applyFacts(email, out); // polarity and explicit-date facts from the text (lib/reliability/facts.ts)
   });
   const have = new Set(events.map((e) => e.gmailMessageId));
   const near = emails.flatMap((e) => (have.has(e.id) ? [] : [nearMiss(e)].filter((x): x is ExtractedEvent => x !== null)));

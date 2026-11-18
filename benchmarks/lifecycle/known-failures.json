@@ -1,10 +1,6 @@
 {
  "note": "Failing tests at the recorded baseline. A test leaves this list only when it passes. `--check` fails on new failures and on entries that now pass.",
  "failing": [
-  "[deadline] I02: an explicit absolute deadline wins over a relative window in the same message (audit #18)",
-  "[deadline] I03: an explicit deadline that has already passed is still recorded (audit #4)",
-  "[false-positive] I06: generic personality-assessment results with a paid upsell do not enter the pipeline as an event (audit #13)",
-  "[terminal] G04-cancelled-interview: active g04-a1 - an interview the employer cancelled must not leave an active Interview opportunity",
-  "[terminal] I01: a message cancelling an upcoming interview is not read as a scheduled interview (audit #10)"
+  "[terminal] G04-cancelled-interview: active g04-a1 - an interview the employer cancelled must not leave an active Interview opportunity"
  ]
 }
