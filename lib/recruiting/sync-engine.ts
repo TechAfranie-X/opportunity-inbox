@@ -4,6 +4,7 @@ import { contactKeysOf, reconcilePredictions } from "../discovery/continuity.ts"
 import { isNearMiss } from "../reliability/flags.ts";
 import { applyConsensus } from "../semantic/consensus.ts";
 import { reconcileReadings } from "../semantic/employer.ts";
+import type { VerifiedReading } from "../semantic/reading.ts";
 import type { SemanticReader } from "../semantic/port.ts";
 import { semanticInputs } from "../semantic/inputs.ts";
 import { minimizeSweepPredictions, tagEvents, viaMap } from "../discovery/strategy.ts";
@@ -73,6 +74,12 @@ export type EngineParams = {
    * pass the veto-only triage, and can only change what a person is asked, never a structured value.
    */
   semantic?: SemanticReader;
+  /**
+   * Employer resolution (lib/identity): normalizes names through the identity graph, rules out vendors, agencies and generic words, and writes a
+   * calibrated known / likely / review / unknown company state. Pure and local; it runs after the readers, so it sees the rules' reading and, when
+   * a second reader ran, its verified relationship evidence. Off unless supplied.
+   */
+  identity?: (events: ExtractedEvent[], emails: Map<string, RecruitingEmail>, readings: Map<string, VerifiedReading>) => ExtractedEvent[];
   /** Name tokens of the account holder, removed from what the second reader sees. */
   selfNames?: string[];
   predict: (emails: RecruitingEmail[]) => Prediction[];
@@ -173,6 +180,7 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
         // A second opinion that fails is no opinion: the first reader's result stands and nothing is lost.
       }
     }
+    if (p.identity) events = p.identity(events, new Map(inbound.map((m) => [m.id, m] as const)), readingLog);
     await store.saveEvents(events);
     const eventIds = new Set(events.filter((e) => !isNearMiss(e)).map((e) => e.gmailMessageId)); // a near miss is still "no event" for continuity
     const held = p.deferable ? inbound.filter((e) => !eventIds.has(e.id) && deferred.size < DEFER_MAX && p.deferable!(e)) : [];
@@ -196,6 +204,7 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
     let events = tagEvents(p.extract(held, { contacts: keys.length > 0 && store.contactAnchors ? await store.contactAnchors(keys) : new Map() }), via);
     if (p.semantic && opinionLog.size > 0) events = applyConsensus(events, held, new Map(held.flatMap((h) => (opinionLog.has(h.id) ? [[h.id, opinionLog.get(h.id)!] as const] : []))));
     if (p.semantic && readingLog.size > 0) events = reconcileReadings(events, new Map(held.flatMap((h) => (readingLog.has(h.id) ? [[h.id, readingLog.get(h.id)!] as const] : []))));
+    if (p.identity) events = p.identity(events, new Map(held.map((m) => [m.id, m] as const)), readingLog);
     await store.saveEvents(events);
     try {
       await store.savePredictions(minimizeSweepPredictions(reconcilePredictions(p.predict(held), events), via));
