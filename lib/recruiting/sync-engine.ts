@@ -3,6 +3,7 @@ import type { ReadContext, ThreadAnchor } from "./extract.ts";
 import { contactKeysOf, reconcilePredictions } from "../discovery/continuity.ts";
 import { isNearMiss } from "../reliability/flags.ts";
 import { applyConsensus } from "../semantic/consensus.ts";
+import { reconcileReadings } from "../semantic/employer.ts";
 import type { SemanticReader } from "../semantic/port.ts";
 import { semanticInputs } from "../semantic/inputs.ts";
 import { minimizeSweepPredictions, tagEvents, viaMap } from "../discovery/strategy.ts";
@@ -132,6 +133,7 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
   const failedIds = new Set<string>();
   const deferred = new Map<string, RecruitingEmail>();
   const opinionLog = new Map<string, import("../recruiting/reader/types.ts").VerifiedOutput>();
+  const readingLog = new Map<string, import("../semantic/reading.ts").VerifiedReading>();
   let repliesUnchecked = 0;
   const outboundOf = async (threadIds: string[]) => {
     const r = await source.fetchOutbound(threadIds);
@@ -157,9 +159,16 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
     let events = tagEvents(p.extract([...inbound, ...outbound], context), via);
     if (p.semantic) {
       try {
-        const opinions = await p.semantic.opine(semanticInputs(inbound, p.selfNames));
+        const inputs = semanticInputs(inbound, p.selfNames);
+        let opinions: Map<string, import("../recruiting/reader/types.ts").VerifiedOutput>;
+        if (p.semantic.readings) {
+          const readings = await p.semantic.readings(inputs);
+          for (const [k, v] of readings) readingLog.set(k, v);
+          opinions = new Map([...readings].map(([k, v]) => [k, v.output] as const));
+        } else opinions = await p.semantic.opine(inputs);
         for (const [k, v] of opinions) opinionLog.set(k, v); // kept for this run so the deferred pass can use them without a second call
         events = applyConsensus(events, inbound, opinions);
+        if (readingLog.size > 0) events = reconcileReadings(events, readingLog);
       } catch {
         // A second opinion that fails is no opinion: the first reader's result stands and nothing is lost.
       }
@@ -186,6 +195,7 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
     const keys = contactKeysOf(held);
     let events = tagEvents(p.extract(held, { contacts: keys.length > 0 && store.contactAnchors ? await store.contactAnchors(keys) : new Map() }), via);
     if (p.semantic && opinionLog.size > 0) events = applyConsensus(events, held, new Map(held.flatMap((h) => (opinionLog.has(h.id) ? [[h.id, opinionLog.get(h.id)!] as const] : []))));
+    if (p.semantic && readingLog.size > 0) events = reconcileReadings(events, new Map(held.flatMap((h) => (readingLog.has(h.id) ? [[h.id, readingLog.get(h.id)!] as const] : []))));
     await store.saveEvents(events);
     try {
       await store.savePredictions(minimizeSweepPredictions(reconcilePredictions(p.predict(held), events), via));

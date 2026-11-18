@@ -7,7 +7,7 @@ import { LOGOS } from "./logos.ts";
  */
 
 /** Vendors that send recruiting mail on an employer's behalf. Their marks must never stand in for the employer. */
-const VENDORS = new Set([
+export const VENDOR_KEYS = new Set([
   "greenhouse", "lever", "workday", "myworkdayjobs", "ashby", "ashbyhq", "smartrecruiters", "icims", "taleo", "jobvite", "bamboohr", "workable",
   "hackerrank", "codesignal", "codility", "handshake", "linkedin", "indeed", "glassdoor", "ziprecruiter", "hirevue", "oracle", "teamtailor",
   "rippling", "gem", "eightfold", "phenom", "paylocity", "paycom", "recruitee", "breezy", "pinpoint", "wellfound", "angellist", "dover",
@@ -65,7 +65,7 @@ export type Brand = { key: string; name: string; path: string };
 export function brandFor(company: string | null | undefined): Brand | null {
   if (!company) return null;
   const n = normalizeCompany(company);
-  if (!n || VENDORS.has(n.replace(/ /g, ""))) return null;
+  if (!n || VENDOR_KEYS.has(n.replace(/ /g, ""))) return null;
   const key = ALIASES[n] ?? n.replace(/ /g, "");
   const hit = Object.hasOwn(LOGOS, key) ? LOGOS[key] : undefined;
   return hit ? { key, name: hit.name, path: hit.path } : null;
