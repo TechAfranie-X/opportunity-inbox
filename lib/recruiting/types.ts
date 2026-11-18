@@ -51,7 +51,8 @@ export const STAGES: Stage[] = [
   "closed",
 ];
 
-export type Outcome = "offer" | "rejected" | "withdrawn" | "expired" | null;
+/** `accepted`: an offer followed by onboarding paperwork from the employer (screening, start details): the offer is settled, not waiting for a decision. */
+export type Outcome = "offer" | "accepted" | "rejected" | "withdrawn" | "expired" | null;
 
 /** A single message as handed to the extractor. Body is transient. */
 export type RecruitingEmail = {

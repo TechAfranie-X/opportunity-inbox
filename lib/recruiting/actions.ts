@@ -176,7 +176,7 @@ export function buildActions(
     // resolve it, and an "Action needed: next steps" message after the dated offer is still an open action. Every offer message counts, not just the last.
     const offers = events.filter((e) => e.type === "offer" && !e.outbound);
     const offer = offers[offers.length - 1];
-    if (offer && !laterThan(offer).some((e) => e.type === "withdrawn" || e.type === "rejection")) {
+    if (offer && opp.outcome !== "accepted" && !laterThan(offer).some((e) => e.type === "withdrawn" || e.type === "rejection")) {
       const dated = [...offers].reverse().find((e) => e.eventDate);
       const d = dated?.eventDate ? Math.round((dayStart(dated.eventDate) - today) / DAY) : null;
       if (dated && d !== null && d >= -OFFER_GRACE_DAYS) {

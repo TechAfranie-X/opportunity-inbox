@@ -56,6 +56,11 @@ export function reduceLifecycle(events: EffectiveEvent[], policy: Policy = DEFAU
     if (STAGE_RANK[s] >= STAGE_RANK[stage]) stage = s;
     if (e.type === "offer") outcome = "offer";
   }
+  // An offer followed by the employer's onboarding mail (marked by the refinement layer) is an accepted offer: settled, no decision pending.
+  if (!ended && outcome === "offer") {
+    const firstOffer = events.find((e) => e.type === "offer" && !e.outbound && usable(e));
+    if (firstOffer && events.some((e) => !e.outbound && e.occurredAt.getTime() > firstOffer.occurredAt.getTime() && (e.signals.includes("onboarding (refined)") || e.signals.includes("after offer (refined)")))) outcome = "accepted";
+  }
   if (ended) return { stage: "closed", outcome, status: "closed", closedBy: ended };
   if (expired) return { stage, outcome: "expired", status: "closed", closedBy: "expired" };
   // results and receipts for an assessment are not, by themselves, evidence of an application; an employer's update or nudge is (the review queue decides the rest)

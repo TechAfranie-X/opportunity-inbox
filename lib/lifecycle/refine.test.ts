@@ -60,7 +60,7 @@ test("explicit offer wording is an offer, even when the reader set it aside as a
   assert.ok(!refined[3].signals.includes("near-miss"), "paperwork after an offer is part of the same candidacy");
   const [o] = buildOpportunities(refined);
   assert.equal(o.stage, "offer");
-  assert.equal(o.outcome, "offer");
+  assert.equal(o.outcome, "accepted", "the employer's screening paperwork followed the offer");
   assert.equal(o.events.length, 4);
 });
 
@@ -152,4 +152,21 @@ test("after an offer, onboarding mail is not an interview and not a goodbye", ()
 test("the same wording with no offer on record is left to the reader and the review queue", () => {
   const e = { ...ev({ type: "interview_invite", day: 40, subject: "Welcome to Acme - Pre-employment Screening Satisfied" }), reviewReasons: ["conflict: x"] };
   assert.equal(refineEvents([e]).events[0].type, "interview_invite");
+});
+
+test("an offer followed by employer onboarding is accepted: no pending decision action, stage stays Offer", async () => {
+  const { buildActions } = await import("../recruiting/actions.ts");
+  const events = [
+    ev({ type: "offer", day: 10, subject: "Congratulations on your job offer!", role: "Platform Internship Program" }),
+    ev({ type: "status_update", day: 20, subject: "Your background screening info", conf: 0.3, signals: ["near-miss"] }),
+  ];
+  const [o] = buildOpportunities(refineEvents(events).events);
+  assert.equal(o.outcome, "accepted");
+  assert.equal(o.stage, "offer");
+  assert.equal(o.status, "active");
+  const now = new Date(base + 22 * 86_400_000);
+  assert.equal(buildActions([o], now, new Set()).filter((a) => a.kind === "offer_decision").length, 0);
+  const open = buildOpportunities([ev({ type: "offer", day: 10, subject: "Congratulations on your job offer!", role: "Platform Internship Program" })])[0];
+  assert.equal(open.outcome, "offer");
+  assert.equal(buildActions([open], new Date(base + 12 * 86_400_000), new Set()).filter((a) => a.kind === "offer_decision").length, 1, "a bare offer still needs a decision");
 });

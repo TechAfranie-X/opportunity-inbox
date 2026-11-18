@@ -76,7 +76,9 @@ export function Inspector() {
                       : opp.outcome === "offer"
                         ? "Closed with an offer"
                         : "Closed"
-                    : `${STAGE_LABEL[opp.stage]} since ${shortDay(since!)}`}
+                    : opp.outcome === "accepted"
+                      ? "Offer accepted. The employer has sent onboarding details."
+                      : `${STAGE_LABEL[opp.stage]} since ${shortDay(since!)}`}
                 </p>
               </div>
 
