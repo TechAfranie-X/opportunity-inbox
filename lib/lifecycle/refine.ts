@@ -134,7 +134,7 @@ const MODEL_AGREED = (signals: string[]) => signals.some((x) => x === "semantic:
 const ONBOARDING_RETYPE = new Set<string>(["interview_invite", "interview_scheduled", "follow_up", "recruiter_outreach", "applied", "assessment", "assessment_completed"]);
 const settled = (e: EffectiveEvent) => e.corrected || e.confirmed === true;
 
-export function refineEvents(events: EffectiveEvent[]): Refined {
+export function refineEvents(events: EffectiveEvent[], options: { resolveEmployers?: boolean } = {}): Refined {
   const excluded: Excluded[] = [];
   const kept: EffectiveEvent[] = [];
   const programs = programDomains(events);
@@ -194,7 +194,8 @@ export function refineEvents(events: EffectiveEvent[]): Refined {
     }
     return company;
   };
-  return { events: resolveEmployers(kept.map((e) => (e.company && !settled(e) && canonical(e.company) !== e.company ? { ...e, company: canonical(e.company) } : e))), excluded };
+  const canon = kept.map((e) => (e.company && !settled(e) && canonical(e.company) !== e.company ? { ...e, company: canonical(e.company) } : e));
+  return { events: options.resolveEmployers === false ? canon : resolveEmployers(canon), excluded };
 }
 
 const SCHOLARSHIP = /\b(?:scholarship|fellowship|grant)\b/i;

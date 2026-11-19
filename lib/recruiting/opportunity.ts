@@ -1,5 +1,6 @@
 import { detectContradictions } from "../lifecycle/contradictions.ts";
 import { groupEventsV2, groupRole } from "../lifecycle/identity.ts";
+import { groupEventsLegacyV2 } from "../lifecycle/identity-v2.ts";
 import { assignKeys } from "../lifecycle/keys.ts";
 import { legacyKeyHeads } from "../lifecycle/legacy.ts";
 import { opportunityKind, refineEvents } from "../lifecycle/refine.ts";
@@ -92,6 +93,7 @@ export function buildOpportunities(
   overrides: Map<string, OpportunityOverride> = new Map(),
   policy: Policy = DEFAULT_POLICY,
 ): Opportunity[] {
+  const unresolved = refineEvents(events, { resolveEmployers: false }).events; // what the previous generation saw, for key translation only
   events = refineEvents(events).events; // evidence checks that need the whole record (lib/lifecycle/refine.ts)
   const groups = groupEventsV2(events);
   const keys = assignKeys(groups);
@@ -100,6 +102,9 @@ export function buildOpportunities(
   groups.forEach((g, i) => g.events.forEach((e) => ownerOfEvent.set(e.id, i)));
   const legacy: string[][] = groups.map(() => []);
   for (const [oldKey, head] of legacyKeyHeads(events)) { const i = ownerOfEvent.get(head); if (i !== undefined) legacy[i].push(oldKey); }
+  // keys the previous identity algorithm issued: an override or a dismissal made under one still resolves to the opportunity that now holds that group's latest message
+  const prev = groupEventsLegacyV2(unresolved);
+  assignKeys(prev).forEach((oldKey, n) => { const head = prev[n].events[prev[n].events.length - 1].id; const i = ownerOfEvent.get(head); if (i !== undefined && !legacy[i].includes(oldKey)) legacy[i].push(oldKey); });
   const opportunities = groups.map((group, i): Opportunity => {
     const key = keys[i];
     const { stage, outcome, status: derived, closedBy } = reduceLifecycle(group.events, policy);

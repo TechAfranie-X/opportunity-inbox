@@ -96,3 +96,15 @@ test("contradictions: an offer then an ending is flagged; an ordinary rejection 
   const settled = [ev({ type: "rejection", day: 0, company: "Orbis", thread: "t" }), { ...ev({ type: "interview_scheduled", day: 3, company: "Orbis", thread: "t" }), confirmed: true }];
   assert.deepEqual(detectContradictions(settled), []);
 });
+
+test("an override made under the key the previous identity generation issued still reaches the opportunity (key continuity)", () => {
+  const events = [
+    ev({ type: "applied", day: 0, company: "Harborline", thread: "t1", role: "Data Intern" }),
+    ev({ type: "interview_invite", day: 2, company: "Hirelane", thread: "t1", role: "Data Intern", signals: ["employer:sender-only"] }),
+  ];
+  const first = buildOpportunities(events);
+  assert.equal(first.length, 1);
+  const oldKey = "hirelane~c0~data"; // what the previous generation called the group holding the later message
+  const withOverride = buildOpportunities(events, new Map([[oldKey, { status: "closed" as const }]]));
+  assert.ok(first[0].legacyKeys?.includes(oldKey) || withOverride[0].status === "closed", `legacy keys: ${first[0].legacyKeys?.join(",")} / key ${first[0].key}`);
+});
