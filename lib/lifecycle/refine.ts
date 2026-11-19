@@ -195,7 +195,24 @@ export function refineEvents(events: EffectiveEvent[], options: { resolveEmploye
     return company;
   };
   const canon = kept.map((e) => (e.company && !settled(e) && canonical(e.company) !== e.company ? { ...e, company: canonical(e.company) } : e));
-  return { events: options.resolveEmployers === false ? canon : resolveEmployers(canon), excluded };
+  return { events: options.resolveEmployers === false ? canon : demoteFollowUpOffers(resolveEmployers(canon)), excluded };
+}
+
+/**
+ * A second "offer" from the same employer that only a language model typed (no offer wording in the subject, nothing the rules read as an offer) and that follows an
+ * explicit offer is the employer's follow-up (next steps, welcome, manager information), not another offer. Only an EXPLICIT offer can start the process.
+ * Runs after employer names are resolved, so spelling variants of one employer count as one.
+ */
+function demoteFollowUpOffers(events: EffectiveEvent[]): EffectiveEvent[] {
+  const modelOnly = (e: EffectiveEvent) => e.signals.some((x) => x === "semantic:type" || x === "semantic:event") && !e.signals.some((x) => x.startsWith("offer (")) && !OFFER_SUBJECT.test(e.subject ?? "");
+  const explicitOfferAt = new Map<string, number>();
+  for (const e of events) if (e.type === "offer" && !e.outbound && e.company && !modelOnly(e)) { const k = companyKey(e.company); explicitOfferAt.set(k, Math.min(explicitOfferAt.get(k) ?? Infinity, e.occurredAt.getTime())); }
+  return events.map((e) => {
+    const first = e.company ? explicitOfferAt.get(companyKey(e.company)) : undefined;
+    return first !== undefined && !settled(e) && !e.outbound && e.type === "offer" && modelOnly(e) && e.occurredAt.getTime() > first
+      ? { ...e, type: "status_update" as const, signals: [...e.signals, "after offer (refined)"], reviewReasons: (e.reviewReasons ?? []).filter((x) => !x.startsWith("conflict:")) }
+      : e;
+  });
 }
 
 const SCHOLARSHIP = /\b(?:scholarship|fellowship|grant)\b/i;

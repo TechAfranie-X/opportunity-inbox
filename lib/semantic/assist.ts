@@ -59,6 +59,8 @@ function semanticEvent(m: RecruitingEmail, op: VerifiedOutput): ExtractedEvent {
 }
 
 const LOW_INFORMATION = new Set<string>(["status_update", "applied", "follow_up"]);
+/** What a RECEIPT may be retyped to: only an ending or an offer. A receipt's own wording ("Thank you for applying") is strong, and a confirmation page that mentions an assessment link is still a receipt. */
+const ENDINGS = new Set<string>(["rejection", "withdrawn", "offer"]);
 const DECISIVE = new Set<string>(["rejection", "offer", "withdrawn", "interview_invite", "interview_scheduled", "assessment"]);
 export function applyAssist(events: ExtractedEvent[], emails: RecruitingEmail[], opinions: Map<string, VerifiedOutput>): ExtractedEvent[] {
   if (opinions.size === 0) return events;
@@ -77,7 +79,7 @@ export function applyAssist(events: ExtractedEvent[], emails: RecruitingEmail[],
     if (!op.recruiting) return { ...e, reviewReasons: [...new Set([...(e.reviewReasons ?? []), SECOND_READER_NO])], signals: [...e.signals, "semantic:no"] };
     // A low-information type (a bare status, a receipt, a nudge) is made specific when the verified reading is confident about a decisive stage: the same subject
     // line ("Your application to X") carries a receipt one day and a rejection the next, and only the body tells them apart.
-    const generic = LOW_INFORMATION.has(e.type) && op.certainty === "high" && !!op.type && op.type !== e.type && (e.type === "status_update" || DECISIVE.has(op.type));
+    const generic = LOW_INFORMATION.has(e.type) && op.certainty === "high" && !!op.type && op.type !== e.type && (e.type === "status_update" || (e.type === "applied" ? ENDINGS.has(op.type) : DECISIVE.has(op.type)));
     return applyTextFacts(m, { ...e, type: interviewKind(m, generic ? asEventType(op.type) : e.type), signals: [...e.signals, generic ? "semantic:type" : "semantic:agree"] });
   });
   const have = new Set(out.map((e) => e.gmailMessageId));

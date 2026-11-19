@@ -98,7 +98,7 @@ export function verifyReading(raw: unknown, input: ReaderInput): VerifiedReading
     else if (!inText(name) && !fromCandidate) bad("name_not_in_text");
     else if (!inText(quote) || norm(String(quote)).split(" ").length < 3) bad("relationship_quote_missing");
     else if (basis !== ("employer_candidates" as string) && !norm(String(quote)).includes(norm(name))) bad("quote_does_not_name_employer"); // a name chosen from the local resolver's grounded candidates needs no name in the quote
-    else if (name.split(/\s+/).length > 6 || !/^[A-Z0-9]/.test(name) || /^(?:the|our|your|team|company|hiring team|recruiting|careers|university|program)$/i.test(name)) bad("implausible");
+    else if (name.split(/\s+/).length > 6 || !/^[A-Z0-9]/.test(name) || /^(?:the|our|your|team|company|hiring team|recruiting|careers|university|program|fyi|asap|tbd|n\/a|re|fw|fwd|hello|hi|dear|thanks|thank you|update|application)$/i.test(name)) bad("implausible");
     else if (isIntermediaryBrand(name) || NOT_EMPLOYER.has(name.toLowerCase().replace(/[^a-z0-9]/g, ""))) bad("vendor_not_employer");
     // A two-word capitalised name is a person only when the message itself shows a person by that name: the sender's own display name, or an entity the reader typed as a
     // recruiter. "Orbital Maps", "Jane Street" and "Two Sigma" look like names but are organisations the person applied to; judging by shape alone silently drops them.

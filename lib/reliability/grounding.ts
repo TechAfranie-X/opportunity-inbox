@@ -71,6 +71,7 @@ export function senderBrand(email: Pick<RecruitingEmail, "from" | "subject" | "b
   const words = display.split(/\s+/).filter(Boolean);
   const kept = words.filter((w) => !FUNCTION_WORDS.has(w.toLowerCase().replace(/[^\p{L}]/gu, "")));
   if (kept.length === 0 || (kept.length === words.length && !via) || kept.length > 4) return null;
+  if (!kept.every((w) => /^[\p{L}\d][\p{L}\d&.'’-]*$/u.test(w))) return null; // punctuation-led fragments ("(Gen)", "- Team") are not names
   const domain = /@([^>\s]+)/.exec(email.from)?.[1]?.toLowerCase() ?? "";
   const labels = domain.split(".").slice(0, -1).map(squash);
   const inText = squash(`${email.subject} ${email.bodyText}`).includes(squash(kept.join(" ")));

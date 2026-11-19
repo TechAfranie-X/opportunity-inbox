@@ -130,6 +130,12 @@ export async function loadAllExtracted(userGoogleSub: string): Promise<Extracted
   return rows.map((r) => rowToExtracted(r));
 }
 
+/** Message ids whose row carries ANY person's correction or confirmation: a re-read must not change what they vouched for. */
+export async function loadCorrectedMessageIds(userGoogleSub: string): Promise<Set<string>> {
+  const rows = await getDb().select({ id: recruitingEvents.gmailMessageId, correction: recruitingEvents.correction }).from(recruitingEvents).where(eq(recruitingEvents.userGoogleSub, userGoogleSub));
+  return new Set(rows.filter((r) => r.correction != null).map((r) => r.id));
+}
+
 export async function saveExtractedEvents(userGoogleSub: string, events: ExtractedEvent[]) {
   if (events.length === 0) return;
   const db = getDb();

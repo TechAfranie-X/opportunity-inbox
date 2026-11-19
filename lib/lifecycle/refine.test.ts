@@ -295,3 +295,14 @@ test("an event with no known employer joins the one opportunity that employer's 
   const later = ev({ type: "interview_invite", day: 20, subject: "Book a time", company: null, domain: "acme-corp.example", thread: "th" });
   assert.equal(buildOpportunities([rejected, later]).length, 2, "after a rejection a new stage is a new opportunity");
 });
+
+test("a model-typed 'offer' that follows an explicit offer from the same employer is the employer's follow-up, not a second offer; an explicit one stays", () => {
+  const first = ev({ type: "offer", day: 0, subject: "Congratulations on your job offer!", company: "Orbis", signals: ["offer (ingestion)"] });
+  const follow = ev({ type: "offer", day: 10, subject: "Important next steps for your summer start", company: "Orbis", signals: ["semantic:type"] });
+  const second = ev({ type: "offer", day: 12, subject: "Offer of employment: Analyst Program", company: "Orbis", signals: ["semantic:type"] });
+  const alone = ev({ type: "offer", day: 0, subject: "Next steps", company: "Globex", signals: ["semantic:event"] });
+  const out = refineEvents([first, follow, second, alone]).events;
+  assert.equal(out.find((e) => e.id === follow.id)?.type, "status_update");
+  assert.equal(out.find((e) => e.id === second.id)?.type, "offer", "an explicit second offer is a real second offer");
+  assert.equal(out.find((e) => e.id === alone.id)?.type, "offer", "with no earlier explicit offer the model's reading stands (and is reviewable)");
+});
