@@ -43,6 +43,27 @@ export function resolveEmployers(events: EffectiveEvent[]): EffectiveEvent[] {
     return { ...e, company: te, fieldConfidence: { type: e.fieldConfidence?.type ?? e.confidence, role: e.fieldConfidence?.role ?? e.confidence, company: 0.5 }, signals: [...e.signals.filter((s) => s !== "employer:sender-only"), "employer:thread"] };
   });
 
+  // 1b. SENDER IDENTITY: one sender (the same display name from the same domain) that writes for exactly one employer elsewhere in the record. An applicant-tracking
+  //     platform delivers mail for many employers under ONE address, so a sender whose grounded names are not all variants of one employer proves nothing.
+  const senderKey = (e: EffectiveEvent) => `${tokens(e.senderName ?? "").join(" ")}|${e.senderDomain}`;
+  const bySender = new Map<string, string[]>();
+  for (const e of out) if (e.company && !e.outbound && e.senderName && !e.signals.includes("employer:sender-only")) bySender.set(senderKey(e), [...(bySender.get(senderKey(e)) ?? []), e.company]);
+  const senderEmployer = (e: EffectiveEvent): string | null => {
+    const ns = bySender.get(senderKey(e));
+    if (!ns || ns.length === 0) return null;
+    const longest = [...ns].sort((a, b) => tokens(b).length - tokens(a).length)[0];
+    if (!ns.every((n) => sameName(n, longest) || isPrefix(tokens(n), tokens(longest)))) return null;
+    // and the sender's own label must carry that employer's name ("Fernbank Games" for "Fernbank Interactive Ltd"): a platform's label ("Recruiting", "Applicant Hub") never does
+    const lead = tokens(e.senderName ?? "")[0] ?? "";
+    return lead.length >= 4 && lead === tokens(longest)[0] ? longest : null;
+  };
+  out = out.map((e) => {
+    if (settled(e) || e.outbound || !e.senderName || !(e.signals.includes("employer:sender-only") || !e.company)) return e;
+    const se = senderEmployer(e);
+    if (!se || (e.company && sameName(e.company, se))) return e;
+    return { ...e, company: se, fieldConfidence: { type: e.fieldConfidence?.type ?? e.confidence, role: e.fieldConfidence?.role ?? e.confidence, company: 0.5 }, signals: [...e.signals.filter((s) => s !== "employer:sender-only"), "employer:sender-identity"] };
+  });
+
   // 2. aliases
   type Info = { name: string; support: number; threads: Set<string>; domains: Set<string> };
   const info = new Map<string, Info>();
@@ -50,13 +71,22 @@ export function resolveEmployers(events: EffectiveEvent[]): EffectiveEvent[] {
     if (!e.company) continue;
     const k = tokens(e.company).join(" ");
     const i = info.get(k) ?? { name: e.company, support: 0, threads: new Set(), domains: new Set() };
-    if (!e.signals.includes("employer:sender-only")) i.support++;
+    if (!e.signals.includes("employer:sender-only")) { if (i.support === 0) i.name = e.company; i.support++; } // spelling: the first one the message text itself uses
     i.threads.add(e.gmailThreadId);
     if (e.senderDomain) i.domains.add(e.senderDomain);
     info.set(k, i);
   }
   // only a shared Gmail thread ties two spellings: a shared sender domain is also what a platform or a mailbox provider has in common with many employers
-  const tied = (a: Info, b: Info) => [...a.threads].some((t) => b.threads.has(t));
+  // A sender domain ties two spellings only when everything written from it is one employer (all its names equal or prefix-related): a domain that carries
+  // unrelated employers is a platform or a mailbox provider, and sharing it proves nothing.
+  const related = (x: string, y: string) => { const a = tokens(x), b = tokens(y); return a.join(" ") === b.join(" ") || isPrefix(a, b) || isPrefix(b, a); };
+  const domainNames = new Map<string, string[]>();
+  for (const e of out) if (e.company && e.senderDomain && !e.signals.includes("employer:sender-only")) domainNames.set(e.senderDomain, [...(domainNames.get(e.senderDomain) ?? []), e.company]);
+  // ...and only when the domain is NAMED for the employer ("solmar-energia.example" for "Solmar Energía ..."), not a mailbox or platform that happens to carry one name
+  const flat = (x: string) => tokens(x).join("");
+  const labelOf = (d: string) => flat(d.split(".").slice(0, -1).slice(-1)[0] ?? "");
+  const coherentDomain = (d: string) => { const ns = domainNames.get(d) ?? [], l = labelOf(d); return l.length >= 4 && ns.length > 0 && ns.every((x) => ns.every((y) => related(x, y))) && ns.every((x) => flat(x).startsWith(l) || l.startsWith(flat(x))); };
+  const tied = (a: Info, b: Info) => [...a.threads].some((t) => b.threads.has(t)) || [...a.domains].some((d) => b.domains.has(d) && coherentDomain(d));
   const canon = new Map<string, string>();
   for (const [k, short] of info) {
     const longer = [...info.entries()].filter(([k2, x]) => k2 !== k && isPrefix(tokens(short.name), tokens(x.name)) && tied(short, x));
@@ -68,11 +98,17 @@ export function resolveEmployers(events: EffectiveEvent[]): EffectiveEvent[] {
   }
   // follow chains and pick the best-supported spelling among a class
   const rootOf = (k: string): string => { const seen = new Set<string>(); let cur = k; while (canon.has(cur) && !seen.has(cur)) { seen.add(cur); cur = tokens(canon.get(cur)!).join(" "); } return cur; };
+  // the class's spelling: the best supported (written in message text), ties to the longer, more specific name
+  const members = new Map<string, string[]>();
+  for (const k of info.keys()) members.set(rootOf(k), [...(members.get(rootOf(k)) ?? []), k]);
+  const spelling = new Map<string, string>();
+  for (const [root, ks] of members) spelling.set(root, ks.map((k) => info.get(k)!).sort((a, b) => b.support - a.support || tokens(b.name).length - tokens(a.name).length)[0].name);
   out = out.map((e) => {
     if (!e.company || settled(e)) return e;
     const k = tokens(e.company).join(" ");
     const r = rootOf(k);
-    return r === k ? e : { ...e, company: info.get(r)?.name ?? e.company, signals: [...e.signals, "employer:alias"] };
+    const name = spelling.get(r) ?? e.company;
+    return name === e.company ? e : { ...e, company: name, signals: [...e.signals, "employer:alias"] };
   });
   return out;
 }

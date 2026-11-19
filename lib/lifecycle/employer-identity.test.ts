@@ -8,9 +8,9 @@ import { resolveEmployers } from "./employer-identity.ts";
 // Fictional employers; the shapes are general failure patterns (a platform's name read as the employer; one employer spelled two ways; progress after a rejection).
 let n = 0;
 const base = Date.UTC(2026, 0, 1);
-const ev = (o: { type: EventType; day: number; company: string | null; thread: string; signals?: string[]; role?: string | null; outbound?: boolean; corrected?: boolean; domain?: string }): EffectiveEvent => {
+const ev = (o: { type: EventType; day: number; company: string | null; thread: string; signals?: string[]; role?: string | null; outbound?: boolean; corrected?: boolean; domain?: string; sender?: string }): EffectiveEvent => {
   const id = `e${++n}`;
-  return { id, gmailMessageId: id, gmailThreadId: o.thread, occurredAt: new Date(base + o.day * 86_400_000), outbound: o.outbound ?? false, senderName: "x", senderDomain: o.domain ?? "mailer.example", subject: "s", type: o.type, company: o.company, role: o.role ?? null, eventDate: null, eventDateHasTime: false, dateKind: null, confidence: 0.9, fieldConfidence: { type: 0.9, company: 0.5, role: 0.6 }, reviewReasons: [], signals: o.signals ?? [], corrected: o.corrected ?? false } as EffectiveEvent;
+  return { id, gmailMessageId: id, gmailThreadId: o.thread, occurredAt: new Date(base + o.day * 86_400_000), outbound: o.outbound ?? false, senderName: o.sender ?? "x", senderDomain: o.domain ?? "mailer.example", subject: "s", type: o.type, company: o.company, role: o.role ?? null, eventDate: null, eventDateHasTime: false, dateKind: null, confidence: 0.9, fieldConfidence: { type: 0.9, company: 0.5, role: 0.6 }, reviewReasons: [], signals: o.signals ?? [], corrected: o.corrected ?? false } as EffectiveEvent;
 };
 const names = (es: EffectiveEvent[]) => es.map((e) => e.company);
 
@@ -21,6 +21,15 @@ test("a name found only in the sender yields to the one employer the thread's ow
     ev({ type: "follow_up", day: 3, company: "Mailer", thread: "t2", signals: ["employer:sender-only"] }),
   ]);
   assert.deepEqual(names(out), ["Harborline", "Harborline", "Mailer"], "another thread has no such evidence and is left alone");
+});
+
+test("one sender that writes for exactly one employer lends that name to its sender-only mail, only when the sender's own label carries the name", () => {
+  const out = resolveEmployers([
+    ev({ type: "applied", day: 0, company: "Fernbank Interactive Ltd", thread: "t1", sender: "Fernbank Games", domain: "workwell-ats.example" }),
+    ev({ type: "assessment", day: 2, company: "Workwell-ats", thread: "t2", sender: "Fernbank Games", domain: "workwell-ats.example", signals: ["employer:sender-only"] }),
+    ev({ type: "assessment", day: 3, company: "Workwell-ats", thread: "t3", sender: "Applicant Hub", domain: "workwell-ats.example", signals: ["employer:sender-only"] }),
+  ]);
+  assert.deepEqual(names(out), ["Fernbank Interactive Ltd", "Fernbank Interactive Ltd", "Workwell-ats"], "a platform's generic label proves nothing");
 });
 
 test("a thread that names two different employers does not overrule a sender-only name", () => {

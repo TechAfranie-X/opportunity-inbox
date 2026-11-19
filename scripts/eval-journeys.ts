@@ -116,7 +116,7 @@ for (const sc of fx.scenarios) {
       if (home.stage === j.finalStage) c.stageOk++; else bad(`${sc.id}/${j.key} STAGE ${home.stage} != ${j.finalStage}`);
     }
     // next action
-    const mine = actions.filter((a) => a.opportunityKey === home.key && !a.dormant).sort((a, b) => b.priority - a.priority);
+    const mine = actions.filter((a) => a.opportunityKey === home.key).sort((a, b) => b.priority - a.priority);
     const got = mine[0]?.kind ?? "none";
     if (got === j.nextAction) c.actOk++; else bad(`${sc.id}/${j.key} NEXT ACTION ${got} != ${j.nextAction}`);
     if (mine[0]) { c.evidenceN++; const threads = new Set(jm.map((m) => m.threadId ?? `t-${m.id}`)); if (mine[0].sourceThreadId && threads.has(mine[0].sourceThreadId)) c.evidenceOk++; else bad(`${sc.id}/${j.key} EVIDENCE action points outside the journey`); }

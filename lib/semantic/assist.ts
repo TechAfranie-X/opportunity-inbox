@@ -55,6 +55,8 @@ function semanticEvent(m: RecruitingEmail, op: VerifiedOutput): ExtractedEvent {
   };
 }
 
+const LOW_INFORMATION = new Set<string>(["status_update", "applied", "follow_up"]);
+const DECISIVE = new Set<string>(["rejection", "offer", "withdrawn", "interview_invite", "interview_scheduled", "assessment"]);
 export function applyAssist(events: ExtractedEvent[], emails: RecruitingEmail[], opinions: Map<string, VerifiedOutput>): ExtractedEvent[] {
   if (opinions.size === 0) return events;
   const byId = new Map(emails.map((m) => [m.id, m] as const));
@@ -70,8 +72,10 @@ export function applyAssist(events: ExtractedEvent[], emails: RecruitingEmail[],
       return e;
     }
     if (!op.recruiting) return { ...e, reviewReasons: [...new Set([...(e.reviewReasons ?? []), SECOND_READER_NO])], signals: [...e.signals, "semantic:no"] };
-    const generic = e.type === "status_update" && op.certainty === "high" && op.type && op.type !== "status_update";
-    return { ...e, type: generic ? asEventType(op.type) : e.type, signals: [...e.signals, generic ? "semantic:type" : "semantic:agree"] };
+    // A low-information type (a bare status, a receipt, a nudge) is made specific when the verified reading is confident about a decisive stage: the same subject
+    // line ("Your application to X") carries a receipt one day and a rejection the next, and only the body tells them apart.
+    const generic = LOW_INFORMATION.has(e.type) && op.certainty === "high" && !!op.type && op.type !== e.type && (e.type === "status_update" || DECISIVE.has(op.type));
+    return { ...e, type: interviewKind(m, generic ? asEventType(op.type) : e.type), signals: [...e.signals, generic ? "semantic:type" : "semantic:agree"] };
   });
   const have = new Set(out.map((e) => e.gmailMessageId));
   const added = emails.flatMap((m) => {

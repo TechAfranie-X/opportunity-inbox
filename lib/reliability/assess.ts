@@ -7,7 +7,7 @@ import type { ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
 import { applyFacts, bodyAct, explicitOffer } from "./facts.ts";
 import { CONFLICT_PREFIX, MEMBERSHIP_PREFIX, NEAR_MISS, NEAR_MISS_WEAK, hasDoubt, isNearMiss } from "./flags.ts";
 import { studentAcceptance } from "./facts.ts";
-import { companyInText, groundingOf, isLinkedEvent } from "./grounding.ts";
+import { companyInText, groundingOf, isLinkedEvent, nameOfSenderDomain, senderBrand } from "./grounding.ts";
 
 /**
  * The reliability layer around the rule reader. The reader is unchanged; this layer only checks and abstains:
@@ -142,7 +142,18 @@ export function readMail(emails: RecruitingEmail[], context?: ReadContext): Extr
     }
     // Provenance of the employer name: written in the message text, or found only in the sender's name/address. A sender-only name says who SENT the mail
     // (an applicant-tracking platform, a mailbox provider, an agency), which is not always who is HIRING; the reconciliation weighs it accordingly.
-    if (out.company && !companyInText(email, out.company)) out.signals.push("employer:sender-only");
+    if (out.company && (!companyInText(email, out.company) || nameOfSenderDomain(email, out.company))) out.signals.push("employer:sender-only");
+    // The employer's own sender label ("Copperline Careers") names the employer even when a platform delivers the mail or the reader fell back to the domain.
+    if (!out.company || out.signals.includes("employer:sender-only")) {
+      const brand = senderBrand(email);
+      if (brand) {
+        out.company = brand;
+        out.fieldConfidence = { type: out.fieldConfidence?.type ?? out.confidence, role: out.fieldConfidence?.role ?? out.confidence, company: Math.max(out.fieldConfidence?.company ?? 0, companyInText(email, brand) ? 0.5 : 0.38) };
+        out.signals = [...out.signals.filter((x) => x !== "employer:sender-only"), "employer:display-name"];
+        // corroborated by the message text: trusted as is; corroborated only by the sender's own domain label: likely, and the person is asked once
+        if (!companyInText(email, brand)) out.reviewReasons!.push("company: taken from the sender's label, not from the message text");
+      }
+    }
     const doubt = membershipDoubt(email, out);
     if (doubt) out.reviewReasons!.push(doubt);
     const conflict = outcomeConflict(email, out);
