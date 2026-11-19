@@ -74,7 +74,12 @@ function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean)
   return positiveCycle || gap <= SPECIFIC_WINDOW_NO_CYCLE;
 }
 
-export function groupEventsV2(events: EffectiveEvent[]): Group[] {
+export function groupEventsV2(input: EffectiveEvent[]): Group[] {
+  // A role the reader COPIED from an earlier message of the thread ("role-inherited") is not evidence about THIS message: automated senders reuse one thread for several
+  // roles, so an inherited role would pull a role-less message into whichever application the thread started with. For identity such an event states no role.
+  const original = new Map(input.map((e) => [e.id, e] as const));
+  const events = input.map((e) => (e.signals.includes("role-inherited") && !e.corrected ? { ...e, role: null } : e));
+  const restore = (g: Group[]) => { for (const x of g) x.events = x.events.map((e) => (original.get(e.id) ? { ...e, role: original.get(e.id)!.role } : e)); return g; };
   const sorted = [...events].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.id.localeCompare(b.id));
   // a person's "belongs with" constraints form components; an event in a component whose group exists joins it directly
   const parent = new Map<string, string>();
@@ -93,8 +98,18 @@ export function groupEventsV2(events: EffectiveEvent[]): Group[] {
       // 1. the Gmail thread: evidence, weighed like any other. A thread can hold several opportunities (automated mail reuses one subject), so every group that
       //    has mail in this thread is a candidate and the same checks apply to each; a specific role match beats a generic one, then recency.
       const inThread = groups.filter((g) => g.threads.has(e.gmailThreadId) && sameEmployer(g)).map((g) => ({ g, rel: relation(g, e) })).filter(({ g, rel }) => allowed(g, e, rel, true));
-      target = inThread.filter((s) => s.rel === "match").sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g ?? inThread.filter((s) => s.rel === "generic").sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
-      if (!target) {
+      const threadMatches = inThread.filter((s) => s.rel === "match");
+      const threadGenerics = inThread.filter((s) => s.rel === "generic");
+      // ABSTAIN here too: a role-less message in a thread that already holds two applications for DIFFERENT roles cannot be told from either by the thread alone.
+      const threadRoles = new Set(threadGenerics.map(({ g }) => groupRole(g)).filter((r): r is string => !!r && specific(r)).map((r) => roleCore(r).join(" ")));
+      if (threadMatches.length === 0 && threadGenerics.length > 1 && threadRoles.size > 1 && !specific(e.role)) {
+        ambiguous = threadGenerics.map(({ g }) => groupRole(g)).filter(Boolean).join(" / ");
+        // a neutral message (a reminder, a bare status) moves no stage, so it rides with the latest candidate and says so; a stage-bearing one stays apart
+        if (NEUTRAL.has(e.type)) target = threadGenerics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
+      } else {
+        target = threadMatches.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g ?? threadGenerics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
+      }
+      if (!target && !ambiguous) {
         const pool = e.company
           ? groups.filter((g) => g.company && companyKey(g.company) === companyKey(e.company!))
           : e.senderDomain ? groups.filter((g) => !g.company && g.events.some((x) => x.senderDomain === e.senderDomain)) : [];
@@ -108,6 +123,7 @@ export function groupEventsV2(events: EffectiveEvent[]): Group[] {
         const roleSet = new Set(pick.map(({ g }) => groupRole(g)).filter((r): r is string => !!r && specific(r)).map((r) => roleCore(r).join(" ")));
         if (matches.length === 0 && generics.length > 1 && roleSet.size > 1 && !specific(e.role)) {
           ambiguous = generics.map(({ g }) => groupRole(g)).filter(Boolean).join(" / ");
+          if (NEUTRAL.has(e.type)) target = generics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
         } else {
           target = pick.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
         }
@@ -127,7 +143,7 @@ export function groupEventsV2(events: EffectiveEvent[]): Group[] {
     componentGroup.set(find(e.id), target);
     if (!target.company && e.company) target.company = e.company;
   }
-  return groups;
+  return restore(groups);
 }
 
 /**
