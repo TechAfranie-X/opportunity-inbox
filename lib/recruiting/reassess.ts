@@ -42,10 +42,12 @@ export async function reassessPossible(userGoogleSub: string, reader: SemanticRe
  * metadata fields are refreshed. Idempotent (running it twice changes nothing the second time), additive (it only UPDATES rows that already exist; it deletes nothing
  * and never touches a person's correction, which lives in its own column), and failure-closed (without a model reading for a message, its row is left as it was).
  */
+/** Bumped when the identity evidence changes, so a stored row is refreshed once per generation (idempotent within one). */
+const BACKFILL_MARK = "identity:backfilled:2";
 export async function backfillIdentity(userGoogleSub: string, reader: SemanticReader | null, selfNames: string[] = [], limit = 400): Promise<{ examined: number; updated: number; skipped: number }> {
   const source = await mailSourceFor(userGoogleSub);
   if (!source) throw new Error("not connected");
-  const stored = (await loadAllExtracted(userGoogleSub)).filter((e) => !e.signals.some((x) => x.startsWith("employer:") || x === "identity:backfilled")).slice(0, limit);
+  const stored = (await loadAllExtracted(userGoogleSub)).filter((e) => !e.signals.includes(BACKFILL_MARK)).slice(0, limit);
   if (stored.length === 0) return { examined: 0, updated: 0, skipped: 0 };
   const { emails } = await source.fetchEmails(stored.map((e) => e.gmailMessageId));
   const inbound = emails.filter((e) => !e.outbound);
@@ -57,7 +59,7 @@ export async function backfillIdentity(userGoogleSub: string, reader: SemanticRe
   const old = new Map(stored.map((e) => [e.gmailMessageId, e] as const));
   // never DOWNGRADE: a message the product already shows (or one a model judged) is not replaced by a weaker reading of the same message
   const keeps = (e: ExtractedEvent) => { const o = old.get(e.gmailMessageId)!; return !(isNearMiss(e) && !isNearMiss(o)) && !(o.signals.some((x) => x.startsWith("semantic:")) && !e.signals.some((x) => x.startsWith("semantic:"))); };
-  const fresh = events.filter((e) => old.has(e.gmailMessageId) && keeps(e)).map((e) => ({ ...e, signals: [...new Set([...e.signals, ...(old.get(e.gmailMessageId)!.signals.filter((x) => x.startsWith("via:"))), "identity:backfilled"])] }));
+  const fresh = events.filter((e) => old.has(e.gmailMessageId) && keeps(e)).map((e) => ({ ...e, signals: [...new Set([...e.signals, ...(old.get(e.gmailMessageId)!.signals.filter((x) => x.startsWith("via:"))), BACKFILL_MARK])] }));
   await saveExtractedEvents(userGoogleSub, fresh);
   return { examined: stored.length, updated: fresh.length, skipped: stored.length - fresh.length };
 }

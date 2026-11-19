@@ -62,20 +62,24 @@ export function groundingOf(email: RecruitingEmail, event: ExtractedEvent): Grou
  * is the employer, if at least one such word was removed (so a person's name is never a brand) and the rest is corroborated: it is written in the message, or it is
  * the start of one of the sender domain's own labels ("copperline-logistics.example"). Returns null otherwise.
  */
-const FUNCTION_WORDS = new Set(["careers", "career", "karriere", "carrières", "carrieres", "carreras", "carreira", "carriere", "recruiting", "recruitment", "recruiter", "recruiters", "recrutement", "recruiting", "talent", "talente", "talento", "talentos", "talents", "jobs", "job", "hr", "rh", "rrhh", "people", "team", "equipo", "equipe", "hiring", "staffing", "applications", "application", "candidate", "candidates", "candidatures", "bewerbung", "bewerbungen", "personal", "personnel", "human", "resources", "admissions", "university", "internships", "internship", "campus", "early", "emploi", "empleo", "stellen", "no", "reply", "noreply", "notifications", "portal", "the", "via", "at", "from", "interview", "interviews", "interviewing", "assessment", "assessments", "scheduling", "schedule", "scheduler", "onboarding", "offer", "offers", "recruit", "update", "updates", "support", "help", "info", "admin", "system", "service", "services", "welcome", "news", "newsletter", "events", "event", "office", "center", "centre", "department", "student", "students", "graduate", "graduates", "grad", "applicant", "applicants", "hub", "desk", "mail", "email", "alerts", "alert", "community", "programs", "program", "success", "operations"]);
+const FUNCTION_WORDS = new Set(["careers", "career", "karriere", "carrières", "carrieres", "carreras", "carreira", "carriere", "recruiting", "recruitment", "recruiter", "recruiters", "recrutement", "recruiting", "talent", "talente", "talento", "talentos", "talents", "jobs", "job", "hr", "rh", "rrhh", "people", "team", "equipo", "equipe", "hiring", "staffing", "applications", "application", "candidate", "candidates", "candidatures", "bewerbung", "bewerbungen", "personal", "personnel", "human", "resources", "admissions", "university", "internships", "internship", "campus", "early", "emploi", "empleo", "stellen", "no", "reply", "noreply", "notifications", "portal", "the", "via", "at", "from", "interview", "interviews", "interviewing", "assessment", "assessments", "scheduling", "schedule", "scheduler", "onboarding", "offer", "offers", "recruit", "update", "updates", "support", "help", "info", "admin", "system", "service", "services", "welcome", "news", "newsletter", "events", "event", "office", "center", "centre", "department", "student", "students", "graduate", "graduates", "grad", "applicant", "applicants", "hub", "desk", "mail", "email", "alerts", "alert", "community", "programs", "program", "success", "operations", "acquisition", "scholarship", "scholarships", "community", "admission", "recruitment", "sourcing", "experience", "relations", "outreach"]);
 export function senderBrand(email: Pick<RecruitingEmail, "from" | "subject" | "bodyText">): string | null {
-  const display = email.from.replace(/<[^>]*>/, "").replace(/["']/g, "").trim();
+  let display = email.from.replace(/<[^>]*>/, "").replace(/["']/g, "").trim();
+  // "Dexi from Sodexo", "Ana at Orbis", "Marta de Solmar": the organisation is what follows the preposition, the person what precedes it
+  const via = /\s(?:from|at|de|bei|chez|di|da)\s+(.+)$/i.exec(display);
+  if (via) display = via[1];
   const words = display.split(/\s+/).filter(Boolean);
   const kept = words.filter((w) => !FUNCTION_WORDS.has(w.toLowerCase().replace(/[^\p{L}]/gu, "")));
-  if (kept.length === 0 || kept.length === words.length || kept.length > 4) return null;
-  const brand = kept.join(" ");
+  if (kept.length === 0 || (kept.length === words.length && !via) || kept.length > 4) return null;
   const domain = /@([^>\s]+)/.exec(email.from)?.[1]?.toLowerCase() ?? "";
-  const b = squash(brand);
-  if (b.length < 3) return null;
   const labels = domain.split(".").slice(0, -1).map(squash);
-  const viaDomain = labels.some((l) => l.length >= 3 && (l.startsWith(b) || b.startsWith(l)));
-  const inText = squash(`${email.subject} ${email.bodyText}`).includes(b);
-  return viaDomain || inText ? brand : null;
+  const inText = squash(`${email.subject} ${email.bodyText}`).includes(squash(kept.join(" ")));
+  // corroborated by the sender's own domain: the brand is the leading words that make up the domain's label ("Intuit" for "Intuit Talent Acquisition" at intuit.com)
+  for (let n = 1; n <= kept.length; n++) {
+    const head = squash(kept.slice(0, n).join(" "));
+    if (head.length >= 3 && labels.some((l) => l.length >= 3 && (l === head || (n === kept.length && (l.startsWith(head) || head.startsWith(l)))))) return kept.slice(0, n).join(" ");
+  }
+  return inText && squash(kept.join(" ")).length >= 3 ? kept.join(" ") : null;
 }
 
 /**
