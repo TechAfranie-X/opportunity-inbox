@@ -27,6 +27,8 @@ try {
   execFileSync("npx", ["drizzle-kit", "migrate"], { env: { ...process.env, DATABASE_URL: url.toString() }, stdio: "ignore" });
   process.env.DATABASE_URL = url.toString();
   process.env.SAMPLE_LOGIN = "1";
+  // The journey must not depend on whatever the developer enabled in .env.local: a local model would read the whole synthetic mailbox. An explicit value still wins.
+  if (process.env.SEMANTIC_READER === "local") process.env.SEMANTIC_READER = "off"; // (.env.local is loaded before this line)
 
   const { SAMPLE_SUB, SAMPLE_EMAIL } = await import("../lib/gmail/sample.ts");
   const { saveGmailConnection, findGmailConnection } = await import("../lib/gmail/credentials.ts");

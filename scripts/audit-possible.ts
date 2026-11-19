@@ -6,3 +6,4 @@ const by = new Map<string, number>();
 for (const e of ws.possible) by.set(why(e), (by.get(why(e)) ?? 0) + 1);
 console.log(ws.possible.length, "possible;", Object.fromEntries(by));
 if (process.argv[3] === "--list") for (const e of ws.possible) console.log(why(e).padEnd(15), (e.senderDomain || "").padEnd(28).slice(0, 28), e.subject.slice(0, 60));
+process.exit(0);
