@@ -93,14 +93,16 @@ export function verifyReading(raw: unknown, input: ReaderInput): VerifiedReading
     const quote = r.employer.quote;
     const basis = r.employer.basis as EmployerBasis;
     const fromCandidate = input.candidates.some((c) => sameOrg(c.name, name));
-    const bad = (why: string) => { rej.push(`employer:${why}`); };
+    const bad = (why: string) => { rej.push(`employer:${why}`); if (process.env.SEMANTIC_DEBUG) console.error(`[semantic-debug] ${why} name=${JSON.stringify(name)} basis=${basis} quote=${JSON.stringify(quote)}`); };
     if (!(EMPLOYER_BASES as readonly string[]).includes(String(basis)) && !(basis === ("employer_candidates" as string) && fromCandidate)) bad("basis_invalid");
     else if (!inText(name) && !fromCandidate) bad("name_not_in_text");
     else if (!inText(quote) || norm(String(quote)).split(" ").length < 3) bad("relationship_quote_missing");
     else if (basis !== ("employer_candidates" as string) && !norm(String(quote)).includes(norm(name))) bad("quote_does_not_name_employer"); // a name chosen from the local resolver's grounded candidates needs no name in the quote
     else if (name.split(/\s+/).length > 6 || !/^[A-Z0-9]/.test(name) || /^(?:the|our|your|team|company|hiring team|recruiting|careers|university|program)$/i.test(name)) bad("implausible");
     else if (isIntermediaryBrand(name) || NOT_EMPLOYER.has(name.toLowerCase().replace(/[^a-z0-9]/g, ""))) bad("vendor_not_employer");
-    else if (looksLikePerson(name)) bad("person_not_employer");
+    // A two-word capitalised name is a person only when the message itself shows a person by that name: the sender's own display name, or an entity the reader typed as a
+    // recruiter. "Orbital Maps", "Jane Street" and "Two Sigma" look like names but are organisations the person applied to; judging by shape alone silently drops them.
+    else if (looksLikePerson(name) && (norm(input.from).includes(norm(name)) || kindOf(name) === "recruiter")) bad("person_not_employer");
     else if (["ats_vendor", "assessment_vendor", "job_board", "scheduler", "recruiter", "recruiting_agency"].includes(kindOf(name) ?? "employer")) bad(`entity_is_${kindOf(name)}`);
     else if (AGENCY_WORDS.test(name) && basis !== "represents") bad("agency_not_employer");
     else if (basis === "sender_is_employer") {

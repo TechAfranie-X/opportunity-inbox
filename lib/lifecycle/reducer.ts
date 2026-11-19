@@ -61,6 +61,11 @@ export function reduceLifecycle(events: EffectiveEvent[], policy: Policy = DEFAU
     const firstOffer = events.find((e) => e.type === "offer" && !e.outbound && usable(e));
     if (firstOffer && events.some((e) => !e.outbound && e.occurredAt.getTime() > firstOffer.occurredAt.getTime() && (e.signals.includes("onboarding (refined)") || e.signals.includes("after offer (refined)")))) outcome = "accepted";
   }
+  // An offer that lapsed unanswered (the employer says so) closes the opportunity as expired; an acceptance or an ending already settled it.
+  if (!ended && outcome === "offer" && events.some((e) => !e.outbound && e.signals.includes("offer expired (fact)") && e.occurredAt.getTime() > (events.find((x) => x.type === "offer")?.occurredAt.getTime() ?? Infinity))
+      && !events.some((e) => e.outbound && e.signals.includes("student:accepts"))) {
+    return { stage, outcome: "expired", status: "closed", closedBy: "expired" };
+  }
   // The student's own explicit acceptance after the first offer settles it too (their words, in an outbound reply: lib/reliability/facts.ts studentAcceptance).
   if (!ended && outcome === "offer") {
     const firstOffer = events.find((e) => e.type === "offer" && !e.outbound && usable(e));

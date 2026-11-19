@@ -127,3 +127,11 @@ test("an employer chosen from the resolver's grounded candidates is accepted wit
   assert.equal(verifyReading({ ...lyftRaw, employer: { name: "Uber", basis: "employer_candidates", quote: "Thank you for applying for the Software Engineer Intern position" } }, withCand).employer, null, "not a candidate");
   assert.equal(verifyReading({ ...lyftRaw, employer: { name: "Lyft", basis: "employer_candidates", quote: "invented words that are not in the message" } }, withCand).employer, null, "quote must be in the message");
 });
+
+test("a two-word organisation is not mistaken for a person; a sender's own name used as the employer is", () => {
+  const input = { key: "k", from: "Postes en ligne <noreply@hiretrack.example>", subject: "Candidature", body: "Bonjour Lucas, votre candidature pour Orbital Maps (Stage développeur) est bien enregistrée.", received: "2026-01-01T00:00:00Z", threadMessages: 1, candidates: [] } as ReaderInput;
+  const raw = (name: string, quote: string): RawReading => ({ key: "k", recruiting: "yes", certainty: "high", event: { type: "applied", stage: "applied", quote: "votre candidature pour Orbital Maps (Stage développeur) est bien enregistrée" }, employer: { name, basis: "applied_to", quote } } as unknown as RawReading);
+  assert.equal(verifyReading(raw("Orbital Maps", "votre candidature pour Orbital Maps (Stage développeur)"), input).employer?.name, "Orbital Maps");
+  const person = { ...input, from: "Sarah Chen <sarah.chen@orbital.example>", body: "Hi Lucas, Sarah Chen here. Your application to Sarah Chen is in." } as ReaderInput;
+  assert.equal(verifyReading(raw("Sarah Chen", "Your application to Sarah Chen is in"), person).employer ?? null, null);
+});

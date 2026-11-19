@@ -6,6 +6,7 @@ import { SECOND_READER_NO, SECOND_READER_YES } from "./consensus.ts";
 import { looksLikePerson } from "../recruiting/company.ts";
 import { findDateMentions } from "../recruiting/dates.ts";
 import { usable } from "./port.ts";
+import { applyTextFacts } from "../reliability/facts.ts";
 
 /**
  * Assist mode: the language model's verified opinion changes what the product SHOWS, not just what it asks. It is a second reader with real authority in
@@ -44,7 +45,7 @@ export function interviewKind(m: Pick<RecruitingEmail, "subject" | "bodyText" | 
 function semanticEvent(m: RecruitingEmail, op: VerifiedOutput): ExtractedEvent {
   const base = candidateEvent(m, "strong", "", []);
   const person = base.company ? looksLikePerson(base.company) : false; // a signature name is not an employer
-  return {
+  return applyTextFacts(m, {
     ...base,
     company: person ? null : base.company,
     type: interviewKind(m, asEventType(op.type)),
@@ -52,7 +53,7 @@ function semanticEvent(m: RecruitingEmail, op: VerifiedOutput): ExtractedEvent {
     fieldConfidence: { type: 0.72, company: base.fieldConfidence?.company ?? 0, role: 0 },
     reviewReasons: [],
     signals: [SEMANTIC_EVENT, `semantic:certainty:${op.certainty}`],
-  };
+  });
 }
 
 const LOW_INFORMATION = new Set<string>(["status_update", "applied", "follow_up"]);
@@ -75,7 +76,7 @@ export function applyAssist(events: ExtractedEvent[], emails: RecruitingEmail[],
     // A low-information type (a bare status, a receipt, a nudge) is made specific when the verified reading is confident about a decisive stage: the same subject
     // line ("Your application to X") carries a receipt one day and a rejection the next, and only the body tells them apart.
     const generic = LOW_INFORMATION.has(e.type) && op.certainty === "high" && !!op.type && op.type !== e.type && (e.type === "status_update" || DECISIVE.has(op.type));
-    return { ...e, type: interviewKind(m, generic ? asEventType(op.type) : e.type), signals: [...e.signals, generic ? "semantic:type" : "semantic:agree"] };
+    return applyTextFacts(m, { ...e, type: interviewKind(m, generic ? asEventType(op.type) : e.type), signals: [...e.signals, generic ? "semantic:type" : "semantic:agree"] });
   });
   const have = new Set(out.map((e) => e.gmailMessageId));
   const added = emails.flatMap((m) => {

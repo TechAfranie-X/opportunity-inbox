@@ -48,8 +48,30 @@ export function applyFacts(email: Pick<RecruitingEmail, "subject" | "bodyText" |
   if ((out.type === "assessment" || out.type === "assessment_completed") && GENERIC_RESULT.test(text) && UPSELL.test(text) && !CANDIDACY.test(text)) {
     set({ confidence: Math.min(out.confidence, 0.3), eventDate: null, dateKind: null, reviewReasons: [...(out.reviewReasons ?? []), "possible: a generic assessment result, not tied to an application"] }, NEAR_MISS);
   }
+  out = applyTextFacts(email, out);
   return out;
 }
+
+/** Facts about how a process ENDED or LAPSED, read from the text of a message whatever reader typed it (rules or model). */
+export function applyTextFacts(email: Pick<RecruitingEmail, "subject" | "bodyText">, event: ExtractedEvent): ExtractedEvent {
+  const text = `${email.subject ?? ""}\n${email.bodyText ?? ""}`;
+  let out = event;
+  const set = (patch: Partial<ExtractedEvent>, signal: string) => { out = { ...out, ...patch, signals: [...out.signals, signal] }; };
+  // An employer acknowledging that the PERSON withdrew is a withdrawal, not a rejection: nobody turned the person down. The wording families (English, French, Spanish,
+  // German, Portuguese, Italian) name the person's own act of withdrawing; "withdrawn" about the employer's offer is NOT matched.
+  if ((out.type === "rejection" || out.type === "status_update" || out.type === "applied" || out.type === "follow_up") && WITHDRAWAL_ACK.test(text) && !OFFER_RESCINDED.test(text)) {
+    set({ type: "withdrawn", fieldConfidence: { type: Math.max(out.fieldConfidence?.type ?? 0, 0.7), company: out.fieldConfidence?.company ?? out.confidence, role: out.fieldConfidence?.role ?? out.confidence } }, "withdrawal acknowledged (fact)");
+  }
+  // An offer that lapsed unanswered: a fact of its own. It is not a rejection and not progress; the reducer closes the opportunity as expired only if nothing settled it.
+  if ((out.type === "status_update" || out.type === "follow_up") && OFFER_LAPSED.test(text)) {
+    set({}, "offer expired (fact)");
+  }
+  return out;
+}
+
+const WITHDRAWAL_ACK = /\b(?:your withdrawal|you(?:'ve| have) withdrawn|you (?:have )?(?:chosen|decided) to withdraw|confirm(?:ing)? (?:the )?withdrawal of your|withdrawal of your (?:application|candidacy)|votre retrait|suite à votre retrait|vous (?:avez|vous êtes) (?:retiré|désisté)|retrait de votre candidature|su retiro|ha retirado su|retirada de su candidatura|sua desist[eê]ncia|retirou a sua candidatura|ihre rücknahme|ihren rücktritt|zurückgezogen haben|ihre bewerbung zurückgezogen|ritiro della (?:sua )?candidatura|ha ritirato)\b/i;
+const OFFER_RESCINDED = /\b(?:rescind\w*|revok\w*|we (?:are|have) (?:withdrawing|withdrawn) (?:the|our) offer|retir\w+ (?:l[’']offre|la oferta)|zieh\w+ (?:das|unser) angebot)\b/i;
+const OFFER_LAPSED = /\b(?:offer (?:has |had |is |was )?(?:now )?(?:expired|lapsed)|(?:expired|lapsed) offer|offer expir(?:ed|ation)|haven'?t received a response to our .{0,40}offer|offre (?:a |est )?expir\w+|oferta (?:ha |est[aá] )?(?:expirad|caducad)\w*|angebot (?:ist )?(?:abgelaufen|verfallen)|oferta expirou)\b/i;
 
 const OFFER_ROLE = /\boffer you the (?:position|role|internship) of\s+([^\n.]{3,110}?)\s+(?:at|with)\s+[A-Z]/;
 

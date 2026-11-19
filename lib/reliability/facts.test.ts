@@ -96,3 +96,16 @@ test("the student's own acceptance of an offer is a fact; a refusal or a differe
     assert.ok(!studentAcceptance(outMail("b", "t", "Re: Offer", body, "2026-01-02T00:00:00Z"), base).signals.includes("student:accepts"), body);
   }
 });
+
+test("an employer acknowledging the person's withdrawal is a withdrawal; a rescinded offer or an ordinary rejection is not; a lapsed offer is a fact", async () => {
+  const { applyTextFacts } = await import("./facts.ts");
+  const ev = (type: string) => ({ gmailMessageId: "x", gmailThreadId: "t", occurredAt: new Date(), outbound: false, senderName: "", senderDomain: "", subject: "", type, company: null, role: null, eventDate: null, eventDateHasTime: false, dateKind: null, confidence: 0.7, reviewReasons: [], signals: [] }) as never as import("../recruiting/types.ts").ExtractedEvent;
+  const run = (type: string, body: string) => applyTextFacts({ subject: "", bodyText: body }, ev(type));
+  assert.equal(run("rejection", "Hi Sam, we confirm the withdrawal of your application for the Data Intern role, as you requested.").type, "withdrawn");
+  assert.equal(run("applied", "Bonjour Lucas, l'entretien est annulé suite à votre retrait. Bonne continuation.").type, "withdrawn");
+  assert.equal(run("rejection", "Hallo Jonas, wir bestätigen, dass Sie Ihre Bewerbung zurückgezogen haben.").type, "withdrawn");
+  assert.equal(run("rejection", "Hi Sam, we have decided not to move forward with your application.").type, "rejection");
+  assert.equal(run("rejection", "Hi Sam, we regret that we have to rescind our offer. Your withdrawal from the other process does not change this.").type, "rejection");
+  assert.ok(run("status_update", "Hello Sam, we haven't received a response to our July 8 offer for the Policy Intern role and it has now expired.").signals.includes("offer expired (fact)"));
+  assert.ok(!run("status_update", "Hello Sam, your application is under review.").signals.includes("offer expired (fact)"));
+});
