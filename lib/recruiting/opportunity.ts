@@ -1,3 +1,4 @@
+import { detectContradictions } from "../lifecycle/contradictions.ts";
 import { groupEventsV2, groupRole } from "../lifecycle/identity.ts";
 import { assignKeys } from "../lifecycle/keys.ts";
 import { legacyKeyHeads } from "../lifecycle/legacy.ts";
@@ -119,6 +120,7 @@ export function buildOpportunities(
       lastActivityAt: group.events[group.events.length - 1].occurredAt,
       events: group.events,
       kind: opportunityKind(group.events),
+      contradictions: detectContradictions(group.events),
       needsReview: !group.company || group.events.some((e) => eventNeedsReview(e, policy)) || closedBy === "not_recruiting",
     };
   });

@@ -48,12 +48,13 @@ export function reconcileReadings(events: ExtractedEvent[], readings: Map<string
       const rules = out.company;
       const sem = r.employer.name;
       if (!rules) {
-        out = { ...out, company: sem, fieldConfidence: { ...fc, company: SEMANTIC_COMPANY_CONFIDENCE }, signals: [...out.signals, "semantic:employer"], reviewReasons: [...new Set([...(out.reviewReasons ?? []), REASON_FROM_READER])] };
+        out = { ...out, company: sem, fieldConfidence: { ...fc, company: SEMANTIC_COMPANY_CONFIDENCE }, signals: [...out.signals.filter((x) => x !== "employer:sender-only"), "semantic:employer"], reviewReasons: [...new Set([...(out.reviewReasons ?? []), REASON_FROM_READER])] };
       } else if (sameOrg(rules, sem)) {
         const up = fc.company >= 0.4 && fc.company < KNOWN_BY_AGREEMENT;
         out = { ...out, fieldConfidence: up ? { ...fc, company: KNOWN_BY_AGREEMENT } : e.fieldConfidence, signals: [...out.signals, "semantic:employer_agrees"] };
-      } else if ((out.fieldConfidence?.company ?? fc.company) < SEMANTIC_COMPANY_CONFIDENCE) {
-        out = { ...out, company: sem, fieldConfidence: { ...fc, company: SEMANTIC_COMPANY_CONFIDENCE }, signals: [...out.signals, "semantic:employer_replaced"], reviewReasons: [...new Set([...(out.reviewReasons ?? []), REASON_READERS_DISAGREE])] };
+      } else if ((out.fieldConfidence?.company ?? fc.company) < SEMANTIC_COMPANY_CONFIDENCE || out.signals.includes("employer:sender-only")) {
+        // a name taken only from the sender (never written in the message) is who SENT the mail; a verified employer the message itself names outranks it
+        out = { ...out, company: sem, fieldConfidence: { ...fc, company: SEMANTIC_COMPANY_CONFIDENCE }, signals: [...out.signals.filter((x) => x !== "employer:sender-only"), "semantic:employer_replaced"], reviewReasons: [...new Set([...(out.reviewReasons ?? []), REASON_READERS_DISAGREE])] };
       } else {
         out = { ...out, signals: [...out.signals, "semantic:employer_conflict"], reviewReasons: [...new Set([...(out.reviewReasons ?? []), REASON_READERS_DISAGREE])] };
       }

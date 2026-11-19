@@ -84,3 +84,15 @@ test("bodyAct: marketing, sales, advice and other people's offers are not acts a
 test("bodyAct: a marketing footer does not veto an act that names the reader's own interview or application", () => {
   assert.equal(act("Hi", "Hi Mia, could you do a video interview with us next week about your application? Unsubscribe from marketing emails")?.type, "interview_invite");
 });
+
+const outMail = (id: string, thread: string, subject: string, body: string, at: string): RecruitingEmail => ({ id, threadId: thread, from: "me@school.example", subject, bodyText: body, receivedAt: new Date(at), outbound: true });
+test("the student's own acceptance of an offer is a fact; a refusal or a different acceptance is not", async () => {
+  const { studentAcceptance } = await import("./facts.ts");
+  const base = { id: "o", gmailMessageId: "o", gmailThreadId: "t", occurredAt: new Date(), outbound: true, senderName: "", senderDomain: "", subject: "", type: "user_reply", company: null, role: null, eventDate: null, eventDateHasTime: false, dateKind: null, confidence: 0.5, reviewReasons: [], signals: [] } as never;
+  for (const body of ["Hi Owen, I'm thrilled to accept. Thank you!", "Bonjour, j'accepte avec grand plaisir l'offre.", "Hola, acepto la oferta con mucho gusto.", "Sehr geehrte Damen, ich nehme das Stipendium sehr gerne an.", "Olá, aceito a proposta, obrigada!"]) {
+    assert.ok(studentAcceptance(outMail("a", "t", "Re: Offer", body, "2026-01-02T00:00:00Z"), base).signals.includes("student:accepts"), body);
+  }
+  for (const body of ["Thank you, but I must decline the offer.", "Unfortunately I am unable to accept at this time.", "Lo siento, no puedo aceptar la oferta.", "Thanks, I will send the documents tomorrow."]) {
+    assert.ok(!studentAcceptance(outMail("b", "t", "Re: Offer", body, "2026-01-02T00:00:00Z"), base).signals.includes("student:accepts"), body);
+  }
+});

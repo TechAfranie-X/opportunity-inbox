@@ -21,6 +21,7 @@ const GENERIC_WINDOW = 90 * DAY;
 const SPECIFIC_WINDOW_NO_CYCLE = 180 * DAY;
 const GENERIC_WINDOW_WITH_THREAD = 240 * DAY;
 const NEUTRAL = new Set<EventType>(["status_update", "follow_up", "user_reply"]);
+const REOPENS = new Set<EventType>(["assessment", "interview_invite", "interview_scheduled", "offer"]);
 const STAGE_BEARING = new Set<EventType>(["applied", "recruiter_outreach", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer", "rejection", "withdrawn"]);
 
 const specific = (role: string | null | undefined) => !!role && !isRoleFragment(role) && roleCore(role).length > 0;
@@ -62,7 +63,9 @@ export function relation(g: Group, e: EffectiveEvent): Relation {
 
 function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean): boolean {
   if (rel === "conflict") return false;
-  if (endedByEmployerOrUser(g) && !NEUTRAL.has(e.type)) return false; // a new application after a rejection is a new opportunity
+  // a new application after a rejection is a new opportunity; but progress (an assessment, an interview, an offer) in the SAME thread for a compatible role is
+  // far more often the same process continuing than a new one, so it joins and the contradiction is surfaced for a person (lib/lifecycle/contradictions.ts)
+  if (endedByEmployerOrUser(g) && !NEUTRAL.has(e.type) && !(viaThread && REOPENS.has(e.type))) return false;
   const gap = e.occurredAt.getTime() - lastAt(g);
   if (rel === "generic") return gap <= (viaThread ? GENERIC_WINDOW_WITH_THREAD : GENERIC_WINDOW);
   if (viaThread) return true;
@@ -82,28 +85,41 @@ export function groupEventsV2(events: EffectiveEvent[]): Group[] {
 
   const groups: Group[] = [];
   const byThread = new Map<string, Group>();
-  for (const e of sorted) {
+  for (let e of sorted) {
     let target: Group | undefined = parent.has(e.id) || [...parent.values()].includes(e.id) ? componentGroup.get(find(e.id)) : undefined;
+    let ambiguous: string | null = null;
     if (!target && !e.separate) {
-      const tg = byThread.get(e.gmailThreadId);
-      if (tg && (e.company ? tg.company && companyKey(tg.company) === companyKey(e.company) : true) && allowed(tg, e, relation(tg, e), true)) target = tg;
+      const sameEmployer = (g: Group) => !e.company || !g.company || companyKey(g.company) === companyKey(e.company);
+      // 1. the Gmail thread: evidence, weighed like any other. A thread can hold several opportunities (automated mail reuses one subject), so every group that
+      //    has mail in this thread is a candidate and the same checks apply to each; a specific role match beats a generic one, then recency.
+      const inThread = groups.filter((g) => g.threads.has(e.gmailThreadId) && sameEmployer(g)).map((g) => ({ g, rel: relation(g, e) })).filter(({ g, rel }) => allowed(g, e, rel, true));
+      target = inThread.filter((s) => s.rel === "match").sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g ?? inThread.filter((s) => s.rel === "generic").sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
       if (!target) {
-        if (e.company) {
-          const ck = companyKey(e.company);
-          const candidates = groups.filter((g) => g.company && companyKey(g.company) === ck);
-          const scored = candidates.map((g) => ({ g, rel: relation(g, e) })).filter(({ g, rel }) => allowed(g, e, rel, false));
-          target = scored.filter((s) => s.rel === "match").sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g ?? scored.filter((s) => s.rel === "generic").sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
-        } else if (e.senderDomain) {
-          target = groups.find((g) => !g.company && g.events.some((x) => x.senderDomain === e.senderDomain));
-          // An event whose employer is unknown, from an employer's own domain that exactly ONE existing opportunity has written from, belongs with it unless
-          // role, cycle, program or the end of that opportunity say otherwise (the same weighing as any other link). Platforms, freemail and several candidates never link this way.
-          if (!target && classifySender(e.senderDomain) === "employer") {
-            const same = groups.filter((g) => g.events.some((x) => x.senderDomain === e.senderDomain));
-            if (same.length === 1 && allowed(same[0], e, relation(same[0], e), false)) target = same[0];
-          }
+        const pool = e.company
+          ? groups.filter((g) => g.company && companyKey(g.company) === companyKey(e.company!))
+          : e.senderDomain ? groups.filter((g) => !g.company && g.events.some((x) => x.senderDomain === e.senderDomain)) : [];
+        const scored = pool.map((g) => ({ g, rel: relation(g, e) })).filter(({ g, rel }) => allowed(g, e, rel, false));
+        const matches = scored.filter((s) => s.rel === "match");
+        const generics = scored.filter((s) => s.rel === "generic");
+        const pick = matches.length ? matches : generics;
+        if (matches.length > 1 && !e.company) { /* employer-less with several role matches: fall through to the most recent */ }
+        // ABSTAIN: an event that states no specific role, at an employer with two or more live applications for DIFFERENT roles, cannot be attributed by employer
+        // alone. Joining the latest would be a guess that merges two applications; it stays on its own and says why.
+        const roleSet = new Set(pick.map(({ g }) => groupRole(g)).filter((r): r is string => !!r && specific(r)).map((r) => roleCore(r).join(" ")));
+        if (matches.length === 0 && generics.length > 1 && roleSet.size > 1 && !specific(e.role)) {
+          ambiguous = generics.map(({ g }) => groupRole(g)).filter(Boolean).join(" / ");
+        } else {
+          target = pick.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
+        }
+        // An event whose employer is unknown, from an employer's own domain that exactly ONE existing opportunity has written from, belongs with it unless
+        // role, cycle, program or the end of that opportunity say otherwise (the same weighing as any other link). Platforms, freemail and several candidates never link this way.
+        if (!target && !ambiguous && !e.company && e.senderDomain && classifySender(e.senderDomain) === "employer") {
+          const same = groups.filter((g) => g.events.some((x) => x.senderDomain === e.senderDomain));
+          if (same.length === 1 && allowed(same[0], e, relation(same[0], e), false)) target = same[0];
         }
       }
     }
+    if (ambiguous) e = { ...e, signals: [...e.signals, "identity:ambiguous"], reviewReasons: [...(e.reviewReasons ?? []), `identity: could belong to more than one application (${ambiguous})`] };
     if (!target) { target = { company: e.company, events: [], threads: new Set() }; groups.push(target); }
     target.events.push(e);
     target.threads.add(e.gmailThreadId);

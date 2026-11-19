@@ -22,6 +22,13 @@ export function companyGrounded(email: Pick<RecruitingEmail, "from" | "replyTo" 
   return addresses.includes(squash(company)) || squash(`${email.subject} ${email.bodyText}`).includes(squash(company));
 }
 
+/** The name is written in the subject or body (not only in the sender's name or address). */
+export function companyInText(email: Pick<RecruitingEmail, "subject" | "bodyText">, company: string): boolean {
+  const c = norm(company);
+  if (!c) return true;
+  return ` ${norm(`${email.subject} ${email.bodyText}`)} `.includes(` ${c} `) || squash(`${email.subject} ${email.bodyText}`).includes(squash(company));
+}
+
 export function roleGrounded(email: Pick<RecruitingEmail, "subject" | "bodyText">, role: string): boolean {
   const r = norm(role);
   if (!r) return true;

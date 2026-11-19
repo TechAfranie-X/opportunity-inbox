@@ -85,6 +85,16 @@ export function buildReviewQueue(opportunities: Opportunity[], policy: Policy = 
       items.push({ event, opportunityKey: o.key, company: o.company, role: o.role, reasons, impact, why, tier: impact >= IMPORTANT_AT ? "important" : "routine" });
     }
   }
+  // Competing evidence inside one opportunity (a rejection followed by an interview, an offer followed by an ending) is always worth a look while it is live.
+  for (const o of opportunities) {
+    for (const c of o.contradictions ?? []) {
+      const event = o.events.find((e) => e.id === c.eventIds[c.eventIds.length - 1]);
+      if (!event || event.corrected || event.confirmed || items.some((i) => i.event === event && i.reasons.includes(c.text))) continue;
+      const { impact, why } = reviewImpact({ event, active: o.status === "active", possible: false, reasons: [c.text] }, now);
+      const live = Math.max(impact, IMPORTANT_AT);
+      items.push({ event, opportunityKey: o.key, company: o.company, role: o.role, reasons: [c.text], impact: live, why: o.status === "active" ? "The record disagrees with itself" : why, tier: "important" });
+    }
+  }
   items.sort((a, b) => b.impact - a.impact || b.event.occurredAt.getTime() - a.event.occurredAt.getTime());
   const maybe = possible
     .filter((e) => !e.outbound)

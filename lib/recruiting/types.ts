@@ -126,6 +126,8 @@ export type Opportunity = {
   events: EffectiveEvent[]; // chronological
   /** Lowest-confidence event, so the UI can nudge "check this". */
   needsReview: boolean;
+  /** Competing evidence inside this opportunity that a person should look at (lib/lifecycle/contradictions.ts). */
+  contradictions?: Array<{ kind: "reopened" | "offer_ended" | "ambiguous_identity"; eventIds: string[]; text: string }>;
   /** What kind of opportunity this is. Scholarships and mentorship programs are real applications but not employer recruiting. Absent = job or internship. */
   kind?: OpportunityKind;
 };

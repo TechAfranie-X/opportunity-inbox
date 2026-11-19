@@ -6,7 +6,8 @@ import { processEvidence } from "../recruiting/signals.ts";
 import type { ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
 import { applyFacts, bodyAct, explicitOffer } from "./facts.ts";
 import { CONFLICT_PREFIX, MEMBERSHIP_PREFIX, NEAR_MISS, NEAR_MISS_WEAK, hasDoubt, isNearMiss } from "./flags.ts";
-import { groundingOf, isLinkedEvent } from "./grounding.ts";
+import { studentAcceptance } from "./facts.ts";
+import { companyInText, groundingOf, isLinkedEvent } from "./grounding.ts";
 
 /**
  * The reliability layer around the rule reader. The reader is unchanged; this layer only checks and abstains:
@@ -124,7 +125,8 @@ export function readMail(emails: RecruitingEmail[], context?: ReadContext): Extr
   const byId = new Map(emails.map((e) => [e.id, e]));
   const events = extractAll(emails, context).map((event) => {
     const email = byId.get(event.gmailMessageId);
-    if (!email || email.outbound) return event;
+    if (email?.outbound) return studentAcceptance(email, event);
+    if (!email) return event;
     const out: ExtractedEvent = { ...event, signals: [...event.signals], reviewReasons: [...(event.reviewReasons ?? [])] };
     const g = groundingOf(email, out);
     if (!g.company) {
@@ -138,6 +140,9 @@ export function readMail(emails: RecruitingEmail[], context?: ReadContext): Extr
       out.fieldConfidence = { type: out.fieldConfidence?.type ?? out.confidence, company: out.fieldConfidence?.company ?? out.confidence, role: 0 };
       out.signals.push("grounding:role-dropped");
     }
+    // Provenance of the employer name: written in the message text, or found only in the sender's name/address. A sender-only name says who SENT the mail
+    // (an applicant-tracking platform, a mailbox provider, an agency), which is not always who is HIRING; the reconciliation weighs it accordingly.
+    if (out.company && !companyInText(email, out.company)) out.signals.push("employer:sender-only");
     const doubt = membershipDoubt(email, out);
     if (doubt) out.reviewReasons!.push(doubt);
     const conflict = outcomeConflict(email, out);

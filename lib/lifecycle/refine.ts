@@ -1,4 +1,5 @@
 import { companyKey } from "../recruiting/company.ts";
+import { resolveEmployers } from "./employer-identity.ts";
 import { NEAR_MISS, NEAR_MISS_WEAK } from "../reliability/flags.ts";
 import type { EffectiveEvent } from "../recruiting/types.ts";
 
@@ -193,7 +194,7 @@ export function refineEvents(events: EffectiveEvent[]): Refined {
     }
     return company;
   };
-  return { events: kept.map((e) => (e.company && !settled(e) && canonical(e.company) !== e.company ? { ...e, company: canonical(e.company) } : e)), excluded };
+  return { events: resolveEmployers(kept.map((e) => (e.company && !settled(e) && canonical(e.company) !== e.company ? { ...e, company: canonical(e.company) } : e))), excluded };
 }
 
 const SCHOLARSHIP = /\b(?:scholarship|fellowship|grant)\b/i;
