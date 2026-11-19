@@ -4,6 +4,7 @@ import { buildReaderInput } from "../recruiting/reader/redact.ts";
 import { sameOrg } from "../recruiting/reader/reconcile.ts";
 import type { ReaderInput } from "../recruiting/reader/types.ts";
 import type { RecruitingEmail } from "../recruiting/types.ts";
+import { looksLikeInjection } from "./inject.ts";
 
 /**
  * What a second reader is allowed to see, and nothing else. Only messages that pass the veto-only triage (commerce, orders, security codes and
@@ -11,7 +12,7 @@ import type { RecruitingEmail } from "../recruiting/types.ts";
  * employer candidates so the reader chooses among grounded names instead of inventing one. The key is the message id and stays local.
  */
 export function semanticInputs(emails: RecruitingEmail[], selfNames: string[] = []): ReaderInput[] {
-  const eligible = emails.filter((e) => !e.outbound && planRead(e).read);
+  const eligible = emails.filter((e) => !e.outbound && !looksLikeInjection(`${e.subject}\n${e.bodyText}`) && planRead(e).read); // an email that addresses the AI is never sent to it
   if (eligible.length === 0) return [];
   const res = resolveBatch(eligible.map((e) => ({ id: e.id, threadId: e.threadId, from: e.from, replyTo: e.replyTo, subject: e.subject, body: e.bodyText })));
   const perThread = new Map<string, number>();

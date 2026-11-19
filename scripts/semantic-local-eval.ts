@@ -21,7 +21,7 @@ const model = flag("--model", "mlx-community/Qwen3-4B-Instruct-2507-4bit");
 const batch = Number(flag("--batch", "4"));
 const verbose = args.includes("--verbose");
 const fx = JSON.parse(readFileSync(file, "utf8")) as { scenarios: { id: string; messages: Msg[] }[] };
-const reader = createModelReader({ transport: localTransport(), model, batch, idPrefix: "local", guide: args.includes("--full") ? SEMANTIC_GUIDE_V3 : SEMANTIC_GUIDE_V3_COMPACT });
+const reader = createModelReader({ transport: localTransport({ baseUrl: flag("--url", "http://127.0.0.1:8089") }), model, batch, idPrefix: "local", guide: args.includes("--full") ? SEMANTIC_GUIDE_V3 : SEMANTIC_GUIDE_V3_COMPACT });
 
 let tp = 0, fp = 0, fn = 0, tn = 0, notSentPos = 0, notSentNeg = 0, typeOk = 0, typeN = 0, abst = 0, n = 0;
 const rows: string[] = [];

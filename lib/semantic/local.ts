@@ -19,7 +19,8 @@ export function localTransport(opts: { baseUrl?: string; maxTokens?: number; tim
     const res = await fetch(new URL("/v1/chat/completions", base), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model, temperature: 0, max_tokens: opts.maxTokens ?? 3000, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
+      body: JSON.stringify({ model, temperature: 0, max_tokens: opts.maxTokens ?? 3000, chat_template_kwargs: { enable_thinking: false }, // reasoning-style models answer directly; the verifier, not a chain of thought, is the check
+      messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
       signal: AbortSignal.timeout(opts.timeoutMs ?? 180_000),
     });
     if (!res.ok) throw new Error(`local model server answered ${res.status}`);
