@@ -51,17 +51,29 @@ export async function backfillIdentity(userGoogleSub: string, reader: SemanticRe
   const corrected = await loadCorrectedMessageIds(userGoogleSub);
   const stored = (await loadAllExtracted(userGoogleSub)).filter((e) => !e.signals.includes(BACKFILL_MARK) && !corrected.has(e.gmailMessageId)).slice(0, limit);
   if (stored.length === 0) return { examined: 0, updated: 0, skipped: 0 };
-  const { emails } = await source.fetchEmails(stored.map((e) => e.gmailMessageId));
-  const inbound = emails.filter((e) => !e.outbound);
-  let events = readMail(emails);
-  if (reader) {
-    const readings = await reader.readings!(semanticInputs(inbound, selfNames));
-    events = reconcileReadings(applyAssist(events, emails, new Map([...readings].map(([k, v]) => [k, v.output] as const))), readings);
+  // Chunked (60 messages) with a pause and one retry on a Gmail rate limit; each chunk is saved on its own, so an interruption leaves a consistent, resumable state
+  // (rows already refreshed carry the mark and are skipped next time).
+  let updated = 0;
+  for (let i = 0; i < stored.length; i += 60) {
+    const part = stored.slice(i, i + 60);
+    let fetched: Awaited<ReturnType<typeof source.fetchEmails>> | null = null;
+    for (let attempt = 0; attempt < 3 && !fetched; attempt++) {
+      try { fetched = await source.fetchEmails(part.map((e) => e.gmailMessageId)); } catch (err) { if (attempt === 2) throw err; await new Promise((r) => setTimeout(r, 45_000 * (attempt + 1))); }
+    }
+    const emails = fetched!.emails;
+    const inbound = emails.filter((e) => !e.outbound);
+    let events = readMail(emails);
+    if (reader) {
+      const readings = await reader.readings!(semanticInputs(inbound, selfNames));
+      events = reconcileReadings(applyAssist(events, emails, new Map([...readings].map(([k, v]) => [k, v.output] as const))), readings);
+    }
+    const old = new Map(part.map((e) => [e.gmailMessageId, e] as const));
+    // never DOWNGRADE: a message the product already shows (or one a model judged) is not replaced by a weaker reading of the same message
+    const keeps = (e: ExtractedEvent) => { const o = old.get(e.gmailMessageId)!; return !(isNearMiss(e) && !isNearMiss(o)) && !(o.signals.some((x) => x.startsWith("semantic:")) && !e.signals.some((x) => x.startsWith("semantic:"))); };
+    const fresh = events.filter((e) => old.has(e.gmailMessageId) && keeps(e)).map((e) => ({ ...e, signals: [...new Set([...e.signals, ...(old.get(e.gmailMessageId)!.signals.filter((x) => x.startsWith("via:"))), BACKFILL_MARK])] }));
+    await saveExtractedEvents(userGoogleSub, fresh);
+    updated += fresh.length;
+    await new Promise((r) => setTimeout(r, 3_000));
   }
-  const old = new Map(stored.map((e) => [e.gmailMessageId, e] as const));
-  // never DOWNGRADE: a message the product already shows (or one a model judged) is not replaced by a weaker reading of the same message
-  const keeps = (e: ExtractedEvent) => { const o = old.get(e.gmailMessageId)!; return !(isNearMiss(e) && !isNearMiss(o)) && !(o.signals.some((x) => x.startsWith("semantic:")) && !e.signals.some((x) => x.startsWith("semantic:"))); };
-  const fresh = events.filter((e) => old.has(e.gmailMessageId) && keeps(e)).map((e) => ({ ...e, signals: [...new Set([...e.signals, ...(old.get(e.gmailMessageId)!.signals.filter((x) => x.startsWith("via:"))), BACKFILL_MARK])] }));
-  await saveExtractedEvents(userGoogleSub, fresh);
-  return { examined: stored.length, updated: fresh.length, skipped: stored.length - fresh.length };
+  return { examined: stored.length, updated, skipped: stored.length - updated };
 }
