@@ -265,3 +265,33 @@ test("a mail-infrastructure word is not an employer, but a real name that contai
   for (const n of ["Mail", "Notifications", "no-reply", "Info", "Team"]) assert.equal(cleanCompany(n), null, n);
   for (const n of ["Mail Chimp Labs", "Teamwork Inc", "Careers Foundation", "Infosys"]) assert.notEqual(cleanCompany(n), null, n);
 });
+
+test("after an offer, onboarding paperwork typed as an application receipt or interview is a status update; before an offer it is untouched", () => {
+  const offer = ev({ type: "offer", day: 1, subject: "Congratulations on your job offer!", company: "Acme" });
+  const welcome = ev({ type: "applied", day: 5, subject: "Welcome to Acme - Onboarding username", company: "Acme" });
+  const manager = ev({ type: "interview_invite", day: 6, subject: "Welcome to Acme: your manager information", company: "Acme" });
+  const early = ev({ type: "applied", day: -3, subject: "Welcome to Acme - Onboarding username", company: "Acme" });
+  const { events: kept } = refineEvents([offer, welcome, manager, early]);
+  assert.equal(kept.find((e) => e.id === welcome.id)?.type, "status_update");
+  assert.equal(kept.find((e) => e.id === manager.id)?.type, "status_update");
+  assert.equal(kept.find((e) => e.id === early.id)?.type, "applied");
+});
+
+test("an event with no known employer joins the one opportunity that employer's own domain has written about; ambiguity, platforms and ended opportunities do not link", () => {
+  const apply = ev({ type: "applied", day: 1, subject: "Application received", company: "Acme", domain: "acme-corp.example", thread: "ta" });
+  const next = ev({ type: "interview_invite", day: 9, subject: "Book a time", company: null, domain: "acme-corp.example", thread: "tb" });
+  assert.equal(buildOpportunities([apply, next]).length, 1, "unknown employer, same domain, one opportunity");
+
+  const other = ev({ type: "applied", day: 2, subject: "Application received", company: "Acme", role: "Data Intern", domain: "acme-corp.example", thread: "tc" });
+  const apply2 = ev({ type: "applied", day: 1, subject: "Application received", company: "Acme", role: "Backend Intern", domain: "acme-corp.example", thread: "ta" });
+  const amb = ev({ type: "interview_invite", day: 9, subject: "Book a time", company: null, domain: "acme-corp.example", thread: "td" });
+  assert.equal(buildOpportunities([apply2, other, amb]).length, 3, "two candidate opportunities: no guess");
+
+  const platform = ev({ type: "applied", day: 1, subject: "Application received", company: "Acme", domain: "hire.greenhouse.io", thread: "te" });
+  const viaPlatform = ev({ type: "interview_invite", day: 9, subject: "Book a time", company: null, domain: "hire.greenhouse.io", thread: "tf" });
+  assert.equal(buildOpportunities([platform, viaPlatform]).length, 2, "a platform domain says nothing about the employer");
+
+  const rejected = ev({ type: "rejection", day: 3, subject: "Your application", company: "Acme", domain: "acme-corp.example", thread: "tg" });
+  const later = ev({ type: "interview_invite", day: 20, subject: "Book a time", company: null, domain: "acme-corp.example", thread: "th" });
+  assert.equal(buildOpportunities([rejected, later]).length, 2, "after a rejection a new stage is a new opportunity");
+});

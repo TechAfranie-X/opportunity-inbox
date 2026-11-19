@@ -1,4 +1,5 @@
 import { companyKey } from "../recruiting/company.ts";
+import { classifySender } from "../recruiting/entity/vendors.ts";
 import type { EffectiveEvent, EventType } from "../recruiting/types.ts";
 import { cycleOf, cyclesConflict, isRoleFragment, programsConflict, programsOf, roleCore, roleRelationV2, type Cycle } from "./cycle.ts";
 
@@ -94,6 +95,12 @@ export function groupEventsV2(events: EffectiveEvent[]): Group[] {
           target = scored.filter((s) => s.rel === "match").sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g ?? scored.filter((s) => s.rel === "generic").sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
         } else if (e.senderDomain) {
           target = groups.find((g) => !g.company && g.events.some((x) => x.senderDomain === e.senderDomain));
+          // An event whose employer is unknown, from an employer's own domain that exactly ONE existing opportunity has written from, belongs with it unless
+          // role, cycle, program or the end of that opportunity say otherwise (the same weighing as any other link). Platforms, freemail and several candidates never link this way.
+          if (!target && classifySender(e.senderDomain) === "employer") {
+            const same = groups.filter((g) => g.events.some((x) => x.senderDomain === e.senderDomain));
+            if (same.length === 1 && allowed(same[0], e, relation(same[0], e), false)) target = same[0];
+          }
         }
       }
     }

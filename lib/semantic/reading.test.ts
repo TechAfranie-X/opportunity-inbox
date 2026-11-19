@@ -119,3 +119,11 @@ test("a model-quoted role is adopted only when it reads like a job title", () =>
   for (const t of ["Software Engineer Intern", "Research Assistant (Computer Science)", "Process Engineering Intern", "Data Analyst Co-op", "Praktikant Versuchswesen"]) assert.ok(looksLikeTitle(t), t);
   for (const t of ["undergrad to help with the sensor-calibration project", "summer position in the wet lab", "a chat about next steps", "paid research assistant who will help us"]) assert.ok(!looksLikeTitle(t), t);
 });
+
+test("an employer chosen from the resolver's grounded candidates is accepted without the name in the quote; an ungrounded name or a vendor is not", () => {
+  const withCand = { ...LYFT, candidates: [{ id: "c1", name: "Lyft" }] };
+  const ok = verifyReading({ ...lyftRaw, employer: { name: "Lyft", basis: "employer_candidates", quote: "Thank you for applying for the Software Engineer Intern position" } }, withCand);
+  assert.equal(ok.employer?.name, "Lyft");
+  assert.equal(verifyReading({ ...lyftRaw, employer: { name: "Uber", basis: "employer_candidates", quote: "Thank you for applying for the Software Engineer Intern position" } }, withCand).employer, null, "not a candidate");
+  assert.equal(verifyReading({ ...lyftRaw, employer: { name: "Lyft", basis: "employer_candidates", quote: "invented words that are not in the message" } }, withCand).employer, null, "quote must be in the message");
+});

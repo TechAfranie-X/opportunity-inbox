@@ -3,6 +3,8 @@ import { NEAR_MISS, NEAR_MISS_WEAK, isNearMiss, isWeakNearMiss } from "../reliab
 import type { VerifiedOutput } from "../recruiting/reader/types.ts";
 import type { EventType, ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
 import { SECOND_READER_NO, SECOND_READER_YES } from "./consensus.ts";
+import { looksLikePerson } from "../recruiting/company.ts";
+import { findDateMentions } from "../recruiting/dates.ts";
 import { usable } from "./port.ts";
 
 /**
@@ -24,11 +26,28 @@ export const isSemanticExcluded = (e: { signals: string[] }) => e.signals.includ
 const UNREADABLE = /could not read/;
 const asEventType = (t: string | null): EventType => (t === "withdrawn" ? "withdrawn" : ((t ?? "status_update") as EventType));
 
+const CONFIRMED_TIME = /\b(?:confirmed|you(?:['’]re| are) (?:booked|scheduled|set|all set)|(?:is|are) (?:scheduled|booked|set) for|scheduled for|see you (?:on|at|then|there)|looking forward to (?:speaking|meeting|seeing))\b/i;
+const CHOOSING = /\b(?:which (?:one |time |slot )?(?:works|do you prefer|suits)|choose|pick|select|let me know (?:which|what|when)|reply with|availab(?:le|ility)|options?|or\b[^.\n]{0,30}\b(?:at|on)\b)\b/i;
+/**
+ * Whether an interview message offers choices ("invite") or fixes a time ("scheduled") is a fact of the text, not of meaning, so it is decided here and not by the
+ * model: a confirmation phrase plus an explicit date or time is scheduled; offered choices without a confirmation is an invitation; anything else keeps the model's type.
+ */
+export function interviewKind(m: Pick<RecruitingEmail, "subject" | "bodyText" | "receivedAt">, modelType: EventType): EventType {
+  if (modelType !== "interview_invite" && modelType !== "interview_scheduled") return modelType;
+  const text = `${m.subject}\n${m.bodyText}`;
+  const timed = findDateMentions(text, m.receivedAt).length > 0 || /\b\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/i.test(text);
+  if (CONFIRMED_TIME.test(text) && timed && !CHOOSING.test(m.bodyText.split(/\n/).slice(0, 2).join(" "))) return "interview_scheduled";
+  if (CHOOSING.test(text) && !CONFIRMED_TIME.test(text)) return "interview_invite";
+  return modelType;
+}
+
 function semanticEvent(m: RecruitingEmail, op: VerifiedOutput): ExtractedEvent {
   const base = candidateEvent(m, "strong", "", []);
+  const person = base.company ? looksLikePerson(base.company) : false; // a signature name is not an employer
   return {
     ...base,
-    type: asEventType(op.type),
+    company: person ? null : base.company,
+    type: interviewKind(m, asEventType(op.type)),
     confidence: 0.72,
     fieldConfidence: { type: 0.72, company: base.fieldConfidence?.company ?? 0, role: 0 },
     reviewReasons: [],

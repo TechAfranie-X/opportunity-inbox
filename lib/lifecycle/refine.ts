@@ -129,6 +129,8 @@ const WEAK_SWEEP_EVIDENCE = (signals: string[]) =>
 
 const SOFT_OR_REJECTION = new Set<string>([...SOFT_TYPES, "rejection"]);
 const MODEL_AGREED = (signals: string[]) => signals.some((x) => x === "semantic:agree" || x === "semantic:event" || x === "semantic:type" || x === "semantic:yes");
+/** Any process stage a reader may mistake onboarding paperwork for ("Welcome ... username" read as an application receipt). Offers, rejections and status updates are left as they are. */
+const ONBOARDING_RETYPE = new Set<string>(["interview_invite", "interview_scheduled", "follow_up", "recruiter_outreach", "applied", "assessment", "assessment_completed"]);
 const settled = (e: EffectiveEvent) => e.corrected || e.confirmed === true;
 
 export function refineEvents(events: EffectiveEvent[]): Refined {
@@ -169,7 +171,7 @@ export function refineEvents(events: EffectiveEvent[]): Refined {
   for (let i = 0; i < kept.length; i++) {
     const e = kept[i];
     const at = e.company ? offerAt.get(companyKey(e.company)) : undefined;
-    if (at !== undefined && !settled(e) && !e.outbound && e.occurredAt.getTime() >= at && ONBOARDING.test(e.subject ?? "") && !e.signals.includes(NEAR_MISS) && (e.type === "interview_invite" || e.type === "follow_up" || e.type === "recruiter_outreach")) {
+    if (at !== undefined && !settled(e) && !e.outbound && e.occurredAt.getTime() >= at && ONBOARDING.test(e.subject ?? "") && !e.signals.includes(NEAR_MISS) && ONBOARDING_RETYPE.has(e.type)) {
       // after an offer, "welcome / screening satisfied / start date" is onboarding, not an interview or a goodbye: retype it and settle the doubt that read it as a farewell
       kept[i] = { ...e, type: "status_update", signals: [...e.signals, "onboarding (refined)"], reviewReasons: (e.reviewReasons ?? []).filter((x) => !x.startsWith("conflict:")) };
     } else if (at !== undefined && !settled(e) && !e.outbound && e.signals.includes(NEAR_MISS) && e.occurredAt.getTime() >= at && ONBOARDING.test(e.subject ?? "")) {

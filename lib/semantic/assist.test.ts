@@ -4,7 +4,7 @@ import type { VerifiedOutput } from "../recruiting/reader/types.ts";
 import type { RecruitingEmail } from "../recruiting/types.ts";
 import { readMail } from "../reliability/assess.ts";
 import { isNearMiss } from "../reliability/flags.ts";
-import { applyAssist, isSemanticExcluded } from "./assist.ts";
+import { applyAssist, interviewKind, isSemanticExcluded } from "./assist.ts";
 
 const mail = (id: string, from: string, subject: string, body: string, labels = ["INBOX"]): RecruitingEmail => ({ id, threadId: `t-${id}`, from, subject, bodyText: body, receivedAt: new Date("2026-05-01T12:00:00Z"), outbound: false, labels });
 const op = (recruiting: boolean, type: VerifiedOutput["type"], certainty: VerifiedOutput["certainty"] = "high"): VerifiedOutput => ({ key: "k", status: "ok", recruiting, type, stage: null, company: null, companySource: null, role: null, dateText: null, certainty, evidence: { hash: "h", offset: 0 }, rejections: [] });
@@ -38,4 +38,12 @@ test("assist: a near miss the model reads as not recruiting is excluded from rev
 test("assist: no opinion, no effect", () => {
   const events = readMail([SILENT, JUNK_NEAR]);
   assert.deepEqual(applyAssist(events, [SILENT, JUNK_NEAR], new Map()), events);
+});
+
+test("interviewKind: a confirmed time is scheduled, offered choices are an invitation, anything else keeps the model's type", () => {
+  const m = (bodyText: string) => ({ subject: "Chat", bodyText, receivedAt: new Date("2026-03-02T12:00:00Z") });
+  assert.equal(interviewKind(m("Great, you're booked for Thursday March 5 at 2:00pm. See you then."), "interview_invite"), "interview_scheduled");
+  assert.equal(interviewKind(m("Which works better: Tuesday at 10am or Wednesday at 3pm? Let me know."), "interview_scheduled"), "interview_invite");
+  assert.equal(interviewKind(m("We would like to talk with you about the role."), "interview_invite"), "interview_invite");
+  assert.equal(interviewKind(m("You're booked for Thursday at 2pm."), "offer"), "offer", "other types are never touched");
 });

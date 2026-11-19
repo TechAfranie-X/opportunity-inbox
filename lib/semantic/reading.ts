@@ -94,10 +94,10 @@ export function verifyReading(raw: unknown, input: ReaderInput): VerifiedReading
     const basis = r.employer.basis as EmployerBasis;
     const fromCandidate = input.candidates.some((c) => sameOrg(c.name, name));
     const bad = (why: string) => { rej.push(`employer:${why}`); };
-    if (!(EMPLOYER_BASES as readonly string[]).includes(String(basis))) bad("basis_invalid");
+    if (!(EMPLOYER_BASES as readonly string[]).includes(String(basis)) && !(basis === ("employer_candidates" as string) && fromCandidate)) bad("basis_invalid");
     else if (!inText(name) && !fromCandidate) bad("name_not_in_text");
     else if (!inText(quote) || norm(String(quote)).split(" ").length < 3) bad("relationship_quote_missing");
-    else if (!norm(String(quote)).includes(norm(name))) bad("quote_does_not_name_employer");
+    else if (basis !== ("employer_candidates" as string) && !norm(String(quote)).includes(norm(name))) bad("quote_does_not_name_employer"); // a name chosen from the local resolver's grounded candidates needs no name in the quote
     else if (name.split(/\s+/).length > 6 || !/^[A-Z0-9]/.test(name) || /^(?:the|our|your|team|company|hiring team|recruiting|careers|university|program)$/i.test(name)) bad("implausible");
     else if (isIntermediaryBrand(name) || NOT_EMPLOYER.has(name.toLowerCase().replace(/[^a-z0-9]/g, ""))) bad("vendor_not_employer");
     else if (looksLikePerson(name)) bad("person_not_employer");
@@ -108,7 +108,7 @@ export function verifyReading(raw: unknown, input: ReaderInput): VerifiedReading
       const dom = senderDomain(input.from);
       if (classifySender(dom) !== "employer" || !(sameOrg(domainLabel(dom), name) || sameOrg(senderBrand(input.from), name))) bad("sender_not_employer");
       else employer = { name, basis };
-    } else employer = { name, basis };
+    } else employer = { name, basis: (basis as string) === "employer_candidates" ? "hiring_for" : basis };
   } else if (output.recruiting && r.employer) rej.push("employer:schema");
 
   // The reader's single company field never leaks past this point: only the verified employer is carried.
