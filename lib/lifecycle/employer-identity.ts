@@ -37,7 +37,8 @@ export function resolveEmployers(events: EffectiveEvent[]): EffectiveEvent[] {
     return names.every((n) => sameName(n, names[0]) || isPrefix(tokens(n), tokens(names[0]))) ? names[0] : null;
   };
   let out = events.map((e) => {
-    if (settled(e) || !e.signals.includes("employer:sender-only")) return e;
+    // the person's own reply borrows its employer from the thread's first message, so it follows the thread's best-evidenced employer too
+    if (settled(e) || !(e.signals.includes("employer:sender-only") || e.outbound)) return e;
     const te = threadEmployer(e.gmailThreadId);
     if (!te || (e.company && sameName(e.company, te))) return e;
     return { ...e, company: te, fieldConfidence: { type: e.fieldConfidence?.type ?? e.confidence, role: e.fieldConfidence?.role ?? e.confidence, company: 0.5 }, signals: [...e.signals.filter((s) => s !== "employer:sender-only"), "employer:thread"] };
@@ -109,6 +110,18 @@ export function resolveEmployers(events: EffectiveEvent[]): EffectiveEvent[] {
     const r = rootOf(k);
     const name = spelling.get(r) ?? e.company;
     return name === e.company ? e : { ...e, company: name, signals: [...e.signals, "employer:alias"] };
+  });
+  // CORROBORATION: a name that came from a weak source (sender label, domain, a thread neighbour) and that the TEXT of a different message of the same employer
+  // class also writes is confirmed by two independent sources. It stops asking the person about a company the record already agrees on.
+  const textBacked = new Map<string, Set<string>>();
+  for (const e of out) if (e.company && !e.outbound && !e.signals.includes("employer:sender-only") && (e.fieldConfidence?.company ?? 0) >= 0.5) {
+    const k = rootOf(tokens(e.company).join(" ")); textBacked.set(k, (textBacked.get(k) ?? new Set()).add(e.id));
+  }
+  out = out.map((e) => {
+    if (!e.company || settled(e) || (e.fieldConfidence?.company ?? 1) >= 0.6) return e;
+    const backers = textBacked.get(rootOf(tokens(e.company).join(" ")));
+    if (!backers || [...backers].every((id) => id === e.id)) return e;
+    return { ...e, fieldConfidence: { type: e.fieldConfidence?.type ?? e.confidence, role: e.fieldConfidence?.role ?? e.confidence, company: 0.6 }, reviewReasons: (e.reviewReasons ?? []).filter((r) => !/^company:/i.test(r)), signals: [...e.signals, "employer:corroborated"] };
   });
   return out;
 }

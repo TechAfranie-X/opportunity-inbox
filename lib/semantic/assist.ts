@@ -6,7 +6,8 @@ import { SECOND_READER_NO, SECOND_READER_YES } from "./consensus.ts";
 import { looksLikePerson } from "../recruiting/company.ts";
 import { findDateMentions } from "../recruiting/dates.ts";
 import { usable } from "./port.ts";
-import { applyTextFacts } from "../reliability/facts.ts";
+import { outboundEvent } from "../recruiting/extract.ts";
+import { applyTextFacts, studentAcceptance } from "../reliability/facts.ts";
 import { employerProvenance } from "../reliability/grounding.ts";
 
 /**
@@ -87,5 +88,15 @@ export function applyAssist(events: ExtractedEvent[], emails: RecruitingEmail[],
     return [op.certainty === "high" ? semanticEvent(m, op) : candidateEvent(m, "strong", SECOND_READER_YES, ["semantic:yes"])];
   });
   void NEAR_MISS;
-  return added.length > 0 ? [...out, ...added].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime()) : out;
+  // The person's own replies in a thread the MODEL recognised as recruiting: the rule reader only keeps a reply when a rule event anchors its thread, so a thread the
+  // rules missed (and the model found) would lose the person's answer (an acceptance, a withdrawal). They are kept the same way, from the model-found anchor.
+  const all = [...out, ...added];
+  const anchors = new Map<string, ExtractedEvent>();
+  for (const e of all) if (!e.outbound && !anchors.has(e.gmailThreadId)) anchors.set(e.gmailThreadId, e);
+  const haveAfter = new Set(all.map((e) => e.gmailMessageId));
+  const replies = emails.flatMap((m) => {
+    const anchor = anchors.get(m.threadId);
+    return m.outbound && anchor && !haveAfter.has(m.id) ? [studentAcceptance(m, outboundEvent(m, anchor))] : [];
+  });
+  return added.length > 0 || replies.length > 0 ? [...all, ...replies].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime()) : out;
 }
