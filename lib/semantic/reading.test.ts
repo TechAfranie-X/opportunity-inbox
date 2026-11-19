@@ -113,3 +113,9 @@ test("a company the rules took from an agency or assessment platform is dropped,
   const noEmployer = verifyReading(raw({ event: { type: "recruiter_outreach", stage: "recruiter", quote: q }, entities: [{ name: "Searchlight Partners", kind: "recruiting_agency", quote: "Searchlight Partners" }], employer: null }), i);
   assert.equal(reconcileReadings([rules], new Map([["m1", noEmployer]]))[0].company, null);
 });
+
+import { looksLikeTitle } from "./employer.ts";
+test("a model-quoted role is adopted only when it reads like a job title", () => {
+  for (const t of ["Software Engineer Intern", "Research Assistant (Computer Science)", "Process Engineering Intern", "Data Analyst Co-op", "Praktikant Versuchswesen"]) assert.ok(looksLikeTitle(t), t);
+  for (const t of ["undergrad to help with the sensor-calibration project", "summer position in the wet lab", "a chat about next steps", "paid research assistant who will help us"]) assert.ok(!looksLikeTitle(t), t);
+});

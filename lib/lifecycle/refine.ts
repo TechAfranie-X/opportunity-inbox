@@ -82,9 +82,13 @@ export function cleanRole(role: string | null): string | null {
   return r || null;
 }
 
+/** A mail-infrastructure word is never an employer: it is what a sender subdomain or display name falls back to ("mail.example.org" -> "Mail"). */
+const INFRA_NAME = /^(?:mail|email|e-?mail|mailer|mailing|notifications?|notify|noreply|no-reply|donotreply|do-not-reply|info|news|updates?|alerts?|messages?|support|help|admin|system|service|services|team|hr|careers|jobs|talent|recruiting|recruitment|hello|contact|bounce|smtp|mx|em|e|go|link|click|t|send|sender|reply|post)$/i;
+
 export function cleanCompany(company: string | null): string | null {
   if (!company) return company;
   let c = company.replace(/\s+/g, " ").trim();
+  if (INFRA_NAME.test(c)) return null;
   for (let i = 0; i < 3 && TRAILING_CONNECTORS.test(c) && !/\b(?:of|&)\s+(?:and|the|of|for|at|&|to)$/i.test(c) && !/\b(?:of|&)(?:\s+the)?$/i.test(c); i++) c = c.replace(TRAILING_CONNECTORS, "").trim();
   c = c.replace(/\s+(?:19|20)\d{2}$/, "").trim(); // "Ramp 2025": the assessment's name, not the employer
   return c || null;

@@ -22,6 +22,17 @@ export const REASON_READERS_DISAGREE = "Two readers disagree about the company. 
  *   rules found no role, reader quotes a verified role               -> adopted (the quote is in the message and passed role cleaning)
  * A reader with no verified employer changes nothing. Corrections and confirmations by the person are applied later and always win.
  */
+const TITLE_NOUN = /\b(?:intern(?:ship)?|engineer|developer|analyst|assistant|associate|scientist|researcher|research|fellow(?:ship)?|scholar(?:ship)?|trainee|coordinator|designer|manager|co-?op|apprentice(?:ship)?|technician|consultant|officer|specialist|programmer|architect|teacher|tutor|nurse|resident(?:cy)?|stagiaire|praktikant\w*|pasant\w*|estagi\w*)\b/i;
+/**
+ * A role quoted from prose is often a description ("undergrad to help with the calibration project"), and two different descriptions of one job must not split one
+ * lifecycle in two. A model-quoted role is adopted only when it reads like a job title: short, no clause, and a recognisable title noun.
+ */
+export function looksLikeTitle(role: string): boolean {
+  const r = role.trim();
+  const words = r.split(/\s+/);
+  return words.length <= 8 && r.length <= 80 && !/\b(?:to|who|that|which|will|help|for the)\b/i.test(r.replace(/\b(?:Intern|Internship) to\b/i, "")) && TITLE_NOUN.test(r);
+}
+
 export function reconcileReadings(events: ExtractedEvent[], readings: Map<string, VerifiedReading>): ExtractedEvent[] {
   if (readings.size === 0) return events;
   return events.map((e) => {
@@ -51,7 +62,7 @@ export function reconcileReadings(events: ExtractedEvent[], readings: Map<string
     if (out.signals.includes("semantic:yes") && out.type === "status_update" && r.output.type && r.output.type !== "status_update") {
       out = { ...out, type: r.output.type, fieldConfidence: { ...(out.fieldConfidence ?? fc), type: 0.4 }, signals: [...out.signals, "semantic:type"] };
     }
-    if (!out.role && r.output.role) out = { ...out, role: r.output.role, signals: [...out.signals, "semantic:role"] };
+    if (!out.role && r.output.role && looksLikeTitle(r.output.role)) out = { ...out, role: r.output.role, signals: [...out.signals, "semantic:role"] };
     return out;
   });
 }

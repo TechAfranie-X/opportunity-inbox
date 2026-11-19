@@ -260,3 +260,8 @@ test("applications for a service, tenancy, membership or status are not candidac
   for (const s of ["Application received: Loan Officer position", "Thank you for applying: Membership Coordinator role", "Your application for the Visa Operations Intern", "Application received - Housing Analyst internship", "Interview invitation: Insurance Underwriter role", "Your application to Acme"]) assert.notEqual(reasonOf(s), "non-employment", s);
   assert.equal(reasonOf("Your visa application", { domain: "mail.myworkday.com" }), null, "an employer's applicant-tracking system is never excluded on wording");
 });
+
+test("a mail-infrastructure word is not an employer, but a real name that contains one is kept", () => {
+  for (const n of ["Mail", "Notifications", "no-reply", "Info", "Team"]) assert.equal(cleanCompany(n), null, n);
+  for (const n of ["Mail Chimp Labs", "Teamwork Inc", "Careers Foundation", "Infosys"]) assert.notEqual(cleanCompany(n), null, n);
+});
