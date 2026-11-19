@@ -116,6 +116,14 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
 }
 
 /** Upsert freshly extracted fields. Never touches `correction`, so user edits survive re-sync. */
+/** Stored near misses nobody has judged yet (no person's confirmation or correction, no language-model verdict): the candidates for a local re-read. */
+export async function loadUnjudgedNearMisses(userGoogleSub: string): Promise<ExtractedEvent[]> {
+  const rows = await getDb().select().from(recruitingEvents).where(eq(recruitingEvents.userGoogleSub, userGoogleSub));
+  return rows
+    .filter((r) => r.correction == null && (r.signals ?? []).includes("near-miss") && !(r.signals ?? []).some((x) => x.startsWith("semantic:")))
+    .map((r) => rowToExtracted(r));
+}
+
 export async function saveExtractedEvents(userGoogleSub: string, events: ExtractedEvent[]) {
   if (events.length === 0) return;
   const db = getDb();

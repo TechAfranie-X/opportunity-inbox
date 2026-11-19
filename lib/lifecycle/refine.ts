@@ -17,7 +17,7 @@ import type { EffectiveEvent } from "../recruiting/types.ts";
  *                    not part of an employer, and a legal/industry suffix variant of an employer already seen is the same employer.
  *  4. polarity       "complete your application"/"incomplete application" is a nudge about an unfinished application, not recruiter interest.
  */
-export type ExclusionReason = "newsletter" | "practice" | "course" | "consumer-account" | "marketing" | "non-employment";
+export type ExclusionReason = "newsletter" | "practice" | "course" | "consumer-account" | "marketing" | "non-employment" | "unrelated";
 export type Excluded = { event: EffectiveEvent; reason: ExclusionReason };
 export type Refined = { events: EffectiveEvent[]; excluded: Excluded[] };
 
@@ -116,7 +116,7 @@ function programDomains(events: EffectiveEvent[]): Set<string> {
  * Sweep-found mail (DISCOVERY=sweep) is read without any hiring keyword in Gmail's query, so the reader's weakest evidence reaches the pipeline: a message
  * linked to an employer only because the sender was seen before ("known-contact-continuity"), is a reply in a recruiting thread, or is "interview confirmed"
  * from body wording alone ("Flights to LGA are up $20", "CornElius sent you messages", a purchase confirmation). Such a message whose subject names no
- * candidacy at all is not placed in the pipeline: it becomes a "possibly recruiting" item in the folded list, never counted. Keyword-found mail is untouched.
+ * candidacy at all is not placed in the pipeline: it is set aside as "unrelated": not in the pipeline and not offered for review, unless a language model read it and agreed it is recruiting. Keyword-found mail is untouched.
  */
 const CANDIDACY_SUBJECT = /\b(?:application|applying|applied|interview|assessment|coding challenge|offer|position|role|internship|intern|job|career|recruit\w*|hiring|candidate|next steps|opportunity|referral|onboarding|background (?:check|screening)|rejection|unfortunately)\b/i;
 const WEAK_SWEEP_EVIDENCE = (signals: string[]) =>
@@ -124,6 +124,7 @@ const WEAK_SWEEP_EVIDENCE = (signals: string[]) =>
   (signals.includes("known-contact-continuity") || signals.includes("reply-in-recruiting-thread") || signals.includes("interview confirmed") || signals.includes("rejection") || signals.includes("follow up"));
 
 const SOFT_OR_REJECTION = new Set<string>([...SOFT_TYPES, "rejection"]);
+const MODEL_AGREED = (signals: string[]) => signals.some((x) => x === "semantic:agree" || x === "semantic:event" || x === "semantic:type" || x === "semantic:yes");
 const settled = (e: EffectiveEvent) => e.corrected || e.confirmed === true;
 
 export function refineEvents(events: EffectiveEvent[]): Refined {
@@ -136,14 +137,11 @@ export function refineEvents(events: EffectiveEvent[]): Refined {
     if (!reason && !e.outbound && programs.has(e.senderDomain) && SOFT_TYPES.has(e.type) && !MINE.test(e.subject ?? "")) reason = "marketing";
     if (reason) { excluded.push({ event: e, reason }); continue; }
     const r: EffectiveEvent = { ...e };
-    if (!e.outbound && !isNearMissEvent(e) && SOFT_OR_REJECTION.has(e.type) && WEAK_SWEEP_EVIDENCE(e.signals) && !CANDIDACY_SUBJECT.test(e.subject ?? "")) {
-      r.type = "status_update";
-      r.eventDate = null;
-      r.eventDateHasTime = false;
-      r.dateKind = null;
-      r.confidence = Math.min(e.confidence, 0.3);
-      r.signals = [...e.signals, NEAR_MISS, NEAR_MISS_WEAK, "sweep-weak (refined)"];
-      r.reviewReasons = [...(e.reviewReasons ?? []), "possible: this was found by the wide search and its subject does not mention a job, application or interview"];
+    // Weak sweep-only evidence with no candidacy wording is low-value uncertainty: it is not placed in the pipeline AND not offered for review (it stays stored,
+    // metadata only). A language model that read the message and agreed it is recruiting (semantic:agree/event/type) overrides this; a person's correction does too.
+    if (!e.outbound && !isNearMissEvent(e) && SOFT_OR_REJECTION.has(e.type) && WEAK_SWEEP_EVIDENCE(e.signals) && !CANDIDACY_SUBJECT.test(e.subject ?? "") && !MODEL_AGREED(e.signals)) {
+      excluded.push({ event: e, reason: "unrelated" });
+      continue;
     }
     const company = cleanCompany(e.company);
     if (company !== e.company) r.company = company;

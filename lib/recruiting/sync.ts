@@ -15,6 +15,23 @@ import { buildPredictions } from "@/lib/recruiting/predictions";
 import { PRODUCT_READER_VERSION } from "@/lib/recruiting/product-version";
 import { contactAnchors, countEvents, evaluatedMessageIds, inheritStoredRoles, loadWorkspace, markSynced, pruneReclassified, recentThreadAnchors, saveExtractedEvents, savePredictions } from "@/lib/recruiting/store";
 import { runSync, type EngineResult, type SyncStore } from "@/lib/recruiting/sync-engine";
+import { SEMANTIC_GUIDE_V3_COMPACT } from "@/lib/semantic/guide-v3";
+import { createModelReader } from "@/lib/semantic/hosted";
+import { localTransport } from "@/lib/semantic/local";
+
+const DEFAULT_LOCAL_MODEL = "mlx-community/Qwen3-4B-Instruct-2507-4bit";
+let localReader: ReturnType<typeof createModelReader> | null = null;
+/** One reader per process so its in-memory cache (keyed by a hash of the redacted input) is shared across syncs. */
+function localSemanticReader() {
+  localReader ??= createModelReader({
+    transport: localTransport({ baseUrl: process.env.LOCAL_MODEL_URL }),
+    model: process.env.LOCAL_MODEL ?? DEFAULT_LOCAL_MODEL,
+    guide: SEMANTIC_GUIDE_V3_COMPACT,
+    batch: 4,
+    idPrefix: "local",
+  });
+  return localReader;
+}
 
 export type SyncResult =
   | ({ ok: true } & EngineResult)
@@ -24,9 +41,14 @@ export type SyncResult =
  * The second reader is OFF unless SEMANTIC_READER names an adapter, and never in production. "cache" serves verified outputs from the
  * development harness cache; "sample" is a scripted stand-in for the synthetic sample mailbox only. No model is hosted, called or paid for.
  */
-function semanticConfig(sub: string): Partial<Pick<Parameters<typeof runSync>[2], "semantic" | "selfNames">> {
+function semanticConfig(sub: string): Partial<Pick<Parameters<typeof runSync>[2], "semantic" | "selfNames" | "semanticMode">> {
   if (process.env.NODE_ENV === "production") return {};
   const selfNames = (process.env.READER_SELF_NAMES ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (process.env.SEMANTIC_READER === "local") {
+    // A model running on THIS machine (an OpenAI-compatible server on loopback, e.g. `mlx_lm server`); the transport refuses any non-loopback address, so
+    // message text cannot leave the machine. Its verified opinion may create or exclude events (assist mode). See docs/semantic-local.md.
+    return { semantic: localSemanticReader(), semanticMode: "assist", selfNames };
+  }
   if (process.env.SEMANTIC_READER === "cache") return { semantic: cacheSemanticReader(), selfNames };
   if (process.env.SEMANTIC_READER === "sample" && isSampleUser(sub)) return { semantic: sampleSemanticReader(), selfNames };
   return {};

@@ -231,21 +231,22 @@ test("a domain with no course or practice mail is never treated as a program", (
   assert.equal(refineEvents(events).excluded.length, 0);
 });
 
-test("sweep-found mail with only continuity evidence and no candidacy in the subject becomes a possible item, not a pipeline stage", () => {
+test("sweep-found mail with only continuity evidence and no candidacy in the subject is set aside as unrelated, not offered for review", () => {
   const sweep = (subject: string, signals: string[], type: EventType = "status_update", domain = "shop.example") => ev({ type, day: 20, subject, domain, company: "Shop", signals: [...signals, "via:sweep"] });
   const events = [
     sweep("Flights to LGA are up $20", ["known-contact-continuity"]),
     sweep("Flight purchase confirmation", ["interview confirmed", "body"], "interview_scheduled"),
     sweep("Update to select benefits", ["rejection", "body"], "rejection"),
     sweep("Your interview with Shop is confirmed", ["interview confirmed", "body"], "interview_scheduled"),
+    sweep("Quick question", ["known-contact-continuity", "semantic:agree"]),
     ev({ type: "status_update", day: 21, subject: "Flights are up $5", domain: "shop.example", company: "Shop", signals: ["known-contact-continuity"] }),
   ];
-  const { events: kept } = refineEvents(events);
-  const weak = kept.filter((e) => e.signals.includes("sweep-weak (refined)"));
-  assert.deepEqual(weak.map((e) => e.subject).sort(), ["Flight purchase confirmation", "Flights to LGA are up $20", "Update to select benefits"]);
-  assert.ok(weak.every((e) => e.signals.includes("near-miss") && e.type === "status_update"));
+  const { events: kept, excluded } = refineEvents(events);
+  assert.deepEqual(excluded.map((x) => x.event.subject).sort(), ["Flight purchase confirmation", "Flights to LGA are up $20", "Update to select benefits"]);
+  assert.ok(excluded.every((x) => x.reason === "unrelated"));
   assert.equal(kept.find((e) => e.subject === "Your interview with Shop is confirmed")?.type, "interview_scheduled");
-  assert.ok(!kept.find((e) => e.subject === "Flights are up $5")?.signals.includes("sweep-weak (refined)"), "keyword-found mail is untouched");
+  assert.ok(kept.some((e) => e.subject === "Quick question"), "a language model that agreed it is recruiting overrides the set-aside");
+  assert.ok(kept.some((e) => e.subject === "Flights are up $5"), "keyword-found mail is untouched");
 });
 
 test("a work-mode tag is not part of the role, so two receipts for one role are one opportunity", () => {
