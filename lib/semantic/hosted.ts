@@ -28,6 +28,15 @@ const inputHash = (i: ReaderInput) => createHash("sha256").update(JSON.stringify
 
 export function createHostedReader(opts: { transport: Transport; env: Record<string, string | undefined>; model?: string; cache?: Map<string, VerifiedReading> }): SemanticReader {
   if (!hostedApproval(opts.env)) throw new Error("Hosted semantic reader is disabled: it needs the owner's explicit approval (SEMANTIC_HOSTED_APPROVED).");
+  return createModelReader({ ...opts, idPrefix: "hosted" });
+}
+
+/**
+ * The model-agnostic reader: prompt, batching, parsing, verification and caching around an injected transport. It has NO approval lock because it
+ * sends nothing anywhere by itself: whoever supplies the transport decides where text goes. The hosted wrapper above locks it behind the owner's phrase;
+ * the local wrapper (lib/semantic/local.ts) only accepts a loopback endpoint, so text cannot leave the machine.
+ */
+export function createModelReader(opts: { transport: Transport; model?: string; cache?: Map<string, VerifiedReading>; idPrefix?: string; batch?: number; guide?: string }): SemanticReader {
   const cache = opts.cache ?? new Map<string, VerifiedReading>();
   const model = opts.model ?? DEFAULT_HOSTED_MODEL;
   const readings = async (inputs: ReaderInput[]) => {
@@ -38,12 +47,13 @@ export function createHostedReader(opts: { transport: Transport; env: Record<str
       if (hit) out.set(i.key, { ...hit, key: i.key, output: { ...hit.output, key: i.key } });
       else todo.push(i);
     }
-    for (let at = 0; at < todo.length; at += BATCH) {
-      const batch = todo.slice(at, at + BATCH);
+    const step = opts.batch ?? BATCH;
+    for (let at = 0; at < todo.length; at += step) {
+      const batch = todo.slice(at, at + step);
       const user = JSON.stringify(batch.map((i) => ({ key: i.key, from: i.from, subject: i.subject, body: i.body, received: i.received, employer_candidates: i.candidates.map((c) => c.name) })));
       let parsed: unknown;
       try {
-        const text = await opts.transport({ system: SEMANTIC_GUIDE, user, model });
+        const text = await opts.transport({ system: opts.guide ?? SEMANTIC_GUIDE, user, model });
         parsed = JSON.parse(text.slice(text.indexOf("["), text.lastIndexOf("]") + 1));
       } catch {
         continue; // a failed or unreadable answer is no opinion
@@ -59,7 +69,7 @@ export function createHostedReader(opts: { transport: Transport; env: Record<str
     return out;
   };
   return {
-    id: `hosted:${model}`,
+    id: `${opts.idPrefix ?? "model"}:${model}`,
     readings,
     async opine(inputs) {
       return new Map([...(await readings(inputs))].map(([k, v]) => [k, v.output] as const));

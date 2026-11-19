@@ -35,6 +35,7 @@ import {
 import type { Prediction } from "@/lib/recruiting/predictions";
 import { isContactKey } from "@/lib/discovery/continuity";
 import { isNearMiss } from "@/lib/reliability/flags";
+import { isSemanticExcluded } from "@/lib/semantic/assist";
 import { inheritRoles, type ThreadAnchor } from "@/lib/recruiting/extract";
 import { EXTRACTOR_VERSION } from "@/lib/recruiting/version";
 import type {
@@ -95,8 +96,10 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
     }),
   ).events; // evidence checks over the whole record, before near misses are set aside (lib/lifecycle/refine.ts)
   // A near miss joins the pipeline only when a person says it is recruiting ("Looks right" or an edit); hiding it removes it.
-  const possible = all.filter((e) => isNearMiss(e) && !e.confirmed && !e.corrected);
-  const events = all.filter((e) => !possible.includes(e));
+  // A near miss the language model read and judged not recruiting is not offered either (it stays stored, metadata only, and a person's "Looks right" still wins).
+  const hidden = all.filter((e) => isNearMiss(e) && isSemanticExcluded(e) && !e.confirmed && !e.corrected);
+  const possible = all.filter((e) => isNearMiss(e) && !e.confirmed && !e.corrected && !hidden.includes(e));
+  const events = all.filter((e) => !possible.includes(e) && !hidden.includes(e));
   const overrides = new Map<string, OpportunityOverride>(
     overrideRows.flatMap((o) =>
       o.status === "closed" || o.status === "active"

@@ -2,6 +2,7 @@ import type { Prediction } from "./predictions.ts";
 import type { ReadContext, ThreadAnchor } from "./extract.ts";
 import { contactKeysOf, reconcilePredictions } from "../discovery/continuity.ts";
 import { isNearMiss } from "../reliability/flags.ts";
+import { applyAssist } from "../semantic/assist.ts";
 import { applyConsensus } from "../semantic/consensus.ts";
 import { reconcileReadings } from "../semantic/employer.ts";
 import type { VerifiedReading } from "../semantic/reading.ts";
@@ -74,6 +75,8 @@ export type EngineParams = {
    * pass the veto-only triage, and can only change what a person is asked, never a structured value.
    */
   semantic?: SemanticReader;
+  /** "review" (default): the second reader only changes what a person is asked. "assist": its verified opinion may also create or exclude events (lib/semantic/assist.ts). */
+  semanticMode?: "review" | "assist";
   /**
    * Employer resolution (lib/identity): normalizes names through the identity graph, rules out vendors, agencies and generic words, and writes a
    * calibrated known / likely / review / unknown company state. Pure and local; it runs after the readers, so it sees the rules' reading and, when
@@ -164,6 +167,7 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
     const threadIds = [...new Set(inboundEvents.map((e) => e.gmailThreadId))];
     const outbound = threadIds.length ? (await outboundOf(threadIds)).filter(allowed) : [];
     let events = tagEvents(p.extract([...inbound, ...outbound], context), via);
+    let semanticFailed = false;
     if (p.semantic) {
       try {
         const inputs = semanticInputs(inbound, p.selfNames);
@@ -174,10 +178,11 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
           opinions = new Map([...readings].map(([k, v]) => [k, v.output] as const));
         } else opinions = await p.semantic.opine(inputs);
         for (const [k, v] of opinions) opinionLog.set(k, v); // kept for this run so the deferred pass can use them without a second call
-        events = applyConsensus(events, inbound, opinions);
+        events = (p.semanticMode === "assist" ? applyAssist : applyConsensus)(events, inbound, opinions);
         if (readingLog.size > 0) events = reconcileReadings(events, readingLog);
       } catch {
         // A second opinion that fails is no opinion: the first reader's result stands and nothing is lost.
+        semanticFailed = true; // and these messages are not remembered as evaluated, so the next run offers them to the model again
       }
     }
     if (p.identity) events = p.identity(events, new Map(inbound.map((m) => [m.id, m] as const)), readingLog);
@@ -187,7 +192,7 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
     for (const h of held) deferred.set(h.id, h);
     const heldIds = new Set(held.map((h) => h.id));
     try {
-      await store.savePredictions(minimizeSweepPredictions(reconcilePredictions(p.predict([...inbound, ...outbound]), events), via).filter((pr) => !heldIds.has(pr.gmailMessageId)));
+      if (!(semanticFailed && p.semanticMode === "assist")) await store.savePredictions(minimizeSweepPredictions(reconcilePredictions(p.predict([...inbound, ...outbound]), events), via).filter((pr) => !heldIds.has(pr.gmailMessageId)));
     } catch {
       // The prediction log is evaluation evidence and the "already evaluated" memory: losing it only costs a re-read next time.
     }
@@ -202,7 +207,7 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
     const held = [...deferred.values()];
     const keys = contactKeysOf(held);
     let events = tagEvents(p.extract(held, { contacts: keys.length > 0 && store.contactAnchors ? await store.contactAnchors(keys) : new Map() }), via);
-    if (p.semantic && opinionLog.size > 0) events = applyConsensus(events, held, new Map(held.flatMap((h) => (opinionLog.has(h.id) ? [[h.id, opinionLog.get(h.id)!] as const] : []))));
+    if (p.semantic && opinionLog.size > 0) events = (p.semanticMode === "assist" ? applyAssist : applyConsensus)(events, held, new Map(held.flatMap((h) => (opinionLog.has(h.id) ? [[h.id, opinionLog.get(h.id)!] as const] : []))));
     if (p.semantic && readingLog.size > 0) events = reconcileReadings(events, new Map(held.flatMap((h) => (readingLog.has(h.id) ? [[h.id, readingLog.get(h.id)!] as const] : []))));
     if (p.identity) events = p.identity(events, new Map(held.map((m) => [m.id, m] as const)), readingLog);
     await store.saveEvents(events);
