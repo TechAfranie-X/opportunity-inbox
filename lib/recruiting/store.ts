@@ -124,6 +124,12 @@ export async function loadUnjudgedNearMisses(userGoogleSub: string): Promise<Ext
     .map((r) => rowToExtracted(r));
 }
 
+/** Every stored event of one account as extracted fields (corrections are NOT applied: they live in their own column and are never touched by a re-read). */
+export async function loadAllExtracted(userGoogleSub: string): Promise<ExtractedEvent[]> {
+  const rows = await getDb().select().from(recruitingEvents).where(eq(recruitingEvents.userGoogleSub, userGoogleSub));
+  return rows.map((r) => rowToExtracted(r));
+}
+
 export async function saveExtractedEvents(userGoogleSub: string, events: ExtractedEvent[]) {
   if (events.length === 0) return;
   const db = getDb();

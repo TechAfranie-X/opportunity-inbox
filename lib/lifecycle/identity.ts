@@ -22,6 +22,8 @@ const SPECIFIC_WINDOW_NO_CYCLE = 180 * DAY;
 const GENERIC_WINDOW_WITH_THREAD = 240 * DAY;
 const NEUTRAL = new Set<EventType>(["status_update", "follow_up", "user_reply"]);
 const REOPENS = new Set<EventType>(["assessment", "interview_invite", "interview_scheduled", "offer"]);
+/** Types whose attribution matters: wrongly attached, they would close, advance or settle another application. Everything else may ride with the latest candidate. */
+const CONSEQUENTIAL = new Set<EventType>(["rejection", "withdrawn", "offer", "interview_invite", "interview_scheduled", "assessment", "assessment_completed"]);
 const STAGE_BEARING = new Set<EventType>(["applied", "recruiter_outreach", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer", "rejection", "withdrawn"]);
 
 const specific = (role: string | null | undefined) => !!role && !isRoleFragment(role) && roleCore(role).length > 0;
@@ -104,8 +106,8 @@ export function groupEventsV2(input: EffectiveEvent[]): Group[] {
       const threadRoles = new Set(threadGenerics.map(({ g }) => groupRole(g)).filter((r): r is string => !!r && specific(r)).map((r) => roleCore(r).join(" ")));
       if (threadMatches.length === 0 && threadGenerics.length > 1 && threadRoles.size > 1 && !specific(e.role)) {
         ambiguous = threadGenerics.map(({ g }) => groupRole(g)).filter(Boolean).join(" / ");
-        // a neutral message (a reminder, a bare status) moves no stage, so it rides with the latest candidate and says so; a stage-bearing one stays apart
-        if (NEUTRAL.has(e.type)) target = threadGenerics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
+        // a message that cannot close, advance or settle anything (a reminder, a bare status, a receipt, an outreach) rides with the latest candidate and says so; a stage-bearing one stays apart
+        if (!CONSEQUENTIAL.has(e.type)) target = threadGenerics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
       } else {
         target = threadMatches.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g ?? threadGenerics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
       }
@@ -123,7 +125,7 @@ export function groupEventsV2(input: EffectiveEvent[]): Group[] {
         const roleSet = new Set(pick.map(({ g }) => groupRole(g)).filter((r): r is string => !!r && specific(r)).map((r) => roleCore(r).join(" ")));
         if (matches.length === 0 && generics.length > 1 && roleSet.size > 1 && !specific(e.role)) {
           ambiguous = generics.map(({ g }) => groupRole(g)).filter(Boolean).join(" / ");
-          if (NEUTRAL.has(e.type)) target = generics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
+          if (!CONSEQUENTIAL.has(e.type)) target = generics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
         } else {
           target = pick.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
         }
