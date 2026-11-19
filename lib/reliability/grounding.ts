@@ -77,3 +77,25 @@ export function senderBrand(email: Pick<RecruitingEmail, "from" | "subject" | "b
   const inText = squash(`${email.subject} ${email.bodyText}`).includes(b);
   return viaDomain || inText ? brand : null;
 }
+
+/**
+ * Where the employer name came from. A name written in the message is trusted as read; a name that exists only in the sender's name or address says who SENT the
+ * mail (a platform, a mailbox provider), marked `employer:sender-only` so later stages weigh it as weak. The employer's own sender label ("Copperline Careers")
+ * names the employer even when a platform delivers the mail or the reader fell back to the domain. Applied to every event a reader produces, rules or model.
+ */
+export function employerProvenance<T extends ExtractedEvent>(email: RecruitingEmail, event: T): T {
+  const out = { ...event, signals: [...event.signals], reviewReasons: [...(event.reviewReasons ?? [])] };
+  out.signals = out.signals.filter((x) => x !== "employer:sender-only");
+  if (out.company && (!companyInText(email, out.company) || nameOfSenderDomain(email, out.company))) out.signals.push("employer:sender-only");
+  if (!out.company || out.signals.includes("employer:sender-only")) {
+    const brand = senderBrand(email);
+    if (brand) {
+      out.company = brand;
+      out.fieldConfidence = { type: out.fieldConfidence?.type ?? out.confidence, role: out.fieldConfidence?.role ?? out.confidence, company: Math.max(out.fieldConfidence?.company ?? 0, companyInText(email, brand) ? 0.5 : 0.38) };
+      out.signals = [...out.signals.filter((x) => x !== "employer:sender-only"), "employer:display-name"];
+      // corroborated by the message text: trusted as is; corroborated only by the sender's own domain label: likely, and the person is asked once
+      if (!companyInText(email, brand)) out.reviewReasons.push("company: taken from the sender's label, not from the message text");
+    }
+  }
+  return out;
+}

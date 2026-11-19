@@ -7,6 +7,7 @@ import { looksLikePerson } from "../recruiting/company.ts";
 import { findDateMentions } from "../recruiting/dates.ts";
 import { usable } from "./port.ts";
 import { applyTextFacts } from "../reliability/facts.ts";
+import { employerProvenance } from "../reliability/grounding.ts";
 
 /**
  * Assist mode: the language model's verified opinion changes what the product SHOWS, not just what it asks. It is a second reader with real authority in
@@ -45,7 +46,7 @@ export function interviewKind(m: Pick<RecruitingEmail, "subject" | "bodyText" | 
 function semanticEvent(m: RecruitingEmail, op: VerifiedOutput): ExtractedEvent {
   const base = candidateEvent(m, "strong", "", []);
   const person = base.company ? looksLikePerson(base.company) : false; // a signature name is not an employer
-  return applyTextFacts(m, {
+  return applyTextFacts(m, employerProvenance(m, {
     ...base,
     company: person ? null : base.company,
     type: interviewKind(m, asEventType(op.type)),
@@ -53,7 +54,7 @@ function semanticEvent(m: RecruitingEmail, op: VerifiedOutput): ExtractedEvent {
     fieldConfidence: { type: 0.72, company: base.fieldConfidence?.company ?? 0, role: 0 },
     reviewReasons: [],
     signals: [SEMANTIC_EVENT, `semantic:certainty:${op.certainty}`],
-  });
+  }));
 }
 
 const LOW_INFORMATION = new Set<string>(["status_update", "applied", "follow_up"]);
