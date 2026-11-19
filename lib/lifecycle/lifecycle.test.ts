@@ -191,3 +191,43 @@ test("display repair: mojibake left by a mislabeled charset is repaired, clean t
   assert.equal(repairText("Software Engineer"), "Software Engineer");
   assert.equal(repairText(null), null);
 });
+
+// ---------------------------------------------------------------- Opportunity Intelligence v3: abstention and evidence weighing (fictional employers; original wording of the failure patterns)
+test("identity v3: a role-less rejection at an employer with two live applications for different roles is not guessed; with one live application it joins", () => {
+  const two = [
+    ev({ id: "a1", type: "applied", role: "Editorial Intern", day: 0, thread: "ta" }),
+    ev({ id: "a2", type: "applied", role: "Audience Analytics Intern", day: 1, thread: "tb" }),
+    ev({ id: "r", type: "rejection", role: null, day: 20, thread: "tc" }),
+  ];
+  const g = groupEventsV2(two);
+  assert.equal(g.length, 3, "the rejection stays apart rather than closing the wrong application");
+  const opps = buildOpportunities(two);
+  assert.ok(opps.some((o) => o.contradictions?.some((c) => c.kind === "ambiguous_identity")), "and says why");
+  const one = groupEventsV2([ev({ id: "a1", type: "applied", role: "Editorial Intern", day: 0, thread: "ta" }), ev({ id: "r", type: "rejection", role: null, day: 20, thread: "tc" })]);
+  assert.equal(one.length, 1, "no false abstention when only one application is live");
+});
+
+test("identity v3: a receipt or reminder with no role rides with the latest application and is marked; it never creates a duplicate card", () => {
+  const g = groupEventsV2([
+    ev({ id: "a1", type: "applied", role: "Editorial Intern", day: 0, thread: "ta" }),
+    ev({ id: "a2", type: "applied", role: "Audience Analytics Intern", day: 1, thread: "tb" }),
+    ev({ id: "n", type: "follow_up", role: null, day: 10, thread: "tc" }),
+  ]);
+  assert.equal(g.length, 2);
+  assert.ok(g.some((x) => x.events.some((e) => e.id === "n" && e.signals.includes("identity:ambiguous"))));
+});
+
+test("identity v3: a role copied from an earlier message of the thread is not evidence about the later message", () => {
+  const g = groupEventsV2([
+    ev({ id: "a1", type: "applied", role: "Editorial Intern", day: 0, thread: "T" }),
+    ev({ id: "a2", type: "applied", role: "Audience Analytics Intern", day: 1, thread: "T" }),
+    ev({ id: "x", type: "interview_invite", role: "Editorial Intern", day: 9, thread: "T", signals: ["role-inherited"] }),
+  ]);
+  assert.equal(g.length, 3, "an inherited role does not pull the invitation into the first application");
+  const real = groupEventsV2([
+    ev({ id: "a1", type: "applied", role: "Editorial Intern", day: 0, thread: "T" }),
+    ev({ id: "a2", type: "applied", role: "Audience Analytics Intern", day: 1, thread: "T" }),
+    ev({ id: "x", type: "interview_invite", role: "Editorial Intern", day: 9, thread: "T" }),
+  ]);
+  assert.equal(real.length, 2, "the same role stated by the message itself does join it");
+});
