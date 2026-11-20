@@ -43,13 +43,17 @@ export async function reassessPossible(userGoogleSub: string, reader: SemanticRe
  * and never touches a person's correction, which lives in its own column), and failure-closed (without a model reading for a message, its row is left as it was).
  */
 /** Bumped when the identity evidence changes, so a stored row is refreshed once per generation (idempotent within one). */
-const BACKFILL_MARK = "identity:backfilled:3";
+export const BACKFILL_MARK = "identity:backfilled:3";
+/** Which stored rows a backfill may re-read: not already refreshed in this generation, and NEVER a row a person confirmed, corrected or ignored. Pure, so it is tested. */
+export function selectBackfillCandidates<T extends { gmailMessageId: string; signals: string[] }>(rows: T[], corrected: ReadonlySet<string>, limit = 400): T[] {
+  return rows.filter((e) => !e.signals.includes(BACKFILL_MARK) && !corrected.has(e.gmailMessageId)).slice(0, limit);
+}
 export async function backfillIdentity(userGoogleSub: string, reader: SemanticReader | null, selfNames: string[] = [], limit = 400): Promise<{ examined: number; updated: number; skipped: number }> {
   const source = await mailSourceFor(userGoogleSub);
   if (!source) throw new Error("not connected");
   // A row a person confirmed or corrected is never re-read: a confirmation vouches for the reading it was made on, and a different reading would put words in their mouth.
   const corrected = await loadCorrectedMessageIds(userGoogleSub);
-  const stored = (await loadAllExtracted(userGoogleSub)).filter((e) => !e.signals.includes(BACKFILL_MARK) && !corrected.has(e.gmailMessageId)).slice(0, limit);
+  const stored = selectBackfillCandidates(await loadAllExtracted(userGoogleSub), corrected, limit);
   if (stored.length === 0) return { examined: 0, updated: 0, skipped: 0 };
   // Chunked (60 messages) with a pause and one retry on a Gmail rate limit; each chunk is saved on its own, so an interruption leaves a consistent, resumable state
   // (rows already refreshed carry the mark and are skipped next time).
