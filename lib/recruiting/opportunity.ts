@@ -127,7 +127,7 @@ export function buildOpportunities(
       firstActivityAt: group.events[0].occurredAt,
       lastActivityAt: group.events[group.events.length - 1].occurredAt,
       events: group.events,
-      kind: opportunityKind(group.events),
+      kind: opportunityKind(group.events, group.company),
       contradictions: detectContradictions(group.events),
       needsReview: !group.company || group.events.some((e) => eventNeedsReview(e, policy)) || closedBy === "not_recruiting",
     };

@@ -106,6 +106,31 @@ function breakTieByLifecycle<T extends { g: Group }>(candidates: T[], e: Effecti
   return fit.length === 1 ? fit[0] : null;
 }
 
+/**
+ * More evidence for a tie between candidate applications, each independent of role extraction and used ONLY when exactly one candidate stands out:
+ *  - the message's own subject names the program/role words one candidate carries ("... 2026 R&D Externship Interview" for "2026 R&D Innovate Boldly Externship"):
+ *    at least two shared meaningful words and a strict lead over every other candidate;
+ *  - the same sender (display name and domain) wrote a message of exactly one candidate within the previous 45 days (a reminder or confirmation follows its invitation).
+ */
+const SUBJECT_STOP = new Set(["intern", "internship", "interns", "the", "and", "for", "with", "your", "our", "you", "application", "applications", "update", "reminder", "interview", "invitation", "invite", "confirmation", "confirmed", "next", "step", "steps", "schedule", "scheduled", "re", "fw", "fwd", "details", "new", "important", "action", "required", "program", "role", "position", "job"]);
+const words = (text: string | null | undefined) => new Set((text ?? "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9&]+/).filter((w) => w.length >= 3 && !SUBJECT_STOP.has(w)));
+function breakTieByEvidence<T extends { g: Group }>(candidates: T[], e: EffectiveEvent): T | null {
+  const subjectWords = words(e.subject);
+  if (subjectWords.size > 0) {
+    const scored = candidates.map((c) => {
+      const roleWords = new Set(c.g.events.flatMap((x) => [...words(x.role)]));
+      return { c, n: [...subjectWords].filter((w) => roleWords.has(w)).length };
+    }).sort((a, b) => b.n - a.n);
+    if (scored[0] && scored[0].n >= 2 && (scored.length === 1 || scored[0].n > scored[1].n)) return scored[0].c;
+  }
+  if (e.senderName && e.senderDomain) {
+    const same = candidates.filter(({ g }) => g.events.some((x) => !x.outbound && x.senderName === e.senderName && x.senderDomain === e.senderDomain && Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) <= 45 * DAY));
+    if (same.length === 1) return same[0];
+  }
+  return null;
+}
+const breakTie = <T extends { g: Group }>(candidates: T[], e: EffectiveEvent): T | null => breakTieByEvidence(candidates, e) ?? breakTieByLifecycle(candidates, e);
+
 /** Signals that mark a role the reader COPIED from another message (the thread's first one, or an earlier message from the same sender) instead of reading it from this one. */
 const BORROWED_ROLE = ["role-inherited", "reply-in-recruiting-thread", "known-contact-continuity", "outbound-in-recruiting-thread"];
 export function groupEventsV2(input: EffectiveEvent[]): Group[] {
@@ -138,7 +163,7 @@ export function groupEventsV2(input: EffectiveEvent[]): Group[] {
       const sig = (g: Group, i: number) => { const r = groupRole(g); return r && specific(r) ? roleCore(r).join(" ") : `#${g.events[0].id}:${i}`; };
       const threadRoles = new Set(threadGenerics.map(({ g }, i) => sig(g, i)));
       if (threadMatches.length === 0 && threadGenerics.length > 1 && threadRoles.size > 1 && !specific(e.role)) {
-        const byLifecycle = breakTieByLifecycle(threadGenerics, e);
+        const byLifecycle = breakTie(threadGenerics, e);
         if (byLifecycle) target = byLifecycle.g; else ambiguous = threadGenerics.map(({ g }) => groupRole(g) ?? "an application with no stated role").join(" / ");
         // a message that cannot close, advance or settle anything (a reminder, a bare status, a receipt, an outreach) rides with the latest candidate and says so; a stage-bearing one stays apart
         if (!target && !CONSEQUENTIAL.has(e.type)) target = threadGenerics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
@@ -158,7 +183,7 @@ export function groupEventsV2(input: EffectiveEvent[]): Group[] {
         // alone. Joining the latest would be a guess that merges two applications; it stays on its own and says why.
         const roleSet = new Set(pick.map(({ g }, i) => { const r = groupRole(g); return r && specific(r) ? roleCore(r).join(" ") : `#${g.events[0].id}:${i}`; }));
         if (matches.length === 0 && generics.length > 1 && roleSet.size > 1 && !specific(e.role)) {
-          const byLifecycle = breakTieByLifecycle(generics, e);
+          const byLifecycle = breakTie(generics, e);
           if (byLifecycle) target = byLifecycle.g; else ambiguous = generics.map(({ g }) => groupRole(g) ?? "an application with no stated role").join(" / ");
           if (!target && !CONSEQUENTIAL.has(e.type)) target = generics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
         } else {

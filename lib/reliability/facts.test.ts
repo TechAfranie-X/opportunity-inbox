@@ -127,3 +127,10 @@ test("retraction wording is a fact; an ordinary apology or instruction is not", 
   for (const b of ["Hi Maya, please disregard our previous message; it was sent in error.", "Bonjour, veuillez ne pas tenir compte de notre message précédent.", "Hallo, bitte ignorieren Sie die vorherige Nachricht, sie wurde irrtümlich gesendet.", "Hola, el correo anterior fue enviado por error."]) assert.ok(r(b), b);
   for (const b of ["Please disregard the attached draft agenda and use the final one.", "We apologize for the delay; your interview is on Friday.", "Please ignore the parking section if you are joining remotely."]) assert.ok(!r(b), b);
 });
+
+test("an acceptance or response deadline is captured as the deadline of an offer or selection; a plain date without such a cue is not", () => {
+  const sel = one(mail("d1", "Program Office <office@nsf-workshop.example>", "Congratulations, you have been selected", "Hi Sam, congratulations: you have been selected to attend the workshop. Please confirm your acceptance by October 28, 2026.", "2026-10-24T12:00:00Z"));
+  assert.ok(!sel || sel.eventDate?.toISOString().slice(0, 10) === "2026-10-28", String(sel?.eventDate));
+  const plain = one(mail("d2", "Program Office <office@nsf-workshop.example>", "Congratulations, you have been selected", "Hi Sam, congratulations: you have been selected to attend the workshop held on October 28, 2026 in the main hall.", "2026-10-24T12:00:00Z"));
+  assert.ok(!plain || plain.eventDate?.toISOString().slice(0, 10) !== "2026-10-28" || plain.dateKind !== "deadline");
+});

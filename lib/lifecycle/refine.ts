@@ -232,10 +232,15 @@ function demoteFollowUpOffers(events: EffectiveEvent[]): EffectiveEvent[] {
 
 const SCHOLARSHIP = /\b(?:scholarship|fellowship|grant)\b/i;
 const MENTORSHIP = /\bmentor(?:ship)?\b/i;
-/** Jobs and internships are the default; a scholarship, fellowship or mentorship application is typed so it is never mistaken for employer recruiting. */
-export function opportunityKind(events: Pick<EffectiveEvent, "subject" | "role">[]): "job" | "scholarship" | "mentorship" {
+/** Jobs and internships are the default; a scholarship, fellowship, mentorship program or event (workshop, conference, summit, career fair, hackathon) is typed so it is never mistaken for employer recruiting. */
+const EVENT_WORDS = /\b(?:workshops?|conferences?|summits?|boot ?camps?|webinars?|symposi(?:um|a)|hackathons?|career fairs?|job fairs?|info(?:rmation)? sessions?|expos?|meet-?ups?|seminars?|colloqui(?:um|a)|open house|networking (?:event|night)|competition|contest)\b/i;
+const TITLE_WORDS = /\b(?:intern(?:ship)?|engineer(?:ing)?|developer|analyst|associate|assistant|scientist|researcher|coordinator|manager|designer|technician|consultant|co-?op|apprentice(?:ship)?|trainee|officer|specialist|fellow(?:ship)?)\b/i;
+export function opportunityKind(events: Pick<EffectiveEvent, "subject" | "role">[], company?: string | null): "job" | "scholarship" | "mentorship" | "event" {
+  const roles = events.map((e) => e.role ?? "").join(" ");
   const text = events.map((e) => `${e.subject ?? ""} ${e.role ?? ""}`).join(" ");
-  if (/\b(?:intern(?:ship)?|software engineer|analyst|developer)\b/i.test(events.map((e) => e.role ?? "").join(" ")) && !SCHOLARSHIP.test(events.map((e) => e.role ?? "").join(" "))) return "job";
+  // a title noun in the ROLE keeps it a job ("Workshop Facilitator Intern", "Conference Coordinator"); an event word in the role/company/subject with no title noun is an event
+  if (!TITLE_WORDS.test(roles) && (EVENT_WORDS.test(roles) || EVENT_WORDS.test(company ?? "") || (events.length > 0 && events.every((e) => EVENT_WORDS.test(e.subject ?? "")) && !SCHOLARSHIP.test(text)))) return "event";
+  if (/\b(?:intern(?:ship)?|software engineer|analyst|developer)\b/i.test(roles) && !SCHOLARSHIP.test(roles)) return "job";
   if (SCHOLARSHIP.test(text)) return "scholarship";
   if (MENTORSHIP.test(text)) return "mentorship";
   return "job";

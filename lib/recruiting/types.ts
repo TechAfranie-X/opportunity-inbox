@@ -132,7 +132,7 @@ export type Opportunity = {
   kind?: OpportunityKind;
 };
 
-export type OpportunityKind = "job" | "scholarship" | "mentorship";
+export type OpportunityKind = "job" | "scholarship" | "mentorship" | "event";
 
 export type ActionKind =
   | "assessment_deadline"

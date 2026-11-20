@@ -20,7 +20,7 @@ const SCHEDULED = new Set<string>(["interview_scheduled", "interview_invite"]);
 const CANCELLED = /\b(?:interview|meeting|call|session|conversation|screen(?:ing)?)\b[^.!?\n]{0,80}\b(?:has|have|had|is|was|were|been|will be)\s+(?:been\s+)?(?:cancel(?:l)?ed|called off)\b|\b(?:cancel(?:l)?ed|cancel(?:l)?ing|cancel(?:l)?ation of)\b[^.!?\n]{0,50}\b(?:interview|meeting|call|session)\b|\bno longer (?:be )?(?:moving forward with|proceeding with|holding|scheduling) (?:the |your |an )?(?:upcoming )?interview\b/i;
 const RESCHEDULED = /\breschedul(?:e|ed|ing)\b|\bnew (?:time|date|slot)\b|\bfind (?:a )?(?:new|another) time\b|\bpick (?:a )?(?:new|another) (?:time|date|slot)\b/i;
 
-const DEADLINE_CUE = /\b(?:deadline(?: is| was)?|due (?:on|by|date)|due:|expires? (?:on)?|no later than|complete(?:d)? (?:it |this |the \w+ )?by|submit(?:ted)? (?:it )?by|must be (?:completed|submitted) by|(?:finish|complete|submit)[^.\n]{0,40}\bbefore)\b[^.\n]{0,25}$/i;
+const DEADLINE_CUE = /\b(?:deadline(?: is| was)?|due (?:on|by|date)|due:|expires? (?:on)?|no later than|complete(?:d)? (?:it |this |the \w+ )?by|submit(?:ted)? (?:it )?by|must be (?:completed|submitted) by|(?:finish|complete|submit)[^.\n]{0,40}\bbefore|(?:accept(?:ance)?|confirm(?:ation)?|respon(?:d|se)|repl(?:y|ies)|rsvp|let us know|sign(?:ed)?|return(?:ed)?|decision)[^.\n]{0,40}\b(?:by|before|on or before|no later than)|(?:acceptance|response|reply|confirmation|rsvp|decision) (?:deadline|date))\b[^.\n]{0,25}$/i;
 const RELATIVE = /\bwithin\s+\d+\s*(?:hours?|days?|weeks?)(?:\s+of\s+[^.,;\n]{0,40})?|\bin\s+\d+\s+days?\b/gi;
 const DEADLINE_TYPES = new Set<string>(["assessment", "assessment_completed", "interview_invite", "recruiter_outreach", "offer", "follow_up", "status_update"]);
 

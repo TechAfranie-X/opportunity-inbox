@@ -242,3 +242,22 @@ test("identity v3: a reply or continuity event that borrowed its anchor's role d
     assert.equal(g.length, 3, `${marker}: a borrowed role is not evidence`);
   }
 });
+
+test("identity audit: a role-less message is attached by its own subject words or by its sender's earlier mail, only when exactly one candidate stands out", () => {
+  const withSubject = (id: string, subject: string, extra: Partial<Parameters<typeof ev>[0]> = {}) => ({ ...ev({ id, type: "interview_scheduled", role: null, day: 20, thread: `t-${id}`, ...extra }), subject });
+  const apps = [
+    ev({ id: "a1", type: "applied", role: "2026 R&D Innovate Boldly Externship", day: 0, thread: "ta" }),
+    ev({ id: "a2", type: "applied", role: "Summer 2026 Intern", day: 1, thread: "tb" }),
+  ];
+  // the subject names the externship's own words
+  const g1 = groupEventsV2([...apps, withSubject("x", "Acme - 2026 R&D Externship Interview")]);
+  assert.ok(g1.some((g) => g.events.some((e) => e.id === "a1") && g.events.some((e) => e.id === "x")), "joined the externship");
+  // a subject that shares only one word, or words with both candidates, is not enough
+  const g2 = groupEventsV2([...apps, withSubject("y", "Interview with Acme")]);
+  assert.equal(g2.length, 3, "nothing to go on: kept apart");
+  // the same sender wrote a message of exactly one candidate recently
+  const sender = (id: string, day: number) => ({ ...ev({ id, type: "interview_invite", role: null, day, thread: `t-${id}` }), senderName: "University Relations Team", senderDomain: "recruit.example" });
+  const base = [{ ...ev({ id: "b1", type: "applied", role: "2026 R&D Innovate Boldly Externship", day: 0, thread: "ta" }) }, { ...ev({ id: "b2", type: "applied", role: "Summer 2026 Intern", day: 1, thread: "tb" }) }, { ...sender("s1", 10), role: "2026 R&D Innovate Boldly Externship" }];
+  const g3 = groupEventsV2([...base, sender("s2", 12)]);
+  assert.ok(g3.some((g) => g.events.some((e) => e.id === "s1") && g.events.some((e) => e.id === "s2")), "the reminder follows its invitation");
+});

@@ -125,10 +125,10 @@ export function compactWhen(now: Date, date: Date, withTime: boolean): string {
 }
 
 /** The line under a company name: the role, or what kind of application this is when no role applies, or an honest "No role detected". */
-export function roleLine(o: { role: string | null; kind?: "job" | "scholarship" | "mentorship" }): string {
+export function roleLine(o: { role: string | null; kind?: "job" | "scholarship" | "mentorship" | "event" }): string {
   if (o.role) return o.role;
-  return o.kind === "scholarship" ? "Scholarship or fellowship" : o.kind === "mentorship" ? "Mentorship application" : "No role detected";
+  return o.kind === "scholarship" ? "Scholarship or fellowship" : o.kind === "mentorship" ? "Mentorship application" : o.kind === "event" ? "Workshop, conference or event" : "No role detected";
 }
 
 /** Job and internship applications drive the pipeline counts. Scholarships and mentorship programs are kept and shown, but counted apart. */
-export const isJob = (o: { kind?: "job" | "scholarship" | "mentorship" }) => (o.kind ?? "job") === "job";
+export const isJob = (o: { kind?: "job" | "scholarship" | "mentorship" | "event" }) => (o.kind ?? "job") === "job";

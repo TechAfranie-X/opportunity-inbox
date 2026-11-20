@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildOpportunities } from "../recruiting/opportunity.ts";
 import type { EffectiveEvent, EventType } from "../recruiting/types.ts";
-import { cleanCompany, cleanRole, exclusionReason, refineEvents } from "./refine.ts";
+import { cleanCompany, cleanRole, exclusionReason, opportunityKind, refineEvents } from "./refine.ts";
 
 // Synthetic fixtures: fictional employers and invented subjects that mirror the SHAPE of failures found in audits, not any real mailbox.
 let n = 0;
@@ -326,4 +326,14 @@ test("stored events: an interview's calendar invitation typed as an assessment b
   assert.equal(out.find((e) => e.id === cal.id)?.type, "interview_scheduled");
   assert.equal(out.find((e) => e.id === asm.id)?.type, "assessment");
   assert.ok(!out.find((e) => e.id === mock.id) || out.find((e) => e.id === mock.id)?.type === "assessment");
+});
+
+test("kinds: a workshop, conference or career fair is an event; a job whose title merely contains an event word, or a scholarship, is not", () => {
+  const k = (subject: string, role: string | null, company: string | null = "Orbis") => opportunityKind([{ subject, role }], company);
+  assert.equal(k("Congratulations, you are selected for our cybersecurity workshop", null, "NSF-funded Cybersecurity Workshop"), "event");
+  assert.equal(k("Application received by Orbis", "2026 HBCU Legacy Bowl Career Fair"), "event");
+  assert.equal(k("Your application", "Conference Coordinator"), "job");
+  assert.equal(k("Your application", "Workshop Facilitator Intern"), "job");
+  assert.equal(k("Your fellowship application", "Summit Fellowship"), "scholarship");
+  assert.equal(k("Interview invitation", "Software Engineer Intern"), "job");
 });
