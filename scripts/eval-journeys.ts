@@ -53,8 +53,17 @@ for (const sc of fx.scenarios) {
   let read = readMail(emails);
   if (reader) {
     const s = Date.now();
-    const readings = (cache[sc.id] ? new Map(cache[sc.id]) : await reader.readings!(semanticInputs(emails))) as Awaited<ReturnType<NonNullable<typeof reader.readings>>>;
+    const inputs = semanticInputs(emails);
+    const readings = (cache[sc.id] ? new Map(cache[sc.id]) : await reader.readings!(inputs)) as Awaited<ReturnType<NonNullable<typeof reader.readings>>>;
+    // --fill-missing: a model call that failed (timeout, malformed batch) leaves no reading; ask again for exactly those messages. The code under test is unchanged, so this repairs
+    // the measurement's infrastructure, not the result.
+    if (cache[sc.id] && process.argv.includes("--fill-missing")) {
+      const missing = inputs.filter((i) => !readings.has(i.key));
+      if (missing.length > 0) { const more = await reader.readings!(missing); for (const [k, v] of more) readings.set(k, v); cache[sc.id] = [...readings.entries()] as [string, unknown][]; if (cachePath) writeFileSync(cachePath, JSON.stringify(cache)); }
+    }
     if (cachePath && !cache[sc.id]) { cache[sc.id] = [...readings.entries()] as [string, unknown][]; writeFileSync(cachePath, JSON.stringify(cache)); }
+    const gaps = inputs.filter((i) => !readings.has(i.key)).length;
+    if (gaps > 0) console.error(`[model] ${sc.id}: ${gaps} message(s) have no reading`);
     modelMs += Date.now() - s;
     read = reconcileReadings(applyAssist(read, emails, new Map([...readings].map(([k, v]) => [k, v.output] as const))), readings);
   }

@@ -121,7 +121,7 @@ export function groupEventsLegacyV2(events: EffectiveEvent[]): Group[] {
  * The title an opportunity shows: the latest SPECIFIC role stated with reasonable confidence, not the first one ever seen. Fragments of prose are never a title.
  * A role the person corrected always wins.
  */
-function groupRole(g: Group): string | null {
+export function groupRole(g: Group): string | null {
   const chrono = g.events;
   const corrected = [...chrono].reverse().find((e) => e.corrected && e.role);
   if (corrected) return corrected.role;

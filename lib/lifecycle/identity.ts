@@ -76,6 +76,27 @@ function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean)
   return positiveCycle || gap <= SPECIFIC_WINDOW_NO_CYCLE;
 }
 
+/**
+ * Lifecycle consistency as identity evidence. Some message types can only continue a process that is waiting for them: a finished assessment follows an assessment that was
+ * sent, a confirmed interview follows an invitation. Among several candidate applications at one employer, the ones whose latest step does not lead to this message are not
+ * candidates; if exactly one is left, the message belongs to it. Used ONLY to break a tie that role, cycle and thread could not; never to override them.
+ */
+const LEADS_TO: Partial<Record<EventType, EventType[]>> = {
+  assessment_completed: ["assessment"],
+  interview_scheduled: ["interview_invite", "recruiter_outreach"],
+};
+function awaiting(g: Group, e: EffectiveEvent): boolean {
+  const need = LEADS_TO[e.type];
+  if (!need) return true;
+  const last = [...g.events].reverse().find((x) => STAGE_BEARING.has(x.type));
+  return !!last && need.includes(last.type);
+}
+function breakTieByLifecycle<T extends { g: Group }>(candidates: T[], e: EffectiveEvent): T | null {
+  if (!LEADS_TO[e.type]) return null;
+  const fit = candidates.filter(({ g }) => awaiting(g, e));
+  return fit.length === 1 ? fit[0] : null;
+}
+
 export function groupEventsV2(input: EffectiveEvent[]): Group[] {
   // A role the reader COPIED from an earlier message of the thread ("role-inherited") is not evidence about THIS message: automated senders reuse one thread for several
   // roles, so an inherited role would pull a role-less message into whichever application the thread started with. For identity such an event states no role.
@@ -103,11 +124,13 @@ export function groupEventsV2(input: EffectiveEvent[]): Group[] {
       const threadMatches = inThread.filter((s) => s.rel === "match");
       const threadGenerics = inThread.filter((s) => s.rel === "generic");
       // ABSTAIN here too: a role-less message in a thread that already holds two applications for DIFFERENT roles cannot be told from either by the thread alone.
-      const threadRoles = new Set(threadGenerics.map(({ g }) => groupRole(g)).filter((r): r is string => !!r && specific(r)).map((r) => roleCore(r).join(" ")));
+      const sig = (g: Group, i: number) => { const r = groupRole(g); return r && specific(r) ? roleCore(r).join(" ") : `#${g.events[0].id}:${i}`; };
+      const threadRoles = new Set(threadGenerics.map(({ g }, i) => sig(g, i)));
       if (threadMatches.length === 0 && threadGenerics.length > 1 && threadRoles.size > 1 && !specific(e.role)) {
-        ambiguous = threadGenerics.map(({ g }) => groupRole(g)).filter(Boolean).join(" / ");
+        const byLifecycle = breakTieByLifecycle(threadGenerics, e);
+        if (byLifecycle) target = byLifecycle.g; else ambiguous = threadGenerics.map(({ g }) => groupRole(g) ?? "an application with no stated role").join(" / ");
         // a message that cannot close, advance or settle anything (a reminder, a bare status, a receipt, an outreach) rides with the latest candidate and says so; a stage-bearing one stays apart
-        if (!CONSEQUENTIAL.has(e.type)) target = threadGenerics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
+        if (!target && !CONSEQUENTIAL.has(e.type)) target = threadGenerics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
       } else {
         target = threadMatches.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g ?? threadGenerics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
       }
@@ -122,12 +145,16 @@ export function groupEventsV2(input: EffectiveEvent[]): Group[] {
         if (matches.length > 1 && !e.company) { /* employer-less with several role matches: fall through to the most recent */ }
         // ABSTAIN: an event that states no specific role, at an employer with two or more live applications for DIFFERENT roles, cannot be attributed by employer
         // alone. Joining the latest would be a guess that merges two applications; it stays on its own and says why.
-        const roleSet = new Set(pick.map(({ g }) => groupRole(g)).filter((r): r is string => !!r && specific(r)).map((r) => roleCore(r).join(" ")));
+        const roleSet = new Set(pick.map(({ g }, i) => { const r = groupRole(g); return r && specific(r) ? roleCore(r).join(" ") : `#${g.events[0].id}:${i}`; }));
         if (matches.length === 0 && generics.length > 1 && roleSet.size > 1 && !specific(e.role)) {
-          ambiguous = generics.map(({ g }) => groupRole(g)).filter(Boolean).join(" / ");
-          if (!CONSEQUENTIAL.has(e.type)) target = generics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
+          const byLifecycle = breakTieByLifecycle(generics, e);
+          if (byLifecycle) target = byLifecycle.g; else ambiguous = generics.map(({ g }) => groupRole(g) ?? "an application with no stated role").join(" / ");
+          if (!target && !CONSEQUENTIAL.has(e.type)) target = generics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
         } else {
           target = pick.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
+          // One receipt is sent per application: a role-less receipt in ANOTHER thread, when the candidate already holds a receipt from a different thread, starts another
+          // application (two receipts in one thread, or a repeat delivery within hours, still join).
+          if (target && e.type === "applied" && !specific(e.role) && target.events.some((x) => x.type === "applied" && x.gmailThreadId !== e.gmailThreadId && Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) >= DAY / 2) && !target.threads.has(e.gmailThreadId)) target = undefined;
         }
         // An event whose employer is unknown, from an employer's own domain that exactly ONE existing opportunity has written from, belongs with it unless
         // role, cycle, program or the end of that opportunity say otherwise (the same weighing as any other link). Platforms, freemail and several candidates never link this way.
