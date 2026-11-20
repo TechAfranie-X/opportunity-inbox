@@ -105,5 +105,29 @@ export function employerProvenance<T extends ExtractedEvent>(email: RecruitingEm
       if (!companyInText(email, brand)) out.reviewReasons.push("company: taken from the sender's label, not from the message text");
     }
   }
+  const unit = unitOf(email);
+  if (unit && !out.signals.some((x) => x.startsWith("unit:"))) out.signals.push(`unit:${unit}`);
   return out;
+}
+
+/**
+ * UNIT evidence: employers write to the person about the part of the organisation that is hiring ("The Clinical Informatics team will review it", "the Controls team", "Équipe
+ * Logistique"). When one employer runs several applications at once and its receipts and updates name no role, the unit is often the only thing that tells them apart. It is
+ * stored as the signal `unit:<name>` and used by identity as soft evidence; generic hiring words ("the hiring team", "Talent team") are never units.
+ */
+const UNIT_GENERIC = new Set(["hiring", "recruiting", "recruitment", "recruiter", "talent", "careers", "career", "hr", "human", "resources", "people", "university", "campus", "early", "student", "students", "our", "your", "the", "a", "this", "that", "support", "admissions", "application", "applications", "review", "interview", "selection", "candidate", "candidates", "team", "equipo", "equipe", "gente", "personal", "rh", "rrhh", "bewerbung", "bewerbungen", "ressources", "humaines"]);
+const CAP = "[\\p{Lu}][\\p{L}&'’-]*";
+const UNIT_AFTER = new RegExp(`\\b(${CAP}(?: (?:and |& |y |et |und |e )?${CAP}){0,3})(?: hiring| recruiting)? (?:team|group|department|division|unit|lab|practice)\\b`, "u");
+const UNIT_BEFORE = new RegExp(`\\b(?:equipo|equipe|équipe|team|área|area|abteilung|bereich|squadra|reparto)(?: de| du| des| of| für| di| da| do)? (${CAP}(?: ${CAP}){0,2})`, "u");
+export function unitOf(email: Pick<RecruitingEmail, "subject" | "bodyText">): string | null {
+  const text = `${email.subject}\n${email.bodyText.slice(0, 1500)}`;
+  for (const re of [UNIT_AFTER, UNIT_BEFORE]) {
+    const m = re.exec(text);
+    if (!m) continue;
+    const toks = m[1].toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9]+/).filter((t) => t && !["and", "y", "et", "und", "e"].includes(t));
+    const useful = toks.filter((t) => !UNIT_GENERIC.has(t));
+    if (useful.length === 0) continue;
+    return useful.join(" ");
+  }
+  return null;
 }

@@ -1,5 +1,5 @@
 /** Bumped when the identity evidence changes, so a stored row is refreshed once per generation (idempotent within one). */
-export const BACKFILL_MARK = "identity:backfilled:3";
+export const BACKFILL_MARK = "identity:backfilled:4";
 
 /** Which stored rows a backfill may re-read: not already refreshed in this generation, and NEVER a row a person confirmed, corrected or ignored. Pure, so it is tested. */
 export function selectBackfillCandidates<T extends { gmailMessageId: string; signals: string[] }>(rows: T[], corrected: ReadonlySet<string>, limit = 400): T[] {

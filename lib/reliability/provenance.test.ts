@@ -36,3 +36,15 @@ test("a division is not lost to its parent: the brand is the longest run of labe
   assert.equal(senderBrand(mail("Nordmarkt Digital Talent <jobs@digital.nordmarkt.example>", "Bewerbung", "Eingang Ihrer Bewerbung.")), "Nordmarkt Digital");
   assert.equal(senderBrand(mail("Intuit Talent Acquisition <noreply@intuit.com>", "Application", "Thanks for applying.")), "Intuit");
 });
+
+import { unitOf } from "./grounding.ts";
+test("the hiring unit a message names is read; generic hiring words and people are not units", () => {
+  const u = (body: string, subject = "Update") => unitOf({ subject, bodyText: body });
+  assert.equal(u("Hi Tomas, we have received your application. The Clinical Informatics team will review it."), "clinical informatics");
+  assert.equal(u("a member of the Patient Finance hiring group would like to speak with you"), "patient finance");
+  assert.equal(u("This is for the Vision Software team."), "vision software");
+  assert.equal(u("Hola, el equipo de Logística revisará tu solicitud."), "logistica");
+  assert.equal(u("The hiring team will review your application."), null);
+  assert.equal(u("Our Talent team is excited to meet you."), null);
+  assert.equal(u("Hi Tomas, thanks for applying."), null);
+});

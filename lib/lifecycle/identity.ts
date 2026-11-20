@@ -50,12 +50,21 @@ function programConflictWithGroup(g: Group, e: EffectiveEvent): boolean {
   return false;
 }
 
+/** The hiring unit a message names ("the Controls team"), from the `unit:` signal the reader recorded. */
+const unitOf = (e: EffectiveEvent): string | null => e.signals.find((x) => x.startsWith("unit:"))?.slice(5) ?? null;
+const unitsOf = (g: Group): Set<string> => new Set(g.events.map(unitOf).filter((u): u is string => !!u));
+const unitsMatch = (a: string, b: string) => a === b || a.includes(b) || b.includes(a);
+
 export type Relation = "match" | "generic" | "conflict";
 /** How an event relates to an established opportunity, from role, cycle and program alone (time and thread are weighed by the caller). */
 export function relation(g: Group, e: EffectiveEvent): Relation {
   const ec = cycleOf(e.role);
   if (cyclesConflict(groupCycle(g), ec)) return "conflict";
   if (programConflictWithGroup(g, e)) return "conflict";
+  // The hiring unit is soft identity evidence: at one employer, two applications to different units are different applications, and a message naming the unit one of them
+  // is for belongs to it. Only when BOTH sides name a unit; a side that names none says nothing.
+  const eu = unitOf(e), gu = unitsOf(g);
+  if (eu && gu.size > 0) return [...gu].some((u) => unitsMatch(u, eu)) ? (specific(e.role) && g.events.some((x) => specific(x.role)) && !g.events.some((x) => specific(x.role) && roleRelationV2(x.role, e.role) === "match") ? "conflict" : "match") : "conflict";
   if (!specific(e.role)) return "generic";
   const roles = g.events.map((x) => x.role).filter((r): r is string => specific(r));
   if (roles.length === 0) return "generic";
