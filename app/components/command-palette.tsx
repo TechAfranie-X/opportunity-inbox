@@ -37,7 +37,8 @@ function PaletteDialog() {
       id: o.key,
       title: o.company,
       opp: o,
-      hint: `${o.role ?? "No role"} · ${o.status === "closed" ? "Closed" : STAGE_LABEL[o.stage]}`,
+      // the first message's date tells two applications to one employer apart when neither names a role
+      hint: `${o.role ?? "No role"} · ${o.status === "closed" ? "Closed" : STAGE_LABEL[o.stage]} · since ${new Date(o.firstActivityAt).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric", ...(new Date(o.firstActivityAt).getUTCFullYear() !== new Date().getUTCFullYear() ? { year: "numeric" } : {}) })}`,
       run: () => {
         setPaletteOpen(false);
         open(o.key);

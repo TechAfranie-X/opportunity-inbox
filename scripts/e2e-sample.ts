@@ -138,6 +138,8 @@ try {
   assert.equal(buildReviewQueue(after.opportunities).some((i) => i.event.id === target.id), false);
   assert.ok(after.opportunities.some((o) => o.company === "Acme Robotics"), "corrected company appears");
   step("correction removes the item and survives a re-sync");
+  const rowHash = () => sql(`select md5(row(type, company, role, event_date, signals::text, confidence)::text) from recruiting_events where id = '${target.id}'`);
+  const correctedRowBefore = rowHash();
 
   // 5b. a reader upgrade revisits every message (nothing of the mail is stored, so it is read from Gmail again) and keeps what the person decided
   const judged = Number(sql(`select count(*) from event_predictions`));
@@ -148,6 +150,7 @@ try {
   const upgraded = await store.loadWorkspace(SAMPLE_SUB, real);
   assert.ok(upgraded.opportunities.some((o) => o.company === "Acme Robotics"), "the person's correction survived the revisit");
   if (strong) assert.ok(upgraded.opportunities.some((o) => o.events.some((e) => e.id === strong!.event.id)), "and so did the near miss they confirmed");
+  assert.equal(rowHash(), correctedRowBefore, "a re-read never rewrites the stored reading of a row the person corrected");
   step("a reader upgrade revisits old decisions and keeps corrections and confirmations");
 
   // 6. confirm and ignore

@@ -157,6 +157,8 @@ export async function saveExtractedEvents(userGoogleSub: string, events: Extract
           fieldConfidence: sql`excluded.field_confidence`,
           reviewReasons: sql`excluded.review_reasons`,
         },
+        // A row a person confirmed, edited or ignored is NEVER rewritten by a re-read (sync, re-evaluation or backfill): a confirmation vouches for the reading it was made on.
+        setWhere: isNull(recruitingEvents.correction),
       });
   }
 }
