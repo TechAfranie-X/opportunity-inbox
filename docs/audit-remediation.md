@@ -49,3 +49,19 @@ Thresholds (anchored on the previous fresh fixture M, hybrid: precision 97.7, re
 - Review justified-share not below 30% and "important" count not above 1.5x the baseline
 - No regression of more than 2 points against the 5230fa9 baseline on any of recruiting precision/recall, status, outcome
 A miss on any threshold is reported as a miss, not re-run.
+
+## Fixture N result (run once per mode on commit b898056 + the pre-registration commit; fixture 16 scenarios, 221 messages, 40 journeys; now CONTAMINATED once its failures are inspected, and it has not been inspected yet)
+| Measure | Threshold | Rules only | Hybrid (local model) | Verdict (hybrid) |
+|---|---|---|---|---|
+| Recruiting precision | >= 95.0 | 100.0 | 100.0 | met |
+| Recruiting recall | >= 94.0 | 59.6 (61 missed) | 84.8 (23 missed) | MISSED |
+| Wrong merges | <= 3 | 21 | 25 | MISSED |
+| Journeys split | <= 12 | 2 | 2 | met |
+| Opportunities merging journeys | <= 2 | 4 | 6 | MISSED |
+| Lifecycle status | >= 85.0 | 76.2 | 66.7 | MISSED |
+| Lifecycle outcome | >= 65.0 | 61.9 | 44.4 | MISSED |
+| Source evidence | 100% | 85.7 | 84.6 | MISSED |
+| Review justified share | >= 30% | 34.3 | 50.0 (38 items, 8 important) | met |
+Other hybrid numbers: pair precision 90.2, pair recall 95.9, stage type 94.5, next action 58.3 (as shipped) / 65.6 (evidence only), contradictions flagged 2/6, journeys not found 4. Model time 2826 s (the local 4B model).
+Most thresholds were MISSED on this unfamiliar fixture. The audit-remediation work does not generalise to N as hoped; the weaknesses (false merges between employers/requisitions, lifecycle status/outcome, provenance) are not closed. The model also lowered status and outcome versus rules-only (66.7 vs 76.2, 44.4 vs 61.9), which is itself a finding.
+Baseline 5230fa9, rules only, same fixture: recall 59.6, wrong merges 21, split 2, merging 4, status 71.4, outcome 57.1, stage 57.1, source evidence 80.0. So the 21 wrong merges predate this mission; rules-only status/outcome/stage/evidence improved by +4.8/+4.8/+9.6/+5.7 points. The baseline hybrid run is in progress.
