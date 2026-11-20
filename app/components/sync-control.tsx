@@ -64,7 +64,7 @@ export function SyncControl({
       <form ref={formRef} action={run} className="flex items-center gap-1.5">
         {/* Quiet by default: words appear only while it works, when it needs you, or when it has never run. */}
         <span className="t-meta hidden text-ink-3 lg:inline" aria-live="polite">
-          {pending ? (continuing ? "Reading older mail…" : "Reading your inbox…") : state.status === "error" ? <span className="text-signal">{state.message}</span> : more ? "Older mail is still unread" : ""}
+          {pending ? (continuing ? `Reading older mail… ${remaining.toLocaleString("en-US")} to go` : "Reading your inbox…") : state.status === "error" ? <span className="text-signal">{state.message}</span> : more ? `${remaining.toLocaleString("en-US")} older messages not read yet. Refresh to keep reading.` : ""}
         </span>
         {updated || pending ? (
           <button
