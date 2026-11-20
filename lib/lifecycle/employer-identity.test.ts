@@ -140,3 +140,13 @@ test("a scheduled interview that a later message cancelled is not an upcoming in
   const live = buildOpportunities([sched]);
   assert.equal(buildActions(live, now).filter((a) => a.kind === "upcoming_interview").length, 1);
 });
+
+test("two applications that once shared a key stay independently addressable: an old key never shadows another opportunity's current key", () => {
+  const a = ev({ type: "applied", day: 0, company: "Orbis", thread: "ta" });
+  const b = ev({ type: "applied", day: 3, company: "Orbis", thread: "tb" });
+  const opps = buildOpportunities([a, b]);
+  assert.equal(opps.length, 2);
+  const keys = new Set(opps.map((o) => o.key));
+  assert.equal(keys.size, 2);
+  for (const o of opps) for (const k of o.legacyKeys ?? []) assert.ok(k === o.key || !keys.has(k), `legacy key ${k} of ${o.key} shadows a current key`);
+});

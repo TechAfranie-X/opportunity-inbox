@@ -105,6 +105,9 @@ export function buildOpportunities(
   // keys the previous identity algorithm issued: an override or a dismissal made under one still resolves to the opportunity that now holds that group's latest message
   const prev = groupEventsLegacyV2(unresolved);
   assignKeys(prev).forEach((oldKey, n) => { const head = prev[n].events[prev[n].events.length - 1].id; const i = ownerOfEvent.get(head); if (i !== undefined && !legacy[i].includes(oldKey)) legacy[i].push(oldKey); });
+  // a remembered old key never shadows another opportunity's CURRENT key (two applications that once shared a key must stay independently addressable)
+  const currentKeys = new Set(keys);
+  legacy.forEach((l, i) => { legacy[i] = l.filter((k) => !currentKeys.has(k) || k === keys[i]); });
   const opportunities = groups.map((group, i): Opportunity => {
     const key = keys[i];
     const { stage, outcome, status: derived, closedBy } = reduceLifecycle(group.events, policy);

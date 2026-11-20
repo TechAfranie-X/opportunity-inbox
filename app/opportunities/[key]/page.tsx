@@ -16,7 +16,7 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
   const real = new Date();
   const now = toFloating(real);
   const workspace = await loadWorkspace(sub, real);
-  const opportunity = workspace.opportunities.find((o) => o.key === decodeURIComponent(key) || o.legacyKeys?.includes(decodeURIComponent(key)));
+  const opportunity = (workspace.opportunities.find((o) => o.key === decodeURIComponent(key)) ?? workspace.opportunities.find((o) => o.legacyKeys?.includes(decodeURIComponent(key))));
   if (!opportunity) notFound();
   await recordUsage(sub, "view_opportunity");
   const updated = workspace.lastSyncedAt?.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });

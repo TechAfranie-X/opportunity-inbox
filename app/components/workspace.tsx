@@ -99,7 +99,8 @@ export function WorkspaceProvider({
   const [local, setLocal] = useState<string | null>(null);
   const raw = persistSelection ? param : local;
   // a bookmarked or shared link made under an earlier key scheme still opens the application it continues
-  const selectedKey = raw ? (opportunities.find((o) => o.key === raw || o.legacyKeys?.includes(raw))?.key ?? null) : null;
+  // an exact key always wins: a key the previous identity generation issued may also be remembered by a DIFFERENT opportunity (two applications once shared it)
+  const selectedKey = raw ? ((opportunities.find((o) => o.key === raw) ?? opportunities.find((o) => o.legacyKeys?.includes(raw)))?.key ?? null) : null;
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const open = useCallback((key: string) => (persistSelection ? writeSelection(key) : setLocal(key)), [persistSelection]);
