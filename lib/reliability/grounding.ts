@@ -77,12 +77,15 @@ export function senderBrandInfo(email: Pick<RecruitingEmail, "from" | "subject" 
   const inText = squash(`${email.subject} ${email.bodyText}`).includes(squash(kept.join(" ")));
   // corroborated by the sender's own domain: the brand is the LONGEST run of leading words every one of which is a label of the domain ("Intuit" for "Intuit Talent
   // Acquisition" at intuit.com; "Nordmarkt Logistik" for "Nordmarkt Logistik Karriere" at logistik.nordmarkt.example). Longest, so a division is never lost to its parent.
-  const labelSet = new Set(domain.split(".").slice(0, -1).map(squash).filter((l) => l.length >= 3));
+  // a label may be a hyphenated compound ("myhr-orbis": a platform prefix plus the employer); both the whole label and its parts count
+  const rawLabels = domain.split(".").slice(0, -1);
+  const wholeLabels = new Set(rawLabels.map(squash).filter((l) => l.length >= 3));
+  const labelSet = new Set([...wholeLabels, ...rawLabels.flatMap((l) => l.split("-").map(squash)).filter((l) => l.length >= 3)]);
   for (let n = kept.length; n >= 1; n--) {
     const head = kept.slice(0, n);
-    if (head.every((w) => squash(w).length >= 3 && [...labelSet].some((l) => l === squash(w) || (n === 1 && (l.startsWith(squash(w)) || squash(w).startsWith(l)))))) return { name: head.join(" "), exact: head.every((w) => labelSet.has(squash(w))) };
+    if (head.every((w) => squash(w).length >= 3 && [...labelSet].some((l) => l === squash(w) || (n === 1 && (l.startsWith(squash(w)) || squash(w).startsWith(l)))))) return { name: head.join(" "), exact: head.every((w) => wholeLabels.has(squash(w))) };
     const joined = squash(head.join(" "));
-    if (joined.length >= 3 && [...labelSet].some((l) => l === joined || (n === kept.length && (l.startsWith(joined) || joined.startsWith(l))))) return { name: head.join(" "), exact: [...labelSet].some((l) => l === joined) };
+    if (joined.length >= 3 && [...labelSet].some((l) => l === joined || (n === kept.length && (l.startsWith(joined) || joined.startsWith(l))))) return { name: head.join(" "), exact: wholeLabels.has(joined) };
   }
   return inText && squash(kept.join(" ")).length >= 3 ? { name: kept.join(" "), exact: true } : null;
 }

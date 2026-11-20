@@ -76,7 +76,9 @@ function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean)
   if (rel === "conflict") return false;
   // a new application after a rejection is a new opportunity; but progress (an assessment, an interview, an offer) in the SAME thread for a compatible role is
   // far more often the same process continuing than a new one, so it joins and the contradiction is surfaced for a person (lib/lifecycle/contradictions.ts)
-  if (endedByEmployerOrUser(g) && !NEUTRAL.has(e.type) && !(viaThread && REOPENS.has(e.type))) return false;
+  // a message that takes the employer's own ending back ("please disregard our previous message") continues that process whatever type it was read as
+  const retraction = e.signals.includes("retraction (fact)");
+  if (endedByEmployerOrUser(g) && !NEUTRAL.has(e.type) && !retraction && !(viaThread && REOPENS.has(e.type))) return false;
   const gap = e.occurredAt.getTime() - lastAt(g);
   if (rel === "generic") return gap <= (viaThread ? GENERIC_WINDOW_WITH_THREAD : GENERIC_WINDOW);
   if (viaThread) return true;

@@ -185,7 +185,8 @@ export function buildActions(
         add(opp, dated, "offer_decision", "Offer decision due",
           d < 0 ? `Deadline was ${when(d)}.` : `Respond ${when(d)}.`,
           { due: dated.eventDate, dueHasTime: dated.eventDateHasTime, daysUntil: d });
-      } else if (ageDays(offer) <= 30) {
+      } else if (ageDays(offer) <= ((opp.kind ?? "job") === "job" ? 30 : 14) && !((opp.kind ?? "job") !== "job" && dated && d !== null && d < -OFFER_GRACE_DAYS)) {
+        // (a workshop or program selection whose acceptance deadline has passed is history, not a decision; a real job offer keeps its quiet "check the latest message" prompt)
         add(opp, offer, "offer_decision", "Next steps on your offer",
           dated ? "The response date has passed; check the latest message for what is still needed." : "No deadline detected — confirm the response date and next steps.",
           { bucket: "today", daysUntil: 0 });
