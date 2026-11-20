@@ -63,7 +63,7 @@ export function groundingOf(email: RecruitingEmail, event: ExtractedEvent): Grou
  * the start of one of the sender domain's own labels ("copperline-logistics.example"). Returns null otherwise.
  */
 const FUNCTION_WORDS = new Set(["careers", "career", "karriere", "carrières", "carrieres", "carreras", "carreira", "carriere", "recruiting", "recruitment", "recruiter", "recruiters", "recrutement", "recruiting", "talent", "talente", "talento", "talentos", "talents", "jobs", "job", "hr", "rh", "rrhh", "people", "team", "equipo", "equipe", "hiring", "staffing", "applications", "application", "candidate", "candidates", "candidatures", "bewerbung", "bewerbungen", "personal", "personnel", "human", "resources", "admissions", "university", "internships", "internship", "campus", "early", "emploi", "empleo", "stellen", "no", "reply", "noreply", "notifications", "portal", "the", "via", "at", "from", "interview", "interviews", "interviewing", "assessment", "assessments", "scheduling", "schedule", "scheduler", "onboarding", "offer", "offers", "recruit", "update", "updates", "support", "help", "info", "admin", "system", "service", "services", "welcome", "news", "newsletter", "events", "event", "office", "center", "centre", "department", "student", "students", "graduate", "graduates", "grad", "applicant", "applicants", "hub", "desk", "mail", "email", "alerts", "alert", "community", "programs", "program", "success", "operations", "acquisition", "scholarship", "scholarships", "community", "admission", "recruitment", "sourcing", "experience", "relations", "outreach"]);
-export function senderBrand(email: Pick<RecruitingEmail, "from" | "subject" | "bodyText">): string | null {
+export function senderBrandInfo(email: Pick<RecruitingEmail, "from" | "subject" | "bodyText">): { name: string; exact: boolean } | null {
   let display = email.from.replace(/<[^>]*>/, "").replace(/["']/g, "").trim();
   // "Dexi from Sodexo", "Ana at Orbis", "Marta de Solmar": the organisation is what follows the preposition, the person what precedes it
   const via = /\s(?:from|at|de|bei|chez|di|da)\s+(.+)$/i.exec(display);
@@ -79,11 +79,16 @@ export function senderBrand(email: Pick<RecruitingEmail, "from" | "subject" | "b
   const labelSet = new Set(domain.split(".").slice(0, -1).map(squash).filter((l) => l.length >= 3));
   for (let n = kept.length; n >= 1; n--) {
     const head = kept.slice(0, n);
-    if (head.every((w) => squash(w).length >= 3 && [...labelSet].some((l) => l === squash(w) || (n === 1 && (l.startsWith(squash(w)) || squash(w).startsWith(l)))))) return head.join(" ");
+    if (head.every((w) => squash(w).length >= 3 && [...labelSet].some((l) => l === squash(w) || (n === 1 && (l.startsWith(squash(w)) || squash(w).startsWith(l)))))) return { name: head.join(" "), exact: head.every((w) => labelSet.has(squash(w))) };
     const joined = squash(head.join(" "));
-    if (joined.length >= 3 && [...labelSet].some((l) => l === joined || (n === kept.length && (l.startsWith(joined) || joined.startsWith(l))))) return head.join(" ");
+    if (joined.length >= 3 && [...labelSet].some((l) => l === joined || (n === kept.length && (l.startsWith(joined) || joined.startsWith(l))))) return { name: head.join(" "), exact: [...labelSet].some((l) => l === joined) };
   }
-  return inText && squash(kept.join(" ")).length >= 3 ? kept.join(" ") : null;
+  return inText && squash(kept.join(" ")).length >= 3 ? { name: kept.join(" "), exact: true } : null;
+}
+
+/** The employer's own sender label, as a name. */
+export function senderBrand(email: Pick<RecruitingEmail, "from" | "subject" | "bodyText">): string | null {
+  return senderBrandInfo(email)?.name ?? null;
 }
 
 /**
@@ -96,13 +101,16 @@ export function employerProvenance<T extends ExtractedEvent>(email: RecruitingEm
   out.signals = out.signals.filter((x) => x !== "employer:sender-only");
   if (out.company && (!companyInText(email, out.company) || nameOfSenderDomain(email, out.company))) out.signals.push("employer:sender-only");
   if (!out.company || out.signals.includes("employer:sender-only")) {
-    const brand = senderBrand(email);
-    if (brand) {
+    const info = senderBrandInfo(email);
+    if (info) {
+      const brand = info.name;
+      // trusted as is when the message text writes it OR the sender's own domain spells exactly that name ("Ridgeway Careers" at ridgeway.example); a name that only STARTS the domain's
+      // label ("Quill" for quill-labs.example) may be incomplete: likely, and the person is asked once
+      const solid = companyInText(email, brand) || info.exact;
       out.company = brand;
-      out.fieldConfidence = { type: out.fieldConfidence?.type ?? out.confidence, role: out.fieldConfidence?.role ?? out.confidence, company: Math.max(out.fieldConfidence?.company ?? 0, companyInText(email, brand) ? 0.5 : 0.38) };
+      out.fieldConfidence = { type: out.fieldConfidence?.type ?? out.confidence, role: out.fieldConfidence?.role ?? out.confidence, company: Math.max(out.fieldConfidence?.company ?? 0, solid ? 0.5 : 0.38) };
       out.signals = [...out.signals.filter((x) => x !== "employer:sender-only"), "employer:display-name"];
-      // corroborated by the message text: trusted as is; corroborated only by the sender's own domain label: likely, and the person is asked once
-      if (!companyInText(email, brand)) out.reviewReasons.push("company: taken from the sender's label, not from the message text");
+      if (!solid) out.reviewReasons.push("company: taken from the sender's label, not from the message text");
     }
   }
   const unit = unitOf(email);
