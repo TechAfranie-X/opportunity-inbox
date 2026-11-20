@@ -306,3 +306,14 @@ test("a model-typed 'offer' that follows an explicit offer from the same employe
   assert.equal(out.find((e) => e.id === second.id)?.type, "offer", "an explicit second offer is a real second offer");
   assert.equal(out.find((e) => e.id === alone.id)?.type, "offer", "with no earlier explicit offer the model's reading stands (and is reviewable)");
 });
+
+test("a bare update that only the model found in a wide sweep, with no candidacy wording, stays out of the pipeline; the same wording from a keyword search or with candidacy words stays", () => {
+  const model = ["semantic:event", "semantic:certainty:high"];
+  const gone = ev({ type: "status_update", day: 0, subject: "Alex sent you messages", company: "Orbis", signals: [...model, "via:sweep"] });
+  const kept1 = ev({ type: "status_update", day: 1, subject: "Update on your application", company: "Orbis", signals: [...model, "via:sweep"] });
+  const kept2 = ev({ type: "status_update", day: 2, subject: "Alex sent you messages", company: "Orbis", signals: [...model, "via:keyword"] });
+  const kept3 = ev({ type: "interview_invite", day: 3, subject: "Alex sent you messages", company: "Orbis", signals: [...model, "via:sweep"] });
+  const out = refineEvents([gone, kept1, kept2, kept3]);
+  assert.deepEqual(out.excluded.map((x) => x.event.id), [gone.id]);
+  assert.equal(out.events.length, 3);
+});

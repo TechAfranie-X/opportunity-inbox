@@ -146,7 +146,10 @@ export function refineEvents(events: EffectiveEvent[], options: { resolveEmploye
     const r: EffectiveEvent = { ...e };
     // Weak sweep-only evidence with no candidacy wording is low-value uncertainty: it is not placed in the pipeline AND not offered for review (it stays stored,
     // metadata only). A language model that read the message and agreed it is recruiting (semantic:agree/event/type) overrides this; a person's correction does too.
-    if (!e.outbound && !isNearMissEvent(e) && SOFT_OR_REJECTION.has(e.type) && WEAK_SWEEP_EVIDENCE(e.signals) && !CANDIDACY_SUBJECT.test(e.subject ?? "") && !MODEL_AGREED(e.signals)) {
+    // A message ONLY the model found (the rules saw nothing), in a wide sweep, typed as nothing more specific than a bare update, with no candidacy wording in its subject,
+    // is the weakest evidence there is: it needs a person's word, not a place in the pipeline.
+    const modelOnlyBareUpdate = e.signals.includes("semantic:event") && e.signals.includes("via:sweep") && (e.type === "status_update" || e.type === "follow_up");
+    if (!e.outbound && !isNearMissEvent(e) && (SOFT_OR_REJECTION.has(e.type) && WEAK_SWEEP_EVIDENCE(e.signals) || modelOnlyBareUpdate) && !CANDIDACY_SUBJECT.test(e.subject ?? "") && (!MODEL_AGREED(e.signals) || modelOnlyBareUpdate)) {
       excluded.push({ event: e, reason: "unrelated" });
       continue;
     }
