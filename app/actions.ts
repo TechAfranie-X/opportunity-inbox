@@ -86,6 +86,15 @@ export async function confirmEventAction(form: FormData) {
   revalidatePath("/", "layout");
 }
 
+/** Housekeeping in bulk: the person has looked at the list and says all of it looks right. Each item is confirmed on its own (a label, never an assumption); the list is capped. */
+export async function confirmEventsAction(form: FormData) {
+  const sub = await requireUserSub();
+  const ids = form.getAll("eventId").map((v) => String(v).slice(0, 64)).slice(0, 200);
+  for (const id of ids) await confirmEvent(sub, id);
+  if (ids.length > 0) await recordUsage(sub, "confirmation");
+  revalidatePath("/", "layout");
+}
+
 export async function setOpportunityStatusAction(form: FormData) {
   const sub = await requireUserSub();
   const status = text(form, "status", 10);

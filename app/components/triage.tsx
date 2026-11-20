@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { confirmEventAction, ignoreEventAction } from "@/app/actions";
+import { confirmEventAction, confirmEventsAction, ignoreEventAction } from "@/app/actions";
 import { EntityMark } from "@/app/components/entity-mark";
 import { GmailLink } from "@/app/components/gmail-link";
 import { IconCheck, IconPencil, IconSlash } from "@/app/components/icons";
@@ -64,7 +64,7 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
 
   const below = (
     <>
-      {housekeeping.length > 0 ? <div className="mt-10"><FoldedList title="Housekeeping" note="Smaller questions that keep your history accurate. None of them affects what needs you now." items={housekeeping} editors={editors} confirmLabel="Looks right" /></div> : null}
+      {housekeeping.length > 0 ? <div className="mt-10"><FoldedList title="Housekeeping" note="Smaller questions that keep your history accurate. None of them affects what needs you now." items={housekeeping} editors={editors} confirmLabel="Looks right" bulk /></div> : null}
       {suggestions.length > 0 ? <div className="mt-6"><FoldedList title="Also possibly recruiting" note="Mail that looks a little like hiring but that we are less sure about. None of it is in your pipeline." items={suggestions} editors={editors} confirmLabel="Yes, it is recruiting" /></div> : null}
     </>
   );
@@ -85,7 +85,7 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
   return (
     <div>
       <p className="t-meta tnum text-ink-3" aria-live="polite">
-        {isImportant ? `${position + 1} of ${important.length} important ${important.length === 1 ? "review" : "reviews"}` : "Housekeeping"}
+        {isImportant ? `${position + 1} of ${important.length} important ${important.length === 1 ? "review" : "reviews"}${housekeeping.length ? ` · ${housekeeping.length} housekeeping below` : ""}` : "Housekeeping"}
       </p>
       <div className="triage-rail mt-3" aria-hidden>
         <span style={{ width: `${isImportant ? Math.max(4, ((position + 1) / Math.max(1, important.length)) * 100) : 4}%` }} />
@@ -178,7 +178,7 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
 }
 
 /** Quiet lists: offered, folded, never counted. Each can still be settled in place. */
-function FoldedList({ title, note, items, editors, confirmLabel }: { title: string; note: string; items: TriageItem[]; editors: Record<string, ReactNode>; confirmLabel: string }) {
+function FoldedList({ title, note, items, editors, confirmLabel, bulk = false }: { title: string; note: string; items: TriageItem[]; editors: Record<string, ReactNode>; confirmLabel: string; bulk?: boolean }) {
   const [open, setOpen] = useState(false);
   const id = useId();
   return (
@@ -192,6 +192,12 @@ function FoldedList({ title, note, items, editors, confirmLabel }: { title: stri
       <div id={id} className="disclose" data-open={open} aria-hidden={!open} inert={!open}>
         <div>
           <p className="t-meta mb-2 mt-3 max-w-[52ch] text-ink-3">{note}</p>
+          {bulk && items.length > 1 ? (
+            <form action={confirmEventsAction} className="mb-3">
+              {items.map((i) => <input key={i.id} type="hidden" name="eventId" value={i.id} />)}
+              <button type="submit" className="btn btn-quiet t-meta" title="Marks every item below as read correctly. Nothing is deleted.">Looks right for all {items.length}</button>
+            </form>
+          ) : null}
           <ul className="list border-y border-line">
             {items.map((i) => (
               <li key={i.id} className="py-4">

@@ -65,7 +65,9 @@ export async function AppShell({
   width?: "reading" | "mid" | "wide";
   children: ReactNode;
 }) {
-  const reviewCount = demo ? 0 : attentionCount(buildReviewQueue(opportunities, undefined, possible));
+  const reviewQueue = demo ? [] : buildReviewQueue(opportunities, undefined, possible);
+  const reviewCount = attentionCount(reviewQueue);
+  const housekeepingCount = reviewQueue.filter((i) => !i.weak && i.tier === "routine").length;
   const hrefOf = (item: (typeof NAV)[number]) => (demo ? item.demoHref : item.href);
   const initial = firstName(user?.name, user?.email).charAt(0);
   const gmailAccount = demo || !user?.googleSub ? null : await connectedGmailAccount(user.googleSub);
@@ -111,7 +113,7 @@ export async function AppShell({
             <Link href="/review" className="side-link" aria-current={active === "review" ? "page" : undefined}>
               <IconReview />
               <span>Review</span>
-              {reviewCount > 0 ? <span className="side-badge" aria-label={`${reviewCount} need review`}>{reviewCount}</span> : null}
+              {reviewCount > 0 ? <span className="side-badge" aria-label={`${reviewCount} need review${housekeepingCount ? `, plus ${housekeepingCount} housekeeping` : ""}`} title={housekeepingCount ? `${reviewCount} need you now; ${housekeepingCount} smaller housekeeping questions wait inside` : undefined}>{reviewCount}</span> : null}
             </Link>
           ) : null}
           <SideSearch />
