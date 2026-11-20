@@ -38,3 +38,14 @@ Open: false-opportunity and Review-burden regression, the person-confirmation co
 2. No prediction is deleted: re-evaluation is a reader-version bump (`PRODUCT_READER_VERSION`), which inserts new prediction rows and leaves old ones (append-only history).
 3. `saveExtractedEvents` refuses to overwrite a corrected, confirmed or ignored row (`setWhere correction is null`), and the end-to-end journey asserts it (it fails without the guard).
 4. Gmail stays read-only; no message text, prompt or token is stored or committed; the model is local.
+
+## Fixture N pre-registration (written 2026-11-20 16:45 CST, BEFORE the first run; fixture never opened or run)
+Fixture: fictional mailbox `journeys-N.json` (outside the repository), run once on commit b898056 in rules mode and in hybrid mode (local Qwen3-4B), with `--cache` so the model is called once. Baseline: commit 5230fa9, same fixture, same two modes, same single run each. After the failure list is inspected N is contaminated and is not a generalisation claim.
+Thresholds (anchored on the previous fresh fixture M, hybrid: precision 97.7, recall 97.0, wrong merges 2, split 9, status 91.2, outcome 70.2, review justified 34.4):
+- Recruiting precision >= 95.0 and recall >= 94.0 (hybrid)
+- Wrong merges <= 3; journeys split <= 12; opportunities merging journeys <= 2
+- Lifecycle status >= 85.0, outcome >= 65.0
+- Source evidence 100%
+- Review justified-share not below 30% and "important" count not above 1.5x the baseline
+- No regression of more than 2 points against the 5230fa9 baseline on any of recruiting precision/recall, status, outcome
+A miss on any threshold is reported as a miss, not re-run.
