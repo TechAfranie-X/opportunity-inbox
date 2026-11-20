@@ -150,3 +150,21 @@ test("two applications that once shared a key stay independently addressable: an
   assert.equal(keys.size, 2);
   for (const o of opps) for (const k of o.legacyKeys ?? []) assert.ok(k === o.key || !keys.has(k), `legacy key ${k} of ${o.key} shadows a current key`);
 });
+
+test("pipeline headline buckets mean one thing each: active, quiet, accepted, closed, other", async () => {
+  const { pipelineBuckets } = await import("../recruiting/history.ts");
+  const now = new Date(Date.UTC(2026, 5, 1));
+  const mk = (day: number, extra: Partial<EffectiveEvent> & { type?: EventType; role?: string } = {}) => ev({ type: extra.type ?? "applied", day, company: `Co${day}${extra.role ?? ""}`, thread: `t${day}${extra.role ?? ""}`, role: extra.role ?? "Data Intern" });
+  const recent = mk(140);
+  const quiet = mk(10);
+  const accepted = ev({ type: "offer", day: 100, company: "AccCo", thread: "ta", role: "Data Intern", signals: [] });
+  const acceptedReply = { ...ev({ type: "user_reply", day: 101, company: "AccCo", thread: "ta", role: "Data Intern", outbound: true }), signals: ["student:accepts"] } as EffectiveEvent;
+  const rejected = [ev({ type: "applied", day: 90, company: "RejCo", thread: "tr", role: "Data Intern" }), ev({ type: "rejection", day: 95, company: "RejCo", thread: "tr", role: "Data Intern" })];
+  const workshop = ev({ type: "applied", day: 130, company: "NSF Cyber Workshop", thread: "tw", role: "Cybersecurity Workshop" });
+  const b = pipelineBuckets(buildOpportunities([recent, quiet, accepted, acceptedReply, ...rejected, workshop]), now);
+  assert.equal(b.active.length, 1);
+  assert.equal(b.quiet.length, 1);
+  assert.equal(b.accepted.length, 1);
+  assert.equal(b.closed.length, 1);
+  assert.equal(b.other.length, 1);
+});

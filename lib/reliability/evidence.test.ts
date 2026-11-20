@@ -79,3 +79,14 @@ test("only the part the sender wrote now is read", () => {
   assert.equal(unquoted("Hello there"), "Hello there");
   assert.ok(!unquoted("Fresh.\n-----Original Message-----\nFrom: a\nold").includes("old"));
 });
+
+test("an invitation that mentions other candidates or fit is not a goodbye; real closure still raises the doubt", async () => {
+  const { outcomeConflict } = await import("./assess.ts");
+  const mail = (body: string) => ({ id: "m", threadId: "t", from: "Careers <careers@orbis.example>", subject: "Your coding challenge", bodyText: body, receivedAt: RECEIVED, outbound: false }) as never;
+  const invite = "Hi Sam, this is the first step in our process. Please complete the challenge within 5 days. Successful candidates may progress to interviews; we also review many other candidates, so submit early.";
+  assert.equal(outcomeConflict(mail(invite), ev("assessment")), null);
+  const goodbye = "Hi Sam, thank you for your time. We have decided to go with other candidates and wish you the best in your search.";
+  assert.ok(outcomeConflict(mail(goodbye), ev("status_update")));
+  const mixed = "Hi Sam, your application is no longer under consideration. We encourage other candidates like you to apply again; next steps for future roles are on our site.";
+  assert.ok(outcomeConflict(mail(mixed), ev("status_update")), "closure wording keeps the doubt even beside forward-looking words");
+});

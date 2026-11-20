@@ -84,6 +84,9 @@ export function cleanRole(role: string | null): string | null {
   if (open >= 0 && r.indexOf(")", open) < 0) r = r.slice(0, open).replace(/[\s,;:-]+$/, "").trim(); // a title cut off mid-parenthesis
   r = r.replace(/\s+[—–-]\s+(?:remote|hybrid|on-?site)(?:\s*\([^)]{1,20}\))?$/i, "").trim(); // a work-mode tag is where the role is done, not part of the role
   if (TEAM_ONLY.test(r)) return null; // "Engineering team" is prose about who is hiring, not a role
+  // a sentence fragment mistaken for a role ("and giving us the", "and we wish you success in your") is no role: shown as unknown, never as a title
+  if (/^(?:and|or|but|the|of|to|a|an|for|in|on|with|that|this|your|our|we|you|i|it|is|are|was|were|be|by|at|as|so|if)\b/i.test(r) && !TITLE_WORDS.test(r)) return null;
+  if (/\b(?:we|us|you|your|our|wish|thank|thanks|giving|regret|sorry|hope|please|will|would|could)\b/.test(r) && !/\b(?:intern|engineer|analyst|developer|associate|scientist|fellow|assistant|designer|manager|coordinator)\b/i.test(r)) return null;
   return r || null;
 }
 

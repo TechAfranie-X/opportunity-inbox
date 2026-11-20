@@ -7,7 +7,7 @@ import type { ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
 import { applyFacts, bodyAct, explicitOffer } from "./facts.ts";
 import { CONFLICT_PREFIX, MEMBERSHIP_PREFIX, NEAR_MISS, NEAR_MISS_WEAK, hasDoubt, isNearMiss } from "./flags.ts";
 import { studentAcceptance } from "./facts.ts";
-import { marketingFact } from "./evidence.ts";
+import { closureFact, marketingFact } from "./evidence.ts";
 import { employerProvenance, groundingOf, isLinkedEvent } from "./grounding.ts";
 
 /**
@@ -46,6 +46,7 @@ export function membershipDoubt(email: RecruitingEmail, event: ExtractedEvent): 
  * Rejections end this way even when the wording of the decision itself is unfamiliar. Pleasantries about something upcoming
  * ("good luck on the assessment") do not match: the wish must be about the search or the future.
  */
+const FORWARD = /\b(?:invit(?:e|ed|ation) (?:you )?to (?:complete|take|schedule|interview|join|begin|start)|first (?:step|round|stage)|next (?:step|round|stage)s?|(?:complete|finish|submit|take) (?:it |this |the |your )?(?:[\w-]+ ){0,3}(?:within|by|before) |within \d+ (?:days?|hours?)|successful candidates?|candidates? who (?:pass|succeed|progress|complete)|progress to (?:the |an? )?(?:next|interview|final)|(?:start|begin) (?:the |your )?(?:assessment|challenge|exercise|test))\b/i;
 const FAREWELL = [
   /\b(?:best of luck|wish you (?:all )?(?:the best|success|luck)|good luck)\b[^.\n]{0,40}\b(?:search|future|endeavou?rs|career|journey)\b/i,
   /\bfuture (?:endeavou?rs|opportunities)\b/i,
@@ -59,6 +60,9 @@ export function outcomeConflict(email: RecruitingEmail, event: ExtractedEvent): 
   if (email.outbound || ["rejection", "offer", "withdrawn", "user_reply"].includes(event.type)) return null;
   const text = stripQuoted(email.bodyText);
   if (!FAREWELL.some((r) => r.test(text))) return null;
+  // A message that INVITES the reader to do something next (a first step, an assessment to complete within days, "successful candidates may progress") and says nothing that closes
+  // the candidacy is not a goodbye: "other candidates" and "not a fit" there describe the process, not the reader's outcome. Explicit closure wording still keeps the doubt.
+  if (FORWARD.test(text) && !closureFact(email)) return null;
   return `${CONFLICT_PREFIX} the wording reads like a goodbye, but it was read as "${event.type.replace(/_/g, " ")}"`;
 }
 

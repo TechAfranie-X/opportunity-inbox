@@ -8,6 +8,7 @@ import { IconPipeline, IconReview, IconSettings, IconToday } from "@/app/compone
 import { Menu } from "@/app/components/menu";
 import { SearchButton } from "@/app/components/search-button";
 import { SideSearch } from "@/app/components/side-search";
+import { DayRollover } from "@/app/components/day-rollover";
 import { SyncControl } from "@/app/components/sync-control";
 import { ThemeControl } from "@/app/components/theme-control";
 import { WorkspaceProvider } from "@/app/components/workspace";
@@ -190,6 +191,7 @@ export async function AppShell({
             to see your own.
           </p>
         ) : null}
+        {!demo ? <DayRollover /> : null}
         <main className="mx-auto w-full max-w-[75rem] px-6 lg:px-10">
           <div className={`mx-auto w-full ${width === "reading" ? "max-w-[46rem]" : width === "mid" ? "max-w-[58rem]" : "max-w-[68rem]"}`}>{children}</div>
         </main>

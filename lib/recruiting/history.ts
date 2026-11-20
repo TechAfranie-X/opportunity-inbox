@@ -174,3 +174,24 @@ export function lastMeaningful(opportunity: Opportunity): { label: string; at: D
     scheduled: event.type === "interview_scheduled" ? event.eventDate : null,
   };
 }
+
+
+/**
+ * The pipeline headline, in buckets that mean one thing each. "Active" used to be every open job, so a quiet application from last spring, an accepted offer and a live
+ * interview were one number. `active` = open and recently moving; `quiet` = open but silent for the dormancy period with nothing dated ahead (nothing is closed by silence);
+ * `accepted` = an offer the person accepted (settled, not a pending decision); `closed` = ended; `other` = scholarships, mentorship programs and events (counted apart).
+ */
+export type PipelineBuckets = { active: Opportunity[]; quiet: Opportunity[]; accepted: Opportunity[]; closed: Opportunity[]; other: Opportunity[] };
+export function pipelineBuckets(opportunities: Opportunity[], now: Date, dormantAfterDays = 60): PipelineBuckets {
+  const out: PipelineBuckets = { active: [], quiet: [], accepted: [], closed: [], other: [] };
+  const day = 86_400_000;
+  for (const o of opportunities) {
+    if ((o.kind ?? "job") !== "job") { out.other.push(o); continue; }
+    if (o.status === "closed") { out.closed.push(o); continue; }
+    if (o.outcome === "accepted") { out.accepted.push(o); continue; }
+    const quietDays = Math.floor((now.getTime() - o.lastActivityAt.getTime()) / day);
+    const upcoming = o.events.some((e) => e.eventDate && e.eventDate.getTime() >= now.getTime() - day);
+    (quietDays >= dormantAfterDays && !upcoming ? out.quiet : out.active).push(o);
+  }
+  return out;
+}

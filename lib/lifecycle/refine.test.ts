@@ -337,3 +337,8 @@ test("kinds: a workshop, conference or career fair is an event; a job whose titl
   assert.equal(k("Your fellowship application", "Summit Fellowship"), "scholarship");
   assert.equal(k("Interview invitation", "Software Engineer Intern"), "job");
 });
+
+test("sentence fragments are not roles; real titles survive, including ones that start with a function word", () => {
+  for (const frag of ["and giving us the", "and we wish you success in your", "to help with the project", "of the program team"]) assert.equal(cleanRole(frag), null, frag);
+  for (const ok of ["Software Engineer Intern", "Summer 2027 Analyst Program", "The Data Science Fellowship", "Assistant Engineer"]) assert.equal(cleanRole(ok), ok, ok);
+});

@@ -63,7 +63,7 @@ export function PipelineExplorer({ initialStage, controlledStage }: { initialSta
     }
   };
 
-  const label = (v: View) => (v === "all" ? "All active" : v === "closed" ? "Closed" : STAGE_LABEL[v]);
+  const label = (v: View) => (v === "all" ? "All open" : v === "closed" ? "Closed" : STAGE_LABEL[v]);
 
   const rank = (o: Opportunity) => {
     const n = nextMoment(o, now);

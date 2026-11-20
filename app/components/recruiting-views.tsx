@@ -24,10 +24,9 @@ import {
 
   relativeDay,
   toInputValue,
-  isJob,
   roleLine,
 } from "@/lib/recruiting/format";
-import { annotateTimeline, nextMoment, peopleFor, pulse, stageSince } from "@/lib/recruiting/history";
+import { annotateTimeline, nextMoment, peopleFor, pipelineBuckets, pulse, stageSince } from "@/lib/recruiting/history";
 import { entityState, stageMilestones } from "@/lib/recruiting/presentation";
 import { EVENT_TYPES, type ActionItem, type ActionKind, type EffectiveEvent, type Opportunity } from "@/lib/recruiting/types";
 
@@ -203,9 +202,10 @@ function ScheduleRows({ items, now }: { items: ActionItem[]; now: Date }) {
 }
 
 /** Where everything stands: a count, one flat segmented bar (quantity, not rank), and the stages. Each row opens that stage. */
-function PipelineCard({ opportunities, pipelineHref }: { opportunities: Opportunity[]; pipelineHref: string }) {
-  const rows = pulse(opportunities);
-  const active = opportunities.filter((o) => o.status === "active" && isJob(o)).length;
+function PipelineCard({ opportunities, pipelineHref, now }: { opportunities: Opportunity[]; pipelineHref: string; now: Date }) {
+  const buckets = pipelineBuckets(opportunities, now);
+  const rows = pulse(buckets.active);
+  const active = buckets.active.length;
   const total = Math.max(1, rows.reduce((n, r) => n + r.count, 0));
   if (opportunities.length === 0) {
     return (
@@ -222,6 +222,7 @@ function PipelineCard({ opportunities, pipelineHref }: { opportunities: Opportun
         <Link href={pipelineHref} className="link-quiet t-meta">Open</Link>
       </div>
       <p className="mt-3 text-[1.5rem] font-medium leading-none tracking-tight"><span className="tnum">{active}</span> <span className="text-[1rem] font-normal text-ink-2">active</span></p>
+      {buckets.quiet.length + buckets.accepted.length > 0 ? <p className="t-meta mt-1.5 tnum text-ink-2">{[buckets.quiet.length ? `${buckets.quiet.length} quiet for two months or more` : "", buckets.accepted.length ? `${buckets.accepted.length} accepted` : ""].filter(Boolean).join(" · ")}</p> : null}
       <div className="mt-3 flex h-1.5 gap-0.5 overflow-hidden rounded-full" aria-hidden>
         {rows.filter((r) => r.count > 0).map((r, i) => (
           <span key={r.stage} className="block h-full" style={{ width: `${(r.count / total) * 100}%`, background: "var(--ink-3)", opacity: 0.35 + i * 0.16 }} />
@@ -379,7 +380,7 @@ export function TodayComposition({
         </div>
 
         <aside className="min-w-0 space-y-4" aria-label="State of things">
-          <PipelineCard opportunities={opportunities} pipelineHref={pipelineHref} />
+          <PipelineCard opportunities={opportunities} pipelineHref={pipelineHref} now={now} />
           <RecentCard opportunities={opportunities} now={now} activityHref={activityHref} />
           {toCheck > 0 ? (
             <section aria-label="Review" className="panel p-4">

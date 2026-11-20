@@ -49,7 +49,11 @@ const OFFER_OR_NEXT = /\b(?:pleased to (?:offer|invite|inform you that you)|cong
 
 export function closureFact(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
   const text = unquoted(`${email.subject}\n${email.bodyText}`);
-  return CLOSURE.test(text) && !CLOSURE_NOT_ABOUT_YOU.test(text) && !OFFER_OR_NEXT.test(text.slice(0, 600));
+  const closure = CLOSURE.exec(text);
+  if (!closure || CLOSURE_NOT_ABOUT_YOU.test(text)) return false;
+  // a positive anchor ("congratulations", "next round", "invite you") BEFORE the closure phrase means the closure words belong to a conditional or a different matter
+  const anchor = OFFER_OR_NEXT.exec(text.slice(0, closure.index));
+  return !anchor;
 }
 
 // ------------------------------------------------------------------ marketing
