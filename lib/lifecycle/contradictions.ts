@@ -20,6 +20,11 @@ export function detectContradictions(events: EffectiveEvent[]): Contradiction[] 
   let lastOffer: EffectiveEvent | null = null;
   for (const e of credible) {
     if (e.corrected || e.confirmed) { if (ENDING.has(e.type)) lastEnd = e; continue; }
+    if (e.signals.includes("retraction (fact)") && lastEnd) {
+      out.push({ kind: "reopened", eventIds: [lastEnd.id, e.id], text: "A rejection or withdrawal was taken back by a later message. Check where the process stands." });
+      lastEnd = null;
+      continue;
+    }
     if (ENDING.has(e.type)) {
       if (lastOffer && !lastEnd) out.push({ kind: "offer_ended", eventIds: [lastOffer.id, e.id], text: "An offer was followed by a message that ends the process. Check what happened." });
       lastEnd = e;

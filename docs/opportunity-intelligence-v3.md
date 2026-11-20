@@ -164,3 +164,46 @@ On one fresh independent fixture, hybrid new vs hybrid baseline (`ab0e738`):
 All five must hold. A fixture is never re-run for tuning; a failed threshold is reported as failed.
 
 Gate L (fresh, run once on `b1559c1`, before the unit-evidence and borrowed-role fixes): recruiting 98.6 / 96.5 both runs; wrong merges 40 -> 32 (-20%, threshold 2 FAILED); status 85.3 -> 82.4, stage 79.4 -> 73.5 (threshold 3 FAILED), outcome 58.8 -> 61.8; review 46 -> 9 items, justified 26% -> 67% (4 met); next action 80.8 -> 88.5, source evidence 90 -> 100 (5 met). Inspection after the run found two general causes, both fixed afterwards (L is now contaminated): reply/continuity events carried their anchor's borrowed role into the wrong application, and the hiring unit named in the body ("the Patient Finance team") was not used as identity evidence.
+
+Gate M (fresh, 215 messages, 182+ inbound, 16 scenarios; run once on `53d3d6e`, hybrid baseline `ab0e738` -> new):
+
+| M | rules baseline | rules new | hybrid baseline | hybrid new | threshold |
+|---|---|---|---|---|---|
+| Recruiting P / R | 100 / 46.6 | 100 / 46.6 | 97.0 / 97.7 | 97.7 / 97.0 | 1: met (R -0.7) |
+| Grouping pair P / R | 84.6 / 82.5 | 85.0 / 85.0 | 94.7 / 74.8 | 98.1 / 87.4 | |
+| Wrong-merge pairs | 6 | 6 | 5 | **2** | 2: met (-60%; small counts) |
+| Journeys split / opportunities merging journeys | 5 / 2 | 4 / 2 | 11 / 3 | 9 / 1 | |
+| Status / outcome / stage | 76 / 65 / 65 | 79 / 68 / 68 | 93.1 / 72.4 / 79.3 | 91.2 / 70.2 / 77.2 | 3: **missed** by about 2 points each |
+| Next action (evidence-only clock) / source evidence | 62.5 / 94 | 62.5 / 94 | 70.0 / 95.7 | 67.5 / 100 | 5: **missed** on next action (-2.5), met on source evidence |
+| Contradictions flagged | 1/5 | 1/5 | 1/5 | 2/5 | |
+| Review items (justified) | 19 (32%) | 16 (56%) | 34 (24%) | 32 (34%) | 4: met |
+
+Verdict on the pre-registered thresholds: 1, 2 and 4 met; 3 and 5 missed by one to two journeys of about 34 (a single journey is 2.9 points, so these gaps are inside the noise of one fixture, but the thresholds were written without
+that tolerance and are reported as missed). After the run, inspection found a general cause for one of the regressed journeys (a rejection followed by "please disregard our previous message" was never reopened); the
+retraction fact was added (status/outcome/stage on M then 93.0 / 71.9 / 78.9, no longer evidence because M is contaminated).
+
+**Pooled over the four fresh gates (J, K, L, M; hybrid, code as it was at each gate; 151 journeys)**
+
+| | baseline `ab0e738` | v3 at gate time |
+|---|---|---|
+| Recruiting precision / recall | 97.9 / 96.7 | 98.1 / 96.5 |
+| Grouping pair precision / recall | 87.0 / 77.3 | 88.7 / 85.4 |
+| Wrong-merge pairs | 93 | 88 (-5%) |
+| Journeys split | 46 | 29 (-37%) |
+| Opportunities merging journeys | 23 | 20 |
+| Status / outcome / stage | 85.5 / 63.8 / 71.5 | 86.8 / 68.9 / 74.7 |
+| Next action, evidence-only clock | 73.3 | 78.4 |
+| Source evidence | 94.0 | 100 |
+| Review items, justified share | 157, 34% | 99, 44% |
+| Contradictions flagged | 10/24 | 12/24 |
+
+Reading: genuine detection is unchanged; identity completeness, lifecycle accuracy, next action, evidence traceability and review burden improved on independent data; **false merges fell only about 5% at gate
+time**. Later general fixes (borrowed roles from reply/continuity events, hiring-unit evidence, longest-run sender brand, lifecycle tie-break, one receipt per application, retraction) reduced merges further on the
+contaminated fixtures (J 15 -> 5, K 33 -> 25, L 40 -> 13, M 5 -> 2) but those numbers are not independent evidence. Acceptance for "false merges demonstrably reduced on a new independent evaluation" is therefore met only
+on M (-60%, 5 -> 2 pairs, a small count) and not on J, K or L at the time they were run. A further fresh fixture would be needed to confirm the later fixes at scale.
+
+## 8. Preservation of user corrections (verified)
+Before and after the generation-4 backfill, a hash over every corrected or confirmed row (message id, type, company, role, signals, correction) of both accounts was identical (54 and 85 rows), and the corrected-row selection is
+a pure, tested function (`lib/recruiting/backfill-select.ts`). First-account browser verification (aphranie2003): Today, the Harvey interview card ("Interview tomorrow 12:00 PM"), the opportunity drawer, Pipeline counts,
+Review, and "Open latest email" (opens the Harvey "Next Steps" thread under that account in Gmail `u/0`). That pass found one defect (a calendar invitation titled as an interview was read as an "assessment due"
+beside the real interview), fixed with tests (`calendar invitation for an interview`).

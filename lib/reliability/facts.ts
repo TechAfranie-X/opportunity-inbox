@@ -68,6 +68,11 @@ export function applyTextFacts(email: Pick<RecruitingEmail, "subject" | "bodyTex
   if ((out.type === "rejection" || out.type === "status_update" || out.type === "applied" || out.type === "follow_up") && WITHDRAWAL_ACK.test(text) && !OFFER_RESCINDED.test(text)) {
     set({ type: "withdrawn", fieldConfidence: { type: Math.max(out.fieldConfidence?.type ?? 0, 0.7), company: out.fieldConfidence?.company ?? out.confidence, role: out.fieldConfidence?.role ?? out.confidence } }, "withdrawal acknowledged (fact)");
   }
+  // A message that withdraws the employer's own previous message ("please disregard our earlier message", "sent in error"): a fact of its own. The reducer lets it reopen a
+  // process the previous message had ended, and the contradiction is flagged for a person.
+  if ((out.type === "status_update" || out.type === "follow_up" || out.type === "applied") && RETRACTION.test(text)) {
+    set({}, "retraction (fact)");
+  }
   // An offer that lapsed unanswered: a fact of its own. It is not a rejection and not progress; the reducer closes the opportunity as expired only if nothing settled it.
   if ((out.type === "status_update" || out.type === "follow_up") && OFFER_LAPSED.test(text)) {
     set({}, "offer expired (fact)");
@@ -75,6 +80,7 @@ export function applyTextFacts(email: Pick<RecruitingEmail, "subject" | "bodyTex
   return out;
 }
 
+const RETRACTION = /\b(?:(?:please |kindly )?(?:disregard|ignore) (?:our|the|my|this|that) (?:(?:earlier|previous|last|prior|recent) )?(?:message|e-?mail|note|notification|update|decision|rejection)|(?:was|were) sent (?:to you )?(?:in error|by mistake|in mistake)|sent (?:in error|by mistake)|apologi[sz]e for the (?:confusion|mistake|error)|veuillez ne pas tenir compte|ignorez (?:notre|le) (?:message|courriel)|enviado por error|por favor ignore|ignora el mensaje|bitte ignorieren|irrt[uü]mlich (?:gesendet|versandt)|ignore a mensagem|enviada por engano|ignorare il messaggio|inviato per errore)\b/i;
 const WITHDRAWAL_ACK = /\b(?:your withdrawal|you(?:'ve| have) withdrawn|you (?:have )?(?:chosen|decided) to withdraw|confirm(?:ing)? (?:the )?withdrawal of your|withdrawal of your (?:application|candidacy)|votre retrait|suite à votre retrait|vous (?:avez|vous êtes) (?:retiré|désisté)|retrait de votre candidature|su retiro|ha retirado su|retirada de su candidatura|sua desist[eê]ncia|retirou a sua candidatura|ihre rücknahme|ihren rücktritt|zurückgezogen haben|ihre bewerbung zurückgezogen|ritiro della (?:sua )?candidatura|ha ritirato)\b/i;
 const OFFER_RESCINDED = /\b(?:rescind\w*|revok\w*|we (?:are|have) (?:withdrawing|withdrawn) (?:the|our) offer|retir\w+ (?:l[’']offre|la oferta)|zieh\w+ (?:das|unser) angebot)\b/i;
 const OFFER_LAPSED = /\b(?:offer (?:has |had |is |was )?(?:now )?(?:expired|lapsed)|(?:expired|lapsed) offer|offer expir(?:ed|ation)|haven'?t received a response to our .{0,40}offer|offre (?:a |est )?expir\w+|oferta (?:ha |est[aá] )?(?:expirad|caducad)\w*|angebot (?:ist )?(?:abgelaufen|verfallen)|oferta expirou)\b/i;

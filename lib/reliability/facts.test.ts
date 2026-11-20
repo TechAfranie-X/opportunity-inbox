@@ -119,3 +119,11 @@ test("a calendar invitation titled as an interview is the interview scheduled, n
   const practice = one(mail("ci3", "Career Center <cc@uni.example>", "Invitation: Mock Interview Workshop @ Fri Nov 20, 2026 10am", body, "2026-11-16T05:25:00Z"));
   assert.notEqual(practice?.type, "interview_scheduled");
 });
+
+test("retraction wording is a fact; an ordinary apology or instruction is not", async () => {
+  const { applyTextFacts } = await import("./facts.ts");
+  const ev = { gmailMessageId: "x", gmailThreadId: "t", occurredAt: new Date(), outbound: false, senderName: "", senderDomain: "", subject: "", type: "status_update", company: null, role: null, eventDate: null, eventDateHasTime: false, dateKind: null, confidence: 0.7, reviewReasons: [], signals: [] } as never as import("../recruiting/types.ts").ExtractedEvent;
+  const r = (body: string) => applyTextFacts({ subject: "", bodyText: body }, ev).signals.includes("retraction (fact)");
+  for (const b of ["Hi Maya, please disregard our previous message; it was sent in error.", "Bonjour, veuillez ne pas tenir compte de notre message précédent.", "Hallo, bitte ignorieren Sie die vorherige Nachricht, sie wurde irrtümlich gesendet.", "Hola, el correo anterior fue enviado por error."]) assert.ok(r(b), b);
+  for (const b of ["Please disregard the attached draft agenda and use the final one.", "We apologize for the delay; your interview is on Friday.", "Please ignore the parking section if you are joining remotely."]) assert.ok(!r(b), b);
+});

@@ -108,3 +108,20 @@ test("an override made under the key the previous identity generation issued sti
   const withOverride = buildOpportunities(events, new Map([[oldKey, { status: "closed" as const }]]));
   assert.ok(first[0].legacyKeys?.includes(oldKey) || withOverride[0].status === "closed", `legacy keys: ${first[0].legacyKeys?.join(",")} / key ${first[0].key}`);
 });
+
+test("a retraction of an ending reopens the process and is flagged; an ordinary update after a rejection does not", () => {
+  const retract = buildOpportunities([
+    ev({ type: "applied", day: 0, company: "Orbis", thread: "t", role: "Data Intern" }),
+    ev({ type: "rejection", day: 10, company: "Orbis", thread: "t", role: "Data Intern" }),
+    ev({ type: "status_update", day: 12, company: "Orbis", thread: "t", role: "Data Intern", signals: ["retraction (fact)"] }),
+  ]);
+  assert.equal(retract.length, 1);
+  assert.equal(retract[0].status, "active");
+  assert.equal(retract[0].contradictions?.[0]?.kind, "reopened");
+  const plain = buildOpportunities([
+    ev({ type: "applied", day: 0, company: "Orbis", thread: "t", role: "Data Intern" }),
+    ev({ type: "rejection", day: 10, company: "Orbis", thread: "t", role: "Data Intern" }),
+    ev({ type: "status_update", day: 12, company: "Orbis", thread: "t", role: "Data Intern" }),
+  ]);
+  assert.equal(plain[0].status, "closed");
+});

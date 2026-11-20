@@ -48,6 +48,7 @@ export function reduceLifecycle(events: EffectiveEvent[], policy: Policy = DEFAU
     }
     if (!NOT_CANDIDACY.has(e.type) && STAGE_OF[e.type]) candidacy = true;
     if (!usable(e)) continue;
+    if (e.signals.includes("retraction (fact)") && ended && !e.outbound) { ended = null; outcome = null; expired = false; continue; } // the employer took the ending back
     const s = STAGE_OF[e.type];
     if (!s) continue;
     if (s === "closed") { ended = e.type === "rejection" ? "rejected" : "withdrawn"; outcome = ended; expired = false; continue; }
