@@ -47,6 +47,13 @@ const CLOSURE = new RegExp([
 const CLOSURE_NOT_ABOUT_YOU = /\b(?:no longer (?:accepting|receive|receiving|available for|supported|offered)|you (?:will|may) no longer (?:receive|get)|unsubscribe|this (?:job|posting|listing) (?:is|has been|was) (?:closed|filled|removed)|jobs? (?:you|matching)|similar jobs?)\b/i;
 const OFFER_OR_NEXT = /\b(?:pleased to (?:offer|invite|inform you that you)|congratulations|you(?:'ve| have) (?:been )?(?:selected|advanced|moved)|next (?:steps|round)|invite you to)\b/i;
 
+/** Which part of the closure test decided (booleans only; used by read-only audit probes, never prints text). */
+export function closureDiagnose(email: Pick<RecruitingEmail, "subject" | "bodyText">) {
+  const text = unquoted(`${email.subject}\n${email.bodyText}`);
+  const closure = CLOSURE.exec(text);
+  return { closure: !!closure, notAboutYou: CLOSURE_NOT_ABOUT_YOU.test(text), anchorBefore: closure ? OFFER_OR_NEXT.test(text.slice(0, closure.index)) : false, quotedCut: text.length < `${email.subject}\n${email.bodyText}`.length };
+}
+
 export function closureFact(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
   const text = unquoted(`${email.subject}\n${email.bodyText}`);
   const closure = CLOSURE.exec(text);

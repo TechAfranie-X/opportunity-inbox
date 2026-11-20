@@ -55,3 +55,18 @@ test("a model-found event is vetoed when its subject is a membership invitation,
   assert.ok(!notAProcess(m("Welcome to Orbis!", "Hi Sam, thank you for applying. We have received your application for the Data Intern role.")), "a welcome that names the reader's application stays");
   for (const s of ["Your application to Orbis", "Interview invitation", "Assessment: complete within 5 days", "Update on your Databricks-like Fellows Application"]) assert.ok(!notAProcess(m(s)), s);
 });
+
+test("assist: a model alone never ends a candidacy (a mass-mailed invitation read as a rejection stays a question); real closure wording and real invitations still count", () => {
+  const promo = mail("p1", "Insiders Program <hello@lumen-works.example>", "Dana, You're Invited: Lumen Insiders Program!", "Join our community of students for events, newsletters and perks. Unsubscribe at any time. 100 Main Street.");
+  const closed = mail("p2", "Lumen Recruiting <no-reply@lumen-works.example>", "Update on your application", "Dear Dana, thank you for your interest. After careful review you are no longer under consideration for the Data Intern role at Lumen. We wish you well.");
+  const invite = mail("p3", "Lumen Recruiting <no-reply@lumen-works.example>", "Interview invitation: Data Intern", "Dana, we would like to invite you to interview for the Data Intern role. Please choose a slot.");
+  const none = (ms: RecruitingEmail[]) => ms.map((m) => [m.id, op(true, "rejection")] as const);
+  const asPromo = applyAssist([], [promo], new Map([["p1", op(true, "rejection")]]));
+  assert.ok(asPromo.every((e) => isNearMiss(e)), "promo: the model's rejection is a question, not a pipeline event");
+  const asClosed = applyAssist(readMail([closed]), [closed], new Map(none([closed])));
+  assert.ok(asClosed.some((e) => e.gmailMessageId === "p2" && e.type === "rejection" && !isNearMiss(e)), "real closure wording stays a rejection");
+  const asInvite = applyAssist([], [invite], new Map([["p3", op(true, "interview_invite")]]));
+  assert.ok(asInvite.some((e) => e.gmailMessageId === "p3" && e.type === "interview_invite" && !isNearMiss(e)), "a real invitation still counts");
+  assert.ok(notAProcess({ subject: promo.subject, bodyText: promo.bodyText }), "the promotion subject is vetoed");
+  assert.ok(!notAProcess({ subject: "You're invited to interview for the Data Intern role", bodyText: "We would like to invite you to interview." }), "an interview invitation is not vetoed");
+});

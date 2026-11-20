@@ -9,6 +9,7 @@ import { usable } from "./port.ts";
 import { outboundEvent } from "../recruiting/extract.ts";
 import { applyTextFacts, studentAcceptance } from "../reliability/facts.ts";
 import { employerProvenance } from "../reliability/grounding.ts";
+import { closureFact } from "../reliability/evidence.ts";
 
 /**
  * Assist mode: the language model's verified opinion changes what the product SHOWS, not just what it asks. It is a second reader with real authority in
@@ -59,13 +60,21 @@ function semanticEvent(m: RecruitingEmail, op: VerifiedOutput): ExtractedEvent {
 }
 
 const OWN_PROCESS = /\b(?:your (?:job |internship |fellowship |scholarship )?(?:application|candidacy|interview|assessment|offer|resume|submission|status)|(?:thank(?:s| you) for|thanks for) (?:applying|your application)|we(?:'ve| have) received your|you (?:have )?applied|invit(?:e|ed|ation) (?:you )?to (?:interview|complete|schedule|take|begin)|(?:coding|online|technical) (?:challenge|assessment|exercise)|(?:update|decision|next steps?) (?:on|about|for|regarding) your|schedule (?:your|an?) (?:interview|call)|offer (?:of employment|letter)|congratulations[^.!?\n]{0,40}\b(?:offer|selected|advance))\b/i;
-const NOT_PROCESS = /\bwelcome to [A-Z][\w &-]{1,30}[!.]?(?:\s|$)|\b(?:onboarding (?:username|portal|instructions)|username|set up your (?:account|profile)|honor society|membership|rsvp now|ask [\w ]{1,30} anything|join (?:us|our)|you(?:'re| are) invited to (?:join|attend)|invitation to (?:join|apply for membership)|(?:alumni|student) (?:network|chapter))\b/i;
+const NOT_PROCESS = /\bwelcome to [A-Z][\w &-]{1,30}[!.]?(?:\s|$)|\b(?:onboarding (?:username|portal|instructions)|username|set up your (?:account|profile)|honor society|membership|rsvp now|ask [\w ]{1,30} anything|join (?:us|our)|you(?:'re| are) invited to (?:join|attend)|you(?:'re| are) invited[:!]?\s+[^\n]{0,60}\b(?:program|community|insiders?|event|webinar|summit|session|network|club|newsletter|panel)|invitation to (?:join|apply for membership)|(?:alumni|student) (?:network|chapter))\b/i;
 /**
  * A VETO, not a requirement (requiring corroboration crushed recall on every fixture): a model-found event whose SUBJECT is a membership invitation, a welcome/account notice or an
  * event promotion, with nothing in the message naming the reader's own process, is a question for a person, never an application.
  */
 export function notAProcess(m: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
   return NOT_PROCESS.test(m.subject) && !OWN_PROCESS.test(`${m.subject}\n${m.bodyText.slice(0, 1500)}`);
+}
+/**
+ * A model alone never ends someone's candidacy: a model-found REJECTION is accepted only when the plain text carries terminal wording about the reader's own application (the same
+ * strict closure fact the rule reader uses). A small model reading a mass-mailed "You're invited" promotion as a rejection is the failure this prevents; the message stays a
+ * question for a person instead of closing a real opportunity.
+ */
+export function endingCorroborated(m: Pick<RecruitingEmail, "subject" | "bodyText">, op: Pick<VerifiedOutput, "type">): boolean {
+  return op.type !== "rejection" || closureFact(m);
 }
 const LOW_INFORMATION = new Set<string>(["status_update", "applied", "follow_up"]);
 /** What a RECEIPT may be retyped to: only an ending or an offer. A receipt's own wording ("Thank you for applying") is strong, and a confirmation page that mentions an assessment link is still a receipt. */
@@ -81,14 +90,14 @@ export function applyAssist(events: ExtractedEvent[], emails: RecruitingEmail[],
     if (isNearMiss(e)) {
       if (UNREADABLE.test((e.reviewReasons ?? []).join(" "))) return e;
       if (!op.recruiting) return { ...e, signals: [...e.signals, "semantic:no", SEMANTIC_EXCLUDED] };
-      if (op.certainty === "high") return { ...semanticEvent(m, op), company: e.company ?? semanticEvent(m, op).company };
+      if (op.certainty === "high" && endingCorroborated(m, op) && !notAProcess(m)) return { ...semanticEvent(m, op), company: e.company ?? semanticEvent(m, op).company };
       if (isWeakNearMiss(e)) return { ...e, signals: [...e.signals.filter((s) => s !== NEAR_MISS_WEAK), "semantic:yes"], reviewReasons: [SECOND_READER_YES] };
       return e;
     }
     if (!op.recruiting) return { ...e, reviewReasons: [...new Set([...(e.reviewReasons ?? []), SECOND_READER_NO])], signals: [...e.signals, "semantic:no"] };
     // A low-information type (a bare status, a receipt, a nudge) is made specific when the verified reading is confident about a decisive stage: the same subject
     // line ("Your application to X") carries a receipt one day and a rejection the next, and only the body tells them apart.
-    const generic = LOW_INFORMATION.has(e.type) && op.certainty === "high" && !!op.type && op.type !== e.type && (e.type === "status_update" || (e.type === "applied" ? ENDINGS.has(op.type) : DECISIVE.has(op.type)));
+    const generic = LOW_INFORMATION.has(e.type) && op.certainty === "high" && endingCorroborated(m, op) && !!op.type && op.type !== e.type && (e.type === "status_update" || (e.type === "applied" ? ENDINGS.has(op.type) : DECISIVE.has(op.type)));
     return applyTextFacts(m, { ...e, type: interviewKind(m, generic ? asEventType(op.type) : e.type), signals: [...e.signals, generic ? "semantic:type" : "semantic:agree"] });
   });
   const have = new Set(out.map((e) => e.gmailMessageId));
@@ -99,7 +108,7 @@ export function applyAssist(events: ExtractedEvent[], emails: RecruitingEmail[],
     // A model's high-certainty yes becomes a pipeline event ONLY when plain text corroborates a candidacy: the message speaks about the reader's own application, interview,
     // assessment, offer or candidacy (or from a hiring mailbox with employment words), and is not an invitation, promotion or onboarding notice dressed in the same vocabulary. Otherwise it
     // is a question for a person, never an application. (A small model's confident mistakes are membership invitations, welcome notices, event promotions and vendor mail.)
-    return [op.certainty === "high" && !notAProcess(m) ? semanticEvent(m, op) : candidateEvent(m, "strong", SECOND_READER_YES, ["semantic:yes"])];
+    return [op.certainty === "high" && !notAProcess(m) && endingCorroborated(m, op) ? semanticEvent(m, op) : candidateEvent(m, "strong", SECOND_READER_YES, ["semantic:yes"])];
   });
   void NEAR_MISS;
   // The person's own replies in a thread the MODEL recognised as recruiting: the rule reader only keeps a reply when a rule event anchors its thread, so a thread the

@@ -11,4 +11,4 @@ import { EXTRACTOR_VERSION } from "./version.ts";
  *
  * Bump the suffix whenever a product change can alter what is shown for a message that was already read.
  */
-export const PRODUCT_READER_VERSION = `${EXTRACTOR_VERSION}+product-integrity-5`;
+export const PRODUCT_READER_VERSION = `${EXTRACTOR_VERSION}+product-integrity-6`;
