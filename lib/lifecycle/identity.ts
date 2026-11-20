@@ -97,11 +97,13 @@ function breakTieByLifecycle<T extends { g: Group }>(candidates: T[], e: Effecti
   return fit.length === 1 ? fit[0] : null;
 }
 
+/** Signals that mark a role the reader COPIED from another message (the thread's first one, or an earlier message from the same sender) instead of reading it from this one. */
+const BORROWED_ROLE = ["role-inherited", "reply-in-recruiting-thread", "known-contact-continuity", "outbound-in-recruiting-thread"];
 export function groupEventsV2(input: EffectiveEvent[]): Group[] {
-  // A role the reader COPIED from an earlier message of the thread ("role-inherited") is not evidence about THIS message: automated senders reuse one thread for several
+  // A role the reader COPIED from an earlier message ("role-inherited", or a reply/continuity event that took its anchor's role) is not evidence about THIS message: automated senders reuse one thread for several
   // roles, so an inherited role would pull a role-less message into whichever application the thread started with. For identity such an event states no role.
   const original = new Map(input.map((e) => [e.id, e] as const));
-  const events = input.map((e) => (e.signals.includes("role-inherited") && !e.corrected ? { ...e, role: null } : e));
+  const events = input.map((e) => (BORROWED_ROLE.some((x) => e.signals.includes(x)) && !e.corrected && !e.confirmed ? { ...e, role: null } : e));
   const restore = (g: Group[]) => { for (const x of g) x.events = x.events.map((e) => (original.get(e.id) ? { ...e, role: original.get(e.id)!.role } : e)); return g; };
   const sorted = [...events].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.id.localeCompare(b.id));
   // a person's "belongs with" constraints form components; an event in a component whose group exists joins it directly

@@ -231,3 +231,14 @@ test("identity v3: a role copied from an earlier message of the thread is not ev
   ]);
   assert.equal(real.length, 2, "the same role stated by the message itself does join it");
 });
+
+test("identity v3: a reply or continuity event that borrowed its anchor's role does not pull itself into that application; a message stating the same role does", () => {
+  for (const marker of ["reply-in-recruiting-thread", "known-contact-continuity"]) {
+    const g = groupEventsV2([
+      ev({ id: "a1", type: "applied", role: "Quality Control Intern", day: 0, thread: "T" }),
+      ev({ id: "a2", type: "applied", role: "Regulatory Affairs Intern", day: 1, thread: "T" }),
+      ev({ id: "x", type: "rejection", role: "Quality Control Intern", day: 9, thread: "T", signals: [marker] }),
+    ]);
+    assert.equal(g.length, 3, `${marker}: a borrowed role is not evidence`);
+  }
+});
