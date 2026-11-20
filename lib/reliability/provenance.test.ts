@@ -30,3 +30,9 @@ test("provenance is idempotent and never rewrites a name it has no evidence agai
   assert.deepEqual(twice.signals, once.signals);
   assert.equal(twice.company, "Orbis");
 });
+
+test("a division is not lost to its parent: the brand is the longest run of label words that the sender's domain also spells", () => {
+  assert.equal(senderBrand(mail("Nordmarkt Logistik Karriere <karriere@logistik.nordmarkt.example>", "Bewerbung", "Eingang Ihrer Bewerbung.")), "Nordmarkt Logistik");
+  assert.equal(senderBrand(mail("Nordmarkt Digital Talent <jobs@digital.nordmarkt.example>", "Bewerbung", "Eingang Ihrer Bewerbung.")), "Nordmarkt Digital");
+  assert.equal(senderBrand(mail("Intuit Talent Acquisition <noreply@intuit.com>", "Application", "Thanks for applying.")), "Intuit");
+});
