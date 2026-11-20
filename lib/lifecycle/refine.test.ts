@@ -342,3 +342,12 @@ test("sentence fragments are not roles; real titles survive, including ones that
   for (const frag of ["and giving us the", "and we wish you success in your", "to help with the project", "of the program team"]) assert.equal(cleanRole(frag), null, frag);
   for (const ok of ["Software Engineer Intern", "Summer 2027 Analyst Program", "The Data Science Fellowship", "Assistant Engineer"]) assert.equal(cleanRole(ok), ok, ok);
 });
+
+test("marketing exclusion: a digest is always removed; a bulk-footer message is removed only when it is not decisive", () => {
+  const alert = ev({ type: "applied", day: 0, subject: "Jobs for you", company: "Orbis", signals: ["marketing:alert"] });
+  const bulkSoft = ev({ type: "status_update", day: 1, subject: "Strengths for the week", company: "Orbis", signals: ["marketing:bulk"], domain: "b.example" });
+  const bulkOffer = ev({ type: "offer", day: 2, subject: "Your Orbis offer", company: "Orbis", signals: ["marketing:bulk", "offer (ingestion)"], domain: "c.example" });
+  const out = refineEvents([alert, bulkSoft, bulkOffer]);
+  assert.deepEqual(out.excluded.map((x) => x.event.id).sort(), [alert.id, bulkSoft.id].sort());
+  assert.equal(out.events.length, 1);
+});

@@ -153,7 +153,8 @@ export function refineEvents(events: EffectiveEvent[], options: { resolveEmploye
     // a candidacy event. Decisive types (an application receipt, an interview, an offer, a rejection) keep the doubt and stay for a person to settle.
     if (!reason && !e.outbound && !isNearMissEvent(e) && e.signals.includes("semantic:no") && NO_MEANS_NO.has(e.type) && !e.signals.includes("closure (fact)")) reason = "unrelated";
     // bulk mail (a job-alert digest, a newsletter, a promotion) is recognised at ingestion by what it IS; it is never a candidacy, whatever employer it names
-    if (!reason && !e.outbound && e.signals.some((x) => x.startsWith("marketing:"))) reason = "marketing";
+    // (a job-alert digest is always bulk; "bulk" by footer markers alone never removes a decisive message: an offer, an interview, an explicit closure)
+    if (!reason && !e.outbound && (e.signals.includes("marketing:alert") || (e.signals.includes("marketing:bulk") && !["offer", "interview_scheduled", "interview_invite", "rejection", "withdrawn"].includes(e.type)))) reason = "marketing";
     if (!reason && !e.outbound && programs.has(e.senderDomain) && SOFT_TYPES.has(e.type) && !MINE.test(e.subject ?? "")) reason = "marketing";
     if (reason) { excluded.push({ event: e, reason }); continue; }
     const r: EffectiveEvent = { ...e };
