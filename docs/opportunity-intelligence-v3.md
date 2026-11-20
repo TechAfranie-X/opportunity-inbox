@@ -151,3 +151,16 @@ Replays of stored events plus the identity backfill (both accounts), before -> a
 - The 4B model still has false yeses (marketing, notification mail) and misses some employers; extraction of the employer from prose in other languages is the largest remaining lever.
 - Next action as shipped is time-boxed by design; a fixture's authors expected evidence-only behaviour.
 - Fixtures A-J are contaminated after inspection; a new sealed fixture is needed for any external claim.
+
+
+## 7. Release thresholds (written BEFORE the last gate, fixture M, was run)
+
+On one fresh independent fixture, hybrid new vs hybrid baseline (`ab0e738`):
+1. recruiting precision and recall each within 1 point of the baseline (no genuine detection traded away);
+2. wrong-merge pairs at least 25% fewer than the baseline;
+3. status, outcome and stage accuracy each not lower than the baseline;
+4. justified share of review items not lower than the baseline, and fewer review items;
+5. next-action (evidence-only clock) and source-evidence correctness not lower.
+All five must hold. A fixture is never re-run for tuning; a failed threshold is reported as failed.
+
+Gate L (fresh, run once on `b1559c1`, before the unit-evidence and borrowed-role fixes): recruiting 98.6 / 96.5 both runs; wrong merges 40 -> 32 (-20%, threshold 2 FAILED); status 85.3 -> 82.4, stage 79.4 -> 73.5 (threshold 3 FAILED), outcome 58.8 -> 61.8; review 46 -> 9 items, justified 26% -> 67% (4 met); next action 80.8 -> 88.5, source evidence 90 -> 100 (5 met). Inspection after the run found two general causes, both fixed afterwards (L is now contaminated): reply/continuity events carried their anchor's borrowed role into the wrong application, and the hiring unit named in the body ("the Patient Finance team") was not used as identity evidence.
