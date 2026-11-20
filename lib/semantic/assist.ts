@@ -59,7 +59,7 @@ function semanticEvent(m: RecruitingEmail, op: VerifiedOutput): ExtractedEvent {
 }
 
 const OWN_PROCESS = /\b(?:your (?:job |internship |fellowship |scholarship )?(?:application|candidacy|interview|assessment|offer|resume|submission|status)|(?:thank(?:s| you) for|thanks for) (?:applying|your application)|we(?:'ve| have) received your|you (?:have )?applied|invit(?:e|ed|ation) (?:you )?to (?:interview|complete|schedule|take|begin)|(?:coding|online|technical) (?:challenge|assessment|exercise)|(?:update|decision|next steps?) (?:on|about|for|regarding) your|schedule (?:your|an?) (?:interview|call)|offer (?:of employment|letter)|congratulations[^.!?\n]{0,40}\b(?:offer|selected|advance))\b/i;
-const NOT_PROCESS = /\b(?:welcome to [A-Z][\w &-]{1,30}[!.]|onboarding (?:username|portal|instructions)|username|set up your (?:account|profile)|honor society|membership|rsvp now|ask [\w ]{1,30} anything|join (?:us|our)|you(?:'re| are) invited to (?:join|attend)|invitation to (?:join|apply for membership)|(?:alumni|student) (?:network|chapter))\b/i;
+const NOT_PROCESS = /\bwelcome to [A-Z][\w &-]{1,30}[!.]?(?:\s|$)|\b(?:onboarding (?:username|portal|instructions)|username|set up your (?:account|profile)|honor society|membership|rsvp now|ask [\w ]{1,30} anything|join (?:us|our)|you(?:'re| are) invited to (?:join|attend)|invitation to (?:join|apply for membership)|(?:alumni|student) (?:network|chapter))\b/i;
 /**
  * A VETO, not a requirement (requiring corroboration crushed recall on every fixture): a model-found event whose SUBJECT is a membership invitation, a welcome/account notice or an
  * event promotion, with nothing in the message naming the reader's own process, is a question for a person, never an application.
