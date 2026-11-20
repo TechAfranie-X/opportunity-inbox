@@ -1,4 +1,5 @@
 import type { ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
+import { marketingFact } from "./evidence.ts";
 
 /**
  * Deterministic grounding: every structured value we show (company, role) should be traceable to words in the message it came
@@ -115,6 +116,8 @@ export function employerProvenance<T extends ExtractedEvent>(email: RecruitingEm
   }
   const unit = unitOf(email);
   if (unit && !out.signals.some((x) => x.startsWith("unit:"))) out.signals.push(`unit:${unit}`);
+  const marketing = email.outbound ? null : marketingFact(email);
+  if (marketing && !out.signals.some((x) => x.startsWith("marketing:"))) out.signals.push(`marketing:${marketing}`);
   return out;
 }
 

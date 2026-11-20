@@ -7,6 +7,7 @@ import type { ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
 import { applyFacts, bodyAct, explicitOffer } from "./facts.ts";
 import { CONFLICT_PREFIX, MEMBERSHIP_PREFIX, NEAR_MISS, NEAR_MISS_WEAK, hasDoubt, isNearMiss } from "./flags.ts";
 import { studentAcceptance } from "./facts.ts";
+import { marketingFact } from "./evidence.ts";
 import { employerProvenance, groundingOf, isLinkedEvent } from "./grounding.ts";
 
 /**
@@ -149,5 +150,6 @@ export function readMail(emails: RecruitingEmail[], context?: ReadContext): Extr
   });
   const have = new Set(events.map((e) => e.gmailMessageId));
   const near = emails.flatMap((e) => (have.has(e.id) ? [] : [explicitOffer(e) ?? bodyAct(e) ?? nearMiss(e)].filter((x): x is ExtractedEvent => x !== null)));
-  return [...events, ...near].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+  const flagged = near.map((e) => { const m = byId.get(e.gmailMessageId); const k = m && !m.outbound ? marketingFact(m) : null; return k ? { ...e, signals: [...e.signals, `marketing:${k}`] } : e; });
+  return [...events, ...flagged].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
 }

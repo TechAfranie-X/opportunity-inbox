@@ -5,6 +5,7 @@ import { resolveCompany } from "../recruiting/entity/resolve.ts";
 import { classifySender } from "../recruiting/entity/vendors.ts";
 import { NOT_AN_OFFER, NOT_AN_OFFER_FOR_YOU, OFFER_SUBJECT, CALENDAR_INVITE, INTERVIEW_TITLE, PRACTICE_TITLE } from "../lifecycle/refine.ts";
 import { NEAR_MISS } from "./flags.ts";
+import { bindDates, closureFact } from "./evidence.ts";
 
 /**
  * Ingestion facts: polarity and date facts read from the message text AFTER the rule reader, where the body is still in memory (bodies are never stored).
@@ -59,10 +60,17 @@ export function applyFacts(email: Pick<RecruitingEmail, "subject" | "bodyText" |
 }
 
 /** Facts about how a process ENDED or LAPSED, read from the text of a message whatever reader typed it (rules or model). */
-export function applyTextFacts(email: Pick<RecruitingEmail, "subject" | "bodyText">, event: ExtractedEvent): ExtractedEvent {
+export function applyTextFacts(email: Pick<RecruitingEmail, "subject" | "bodyText"> & { receivedAt?: Date }, event: ExtractedEvent): ExtractedEvent {
   const text = `${email.subject ?? ""}\n${email.bodyText ?? ""}`;
   let out = event;
   const set = (patch: Partial<ExtractedEvent>, signal: string) => { out = { ...out, ...patch, signals: [...out.signals, signal] }; };
+  // Terminal wording the reader typed as a bare update ("no longer under consideration"): an explicit ending, not a status.
+  if (!event.outbound && (out.type === "status_update" || out.type === "follow_up" || out.type === "applied") && closureFact(email)) {
+    set({ type: "rejection", fieldConfidence: { type: Math.max(out.fieldConfidence?.type ?? 0, 0.85), company: out.fieldConfidence?.company ?? out.confidence, role: out.fieldConfidence?.role ?? out.confidence } }, "closure (fact)");
+  }
+  // Dates belong to what they are about (quoted history, a competing offer, a promised update and a cancelled event are not this opportunity's dates).
+  out = bindDates({ subject: email.subject ?? "", bodyText: email.bodyText ?? "", receivedAt: email.receivedAt ?? new Date() }, out);
+
   // An employer acknowledging that the PERSON withdrew is a withdrawal, not a rejection: nobody turned the person down. The wording families (English, French, Spanish,
   // German, Portuguese, Italian) name the person's own act of withdrawing; "withdrawn" about the employer's offer is NOT matched.
   if ((out.type === "rejection" || out.type === "status_update" || out.type === "applied" || out.type === "follow_up") && WITHDRAWAL_ACK.test(text) && !OFFER_RESCINDED.test(text)) {

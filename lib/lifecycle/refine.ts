@@ -145,6 +145,8 @@ export function refineEvents(events: EffectiveEvent[], options: { resolveEmploye
   for (const e of events) {
     if (settled(e)) { kept.push(e); continue; }
     let reason = e.outbound ? null : exclusionReason(e);
+    // bulk mail (a job-alert digest, a newsletter, a promotion) is recognised at ingestion by what it IS; it is never a candidacy, whatever employer it names
+    if (!reason && !e.outbound && e.signals.some((x) => x.startsWith("marketing:"))) reason = "marketing";
     if (!reason && !e.outbound && programs.has(e.senderDomain) && SOFT_TYPES.has(e.type) && !MINE.test(e.subject ?? "")) reason = "marketing";
     if (reason) { excluded.push({ event: e, reason }); continue; }
     const r: EffectiveEvent = { ...e };

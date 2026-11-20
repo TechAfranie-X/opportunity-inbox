@@ -1,3 +1,4 @@
+import { cancelledDays, isCancelledSchedule } from "../lifecycle/cancelled.ts";
 import { stageOfEvent } from "./opportunity.ts";
 import { daysBetween } from "./format.ts";
 import type { EffectiveEvent, EventType, Opportunity, Stage } from "./types.ts";
@@ -111,7 +112,8 @@ export type NextMoment = { label: string; date: Date; hasTime: boolean; kind: "s
 /** The nearest future date that matters: an interview time, an assessment due date or an offer deadline. */
 export function nextMoment(opportunity: Opportunity, now: Date): NextMoment | null {
   const candidates: NextMoment[] = [];
-  const scheduled = [...opportunity.events].reverse().find((e) => e.type === "interview_scheduled" && e.eventDate);
+  const cancelled = cancelledDays(opportunity.events);
+  const scheduled = [...opportunity.events].reverse().find((e) => e.type === "interview_scheduled" && e.eventDate && !isCancelledSchedule(e, cancelled));
   if (scheduled?.eventDate && daysBetween(now, scheduled.eventDate) >= 0) {
     candidates.push({ label: "Interview", date: scheduled.eventDate, hasTime: scheduled.eventDateHasTime, kind: "scheduled" });
   }

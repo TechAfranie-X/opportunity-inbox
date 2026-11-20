@@ -1,3 +1,4 @@
+import { cancelledDays, isCancelledSchedule } from "../lifecycle/cancelled.ts";
 import { hasDoubt } from "../reliability/flags.ts";
 import { DEFAULT_POLICY, type Policy } from "./policy.ts";
 import type { ActionItem, ActionKind, EffectiveEvent, Opportunity } from "./types.ts";
@@ -130,7 +131,8 @@ export function buildActions(
     }
 
     // 2. Upcoming / just-finished interview
-    const interview = lastOf("interview_scheduled");
+    const cancelled = cancelledDays(events);
+    const interview = [...events].reverse().find((e) => e.type === "interview_scheduled" && !isCancelledSchedule(e, cancelled));
     if (interview?.eventDate) {
       const d = Math.round((dayStart(interview.eventDate) - today) / DAY);
       const after = laterThan(interview);

@@ -125,3 +125,18 @@ test("a retraction of an ending reopens the process and is flagged; an ordinary 
   ]);
   assert.equal(plain[0].status, "closed");
 });
+
+test("a scheduled interview that a later message cancelled is not an upcoming interview", async () => {
+  const { buildActions } = await import("../recruiting/actions.ts");
+  const day = 86_400_000;
+  const soon = new Date(Date.UTC(2026, 10, 20));
+  const mk = (type: EventType, d: number, extra: Partial<EffectiveEvent> = {}) => ev({ type, day: d, company: "Orbis", thread: "t", role: "Data Intern", ...extra });
+  const sched = { ...mk("interview_scheduled", 0), eventDate: soon } as EffectiveEvent;
+  const cancel = { ...mk("status_update", 1, { signals: ["cancellation (fact)", "cancelled:2026-11-20"] }) } as EffectiveEvent;
+  const opps = buildOpportunities([sched, cancel]);
+  const now = new Date(Date.UTC(2026, 10, 19, 12));
+  void day;
+  assert.equal(buildActions(opps, now).filter((a) => a.kind === "upcoming_interview").length, 0);
+  const live = buildOpportunities([sched]);
+  assert.equal(buildActions(live, now).filter((a) => a.kind === "upcoming_interview").length, 1);
+});
