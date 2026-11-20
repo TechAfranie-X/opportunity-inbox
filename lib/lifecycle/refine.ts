@@ -38,8 +38,8 @@ const CONSUMER_DOMAIN = /(?:^|\.)(?:robinhood|coinbase|venmo|paypal|cash|wellsfa
  * service, tenancy, membership or status, not a job, internship, fellowship or scholarship. The object noun must sit next to "application"/"interview", and
  * any employment word in the same subject ("Loan Officer position", "Membership Coordinator role") keeps the message.
  */
-const NON_EMPLOYMENT_OBJECT = "(?:visa|immigration|passport|green card|loan|mortgage|credit card|rental|lease|tenancy|apartment|housing|membership|club|society|council|volunteer(?:ing)?|insurance|tax|license|licence|permit|parking)";
-const NON_EMPLOYMENT = new RegExp(`\\b${NON_EMPLOYMENT_OBJECT}\\b[^.!?]{0,25}\\b(?:application|interview|appointment)\\b|\\bapplication (?:to|for) (?:join |the |our |a |an )?(?:[\\w-]+ ){0,2}${NON_EMPLOYMENT_OBJECT}\\b|\\bapplying as (?:a |an )?volunteer\\b|\\bapplication to join\\b`, "i");
+const NON_EMPLOYMENT_OBJECT = "(?:honou?r(?:s)? (?:society|college|program)|society|chapter|fraternity|sorority|association|alumni|visa|immigration|passport|green card|loan|mortgage|credit card|rental|lease|tenancy|apartment|housing|membership|club|society|council|volunteer(?:ing)?|insurance|tax|license|licence|permit|parking)";
+const NON_EMPLOYMENT = new RegExp(`\\b(?:invit\\w* to (?:apply|join)|apply (?:for|to)|join)\\b[^.!?]{0,30}\\b${NON_EMPLOYMENT_OBJECT}\\b|\\b${NON_EMPLOYMENT_OBJECT}\\b[^.!?]{0,25}\\b(?:application|interview|appointment)\\b|\\bapplication (?:to|for) (?:join |the |our |a |an )?(?:[\\w-]+ ){0,2}${NON_EMPLOYMENT_OBJECT}\\b|\\bapplying as (?:a |an )?volunteer\\b|\\bapplication to join\\b`, "i");
 const EMPLOYMENT_WORDS = /\b(?:job|role|position|internship|intern|career|candidate|interview|recruit\w*|hiring|employment)\b/i;
 const ATS_SENDER = /(?:^|\.)(?:greenhouse(?:-mail)?\.io|lever\.co|myworkday\.com|ashbyhq\.com|icims\.com|smartrecruiters\.com|workable\.com|jobvite\.com|modernhire\.com)$/i;
 

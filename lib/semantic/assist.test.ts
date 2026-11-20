@@ -47,3 +47,11 @@ test("interviewKind: a confirmed time is scheduled, offered choices are an invit
   assert.equal(interviewKind(m("We would like to talk with you about the role."), "interview_invite"), "interview_invite");
   assert.equal(interviewKind(m("You're booked for Thursday at 2pm."), "offer"), "offer", "other types are never touched");
 });
+
+import { notAProcess } from "./assist.ts";
+test("a model-found event is vetoed when its subject is a membership invitation, a welcome/account notice or an event promotion and nothing names the reader's own process; real process mail is not", () => {
+  const m = (subject: string, bodyText = "Hello.") => ({ subject, bodyText });
+  for (const s of ["You Are Invited to Join the Honor Society", "Welcome to DialCare!", "Honors College Invitation to Apply for Membership", "RSVP Now: Ask our interns anything this week", "Welcome to Orbis - Onboarding Username"]) assert.ok(notAProcess(m(s)), s);
+  assert.ok(!notAProcess(m("Welcome to Orbis!", "Hi Sam, thank you for applying. We have received your application for the Data Intern role.")), "a welcome that names the reader's application stays");
+  for (const s of ["Your application to Orbis", "Interview invitation", "Assessment: complete within 5 days", "Update on your Databricks-like Fellows Application"]) assert.ok(!notAProcess(m(s)), s);
+});

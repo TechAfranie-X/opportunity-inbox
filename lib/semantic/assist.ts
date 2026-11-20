@@ -58,6 +58,15 @@ function semanticEvent(m: RecruitingEmail, op: VerifiedOutput): ExtractedEvent {
   }));
 }
 
+const OWN_PROCESS = /\b(?:your (?:job |internship |fellowship |scholarship )?(?:application|candidacy|interview|assessment|offer|resume|submission|status)|(?:thank(?:s| you) for|thanks for) (?:applying|your application)|we(?:'ve| have) received your|you (?:have )?applied|invit(?:e|ed|ation) (?:you )?to (?:interview|complete|schedule|take|begin)|(?:coding|online|technical) (?:challenge|assessment|exercise)|(?:update|decision|next steps?) (?:on|about|for|regarding) your|schedule (?:your|an?) (?:interview|call)|offer (?:of employment|letter)|congratulations[^.!?\n]{0,40}\b(?:offer|selected|advance))\b/i;
+const NOT_PROCESS = /\b(?:welcome to [A-Z][\w &-]{1,30}[!.]|onboarding (?:username|portal|instructions)|username|set up your (?:account|profile)|honor society|membership|rsvp now|ask [\w ]{1,30} anything|join (?:us|our)|you(?:'re| are) invited to (?:join|attend)|invitation to (?:join|apply for membership)|(?:alumni|student) (?:network|chapter))\b/i;
+/**
+ * A VETO, not a requirement (requiring corroboration crushed recall on every fixture): a model-found event whose SUBJECT is a membership invitation, a welcome/account notice or an
+ * event promotion, with nothing in the message naming the reader's own process, is a question for a person, never an application.
+ */
+export function notAProcess(m: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
+  return NOT_PROCESS.test(m.subject) && !OWN_PROCESS.test(`${m.subject}\n${m.bodyText.slice(0, 1500)}`);
+}
 const LOW_INFORMATION = new Set<string>(["status_update", "applied", "follow_up"]);
 /** What a RECEIPT may be retyped to: only an ending or an offer. A receipt's own wording ("Thank you for applying") is strong, and a confirmation page that mentions an assessment link is still a receipt. */
 const ENDINGS = new Set<string>(["rejection", "withdrawn", "offer"]);
@@ -87,7 +96,10 @@ export function applyAssist(events: ExtractedEvent[], emails: RecruitingEmail[],
     if (m.outbound || have.has(m.id)) return [];
     const op = opinions.get(m.id);
     if (!usable(op) || !op.recruiting) return [];
-    return [op.certainty === "high" ? semanticEvent(m, op) : candidateEvent(m, "strong", SECOND_READER_YES, ["semantic:yes"])];
+    // A model's high-certainty yes becomes a pipeline event ONLY when plain text corroborates a candidacy: the message speaks about the reader's own application, interview,
+    // assessment, offer or candidacy (or from a hiring mailbox with employment words), and is not an invitation, promotion or onboarding notice dressed in the same vocabulary. Otherwise it
+    // is a question for a person, never an application. (A small model's confident mistakes are membership invitations, welcome notices, event promotions and vendor mail.)
+    return [op.certainty === "high" && !notAProcess(m) ? semanticEvent(m, op) : candidateEvent(m, "strong", SECOND_READER_YES, ["semantic:yes"])];
   });
   void NEAR_MISS;
   // The person's own replies in a thread the MODEL recognised as recruiting: the rule reader only keeps a reply when a rule event anchors its thread, so a thread the
