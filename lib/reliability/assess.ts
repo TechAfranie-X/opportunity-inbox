@@ -30,6 +30,13 @@ export { NEAR_MISS, NEAR_MISS_WEAK, MEMBERSHIP_PREFIX, CONFLICT_PREFIX, isNearMi
 const BULK = /\b(?:unsubscribe|manage (?:your )?(?:email )?preferences|view (?:this )?(?:email )?in (?:your )?browser|email preferences|opt[- ]out|you are receiving this|sent to you because)\b/i;
 const IMPORTANT = "IMPORTANT";
 
+/** The sender is hiring infrastructure: a known applicant-tracking platform, or a careers/jobs/recruiting/talent/hr mailbox. */
+function hiringSender(from: string): boolean {
+  const addr = /<?([^<>\s@]+)@([^<>\s]+)>?/.exec(from);
+  if (!addr) return false;
+  return classifySender(addr[2].toLowerCase()) === "ats" || HIRING_MAILBOX.test(addr[1]);
+}
+const RECEIPT = /\b(?:thank(?:s| you) for (?:applying|your application|submitting your|completing)|we(?:'ve| have) (?:successfully )?received your (?:application|candidacy|submission)|your application (?:to|for|with|at|has been|was|is) [^.\n]{0,70}\b(?:received|submitted|sent|complete|in)\b|application (?:received|confirmation|submitted|complete)\b|you(?:'ve| have) (?:successfully )?applied|(?:assessment|coding challenge|online test|pre-screen) (?:completed|submitted|received)\b|thank(?:s| you) for (?:taking|completing) (?:the |our |your )?[\w -]{0,40}(?:assessment|challenge|test))/i;
 export function membershipDoubt(email: RecruitingEmail, event: ExtractedEvent): string | null {
   if (email.outbound || isLinkedEvent(event)) return null; // linked to a candidacy we already know by its thread or sender
   const evidence = processEvidence(email.subject, email.bodyText);
@@ -37,6 +44,9 @@ export function membershipDoubt(email: RecruitingEmail, event: ExtractedEvent): 
   if (evidence.eventLike && !evidence.employment) return `${MEMBERSHIP_PREFIX} it reads like a course, event or promotion rather than a job`;
   if (!email.labels || email.labels.length === 0) return null; // no Gmail signal is not evidence against
   if (evidence.candidacy || email.labels.includes(IMPORTANT)) return null;
+  // an explicit receipt of the reader's own action ("Thank you for applying to X", "We have received your application", "Assessment completed: X") IS a named candidacy
+  // ... when it also comes from hiring infrastructure (an applicant-tracking platform, a careers/jobs/talent mailbox) or speaks of employment: a gym's or a club's receipt is still doubted
+  if ((RECEIPT.test(email.subject) || RECEIPT.test(email.bodyText.slice(0, 700))) && (evidence.employment || hiringSender(email.from))) return null;
   return `${MEMBERSHIP_PREFIX} nothing in it names one of your applications or interviews, and Gmail did not mark it important`;
 }
 

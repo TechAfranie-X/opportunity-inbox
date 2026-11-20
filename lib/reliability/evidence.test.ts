@@ -90,3 +90,11 @@ test("an invitation that mentions other candidates or fit is not a goodbye; real
   const mixed = "Hi Sam, your application is no longer under consideration. We encourage other candidates like you to apply again; next steps for future roles are on our site.";
   assert.ok(outcomeConflict(mail(mixed), ev("status_update")), "closure wording keeps the doubt even beside forward-looking words");
 });
+
+test("an explicit receipt of the reader's own action is a named candidacy (no membership doubt); an unrelated promotion still is doubted", async () => {
+  const { membershipDoubt } = await import("./assess.ts");
+  const mail = (subject: string, body: string) => ({ id: "m", threadId: "t", from: "Greenhouse <no-reply@us.greenhouse-mail.io>", subject, bodyText: body, receivedAt: RECEIVED, outbound: false, labels: ["INBOX", "CATEGORY_UPDATES"] }) as never;
+  assert.equal(membershipDoubt(mail("Thank you for applying to Orbis", "Hi Sam, we have your application."), ev("applied")), null);
+  assert.equal(membershipDoubt(mail("Assessment completed: Orbis Pre-Screen", "Your results are being reviewed."), ev("assessment_completed")), null);
+  assert.ok(membershipDoubt(mail("Spring prizes inside", "Enter our giveaway for a chance to win. Next steps: share with friends. Application deadline for the prize draw is Friday."), ev("applied")));
+});

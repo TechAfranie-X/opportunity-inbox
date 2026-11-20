@@ -135,6 +135,7 @@ const WEAK_SWEEP_EVIDENCE = (signals: string[]) =>
   signals.includes("via:sweep") && !signals.includes("subject") &&
   (signals.includes("known-contact-continuity") || signals.includes("reply-in-recruiting-thread") || signals.includes("interview confirmed") || signals.includes("rejection") || signals.includes("follow up"));
 
+const NO_MEANS_NO = new Set<string>(["status_update", "follow_up", "assessment_completed", "recruiter_outreach", "assessment"]);
 const SOFT_OR_REJECTION = new Set<string>([...SOFT_TYPES, "rejection"]);
 const MODEL_AGREED = (signals: string[]) => signals.some((x) => x === "semantic:agree" || x === "semantic:event" || x === "semantic:type" || x === "semantic:yes");
 /** Any process stage a reader may mistake onboarding paperwork for ("Welcome ... username" read as an application receipt). Offers, rejections and status updates are left as they are. */
@@ -148,6 +149,9 @@ export function refineEvents(events: EffectiveEvent[], options: { resolveEmploye
   for (const e of events) {
     if (settled(e)) { kept.push(e); continue; }
     let reason = e.outbound ? null : exclusionReason(e);
+    // The model read the message and said it is NOT recruiting, and the rules only typed it as something soft (a bare update, a reminder, a result): two readers agree it is not
+    // a candidacy event. Decisive types (an application receipt, an interview, an offer, a rejection) keep the doubt and stay for a person to settle.
+    if (!reason && !e.outbound && !isNearMissEvent(e) && e.signals.includes("semantic:no") && NO_MEANS_NO.has(e.type) && !e.signals.includes("closure (fact)")) reason = "unrelated";
     // bulk mail (a job-alert digest, a newsletter, a promotion) is recognised at ingestion by what it IS; it is never a candidacy, whatever employer it names
     if (!reason && !e.outbound && e.signals.some((x) => x.startsWith("marketing:"))) reason = "marketing";
     if (!reason && !e.outbound && programs.has(e.senderDomain) && SOFT_TYPES.has(e.type) && !MINE.test(e.subject ?? "")) reason = "marketing";
