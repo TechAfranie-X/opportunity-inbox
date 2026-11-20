@@ -317,3 +317,13 @@ test("a bare update that only the model found in a wide sweep, with no candidacy
   assert.deepEqual(out.excluded.map((x) => x.event.id), [gone.id]);
   assert.equal(out.events.length, 3);
 });
+
+test("stored events: an interview's calendar invitation typed as an assessment becomes the interview; assessment and practice invitations stay", () => {
+  const cal = ev({ type: "assessment", day: 0, subject: "Invitation: Your Upcoming Virtual Interviews with Orbis @ Fri Nov 20, 2026 10am (PST)", company: "Orbis" });
+  const asm = ev({ type: "assessment", day: 1, subject: "Invitation: Online Assessment window @ Fri Nov 20, 2026 10am", company: "Orbis", domain: "b.example" });
+  const mock = ev({ type: "assessment", day: 2, subject: "Invitation: Mock Interview Workshop @ Fri Nov 20, 2026 10am", company: "Orbis", domain: "c.example" });
+  const out = refineEvents([cal, asm, mock]).events;
+  assert.equal(out.find((e) => e.id === cal.id)?.type, "interview_scheduled");
+  assert.equal(out.find((e) => e.id === asm.id)?.type, "assessment");
+  assert.ok(!out.find((e) => e.id === mock.id) || out.find((e) => e.id === mock.id)?.type === "assessment");
+});

@@ -109,3 +109,13 @@ test("an employer acknowledging the person's withdrawal is a withdrawal; a resci
   assert.ok(run("status_update", "Hello Sam, we haven't received a response to our July 8 offer for the Policy Intern role and it has now expired.").signals.includes("offer expired (fact)"));
   assert.ok(!run("status_update", "Hello Sam, your application is under review.").signals.includes("offer expired (fact)"));
 });
+
+test("a calendar invitation titled as an interview is the interview scheduled, not an assessment due; an assessment or practice invitation is not touched", () => {
+  const body = "You have been invited to the following event. When: Fri Nov 20, 2026 10am. Joining info below. Please complete the pre-interview assessment beforehand.";
+  const interview = one(mail("ci1", "Lauren Williams <lauren@harvey.example>", "Invitation: Your Upcoming Virtual Interviews with Harvey @ Fri Nov 20, 2026 10am (PST)", body, "2026-11-16T05:25:00Z"));
+  assert.ok(!interview || interview.type === "interview_scheduled", interview?.type);
+  const assessment = one(mail("ci2", "Careers <careers@harvey.example>", "Invitation: Online Assessment window @ Fri Nov 20, 2026 10am", body, "2026-11-16T05:25:00Z"));
+  assert.notEqual(assessment?.type, "interview_scheduled");
+  const practice = one(mail("ci3", "Career Center <cc@uni.example>", "Invitation: Mock Interview Workshop @ Fri Nov 20, 2026 10am", body, "2026-11-16T05:25:00Z"));
+  assert.notEqual(practice?.type, "interview_scheduled");
+});

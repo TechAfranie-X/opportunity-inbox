@@ -3,7 +3,7 @@ import test from "node:test";
 
 // reassess.ts imports the database layer through "@/..." aliases; the selection rule is pure, so it is exercised through a dynamic import guarded by the loader.
 test("a backfill never selects a row a person confirmed, corrected or ignored, nor one already refreshed in this generation; running it twice selects nothing new", async () => {
-  const { selectBackfillCandidates, BACKFILL_MARK } = await import("./reassess.ts");
+  const { selectBackfillCandidates, BACKFILL_MARK } = await import("./backfill-select.ts");
   const row = (id: string, signals: string[] = []) => ({ gmailMessageId: id, signals });
   const rows = [row("a"), row("b"), row("c"), row("d", [BACKFILL_MARK]), row("e", ["identity:backfilled:2"])];
   const corrected = new Set(["b", "c"]); // confirmed / edited / ignored: their correction column is non-null

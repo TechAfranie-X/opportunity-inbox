@@ -1,5 +1,6 @@
 import { mailSourceFor } from "@/lib/gmail/source";
 import { loadAllExtracted, loadCorrectedMessageIds, loadUnjudgedNearMisses, saveExtractedEvents } from "@/lib/recruiting/store";
+import { BACKFILL_MARK, selectBackfillCandidates } from "@/lib/recruiting/backfill-select";
 import { readMail } from "@/lib/reliability/assess";
 import { isNearMiss } from "@/lib/reliability/flags";
 import type { ExtractedEvent } from "@/lib/recruiting/types";
@@ -43,11 +44,6 @@ export async function reassessPossible(userGoogleSub: string, reader: SemanticRe
  * and never touches a person's correction, which lives in its own column), and failure-closed (without a model reading for a message, its row is left as it was).
  */
 /** Bumped when the identity evidence changes, so a stored row is refreshed once per generation (idempotent within one). */
-export const BACKFILL_MARK = "identity:backfilled:3";
-/** Which stored rows a backfill may re-read: not already refreshed in this generation, and NEVER a row a person confirmed, corrected or ignored. Pure, so it is tested. */
-export function selectBackfillCandidates<T extends { gmailMessageId: string; signals: string[] }>(rows: T[], corrected: ReadonlySet<string>, limit = 400): T[] {
-  return rows.filter((e) => !e.signals.includes(BACKFILL_MARK) && !corrected.has(e.gmailMessageId)).slice(0, limit);
-}
 export async function backfillIdentity(userGoogleSub: string, reader: SemanticReader | null, selfNames: string[] = [], limit = 400): Promise<{ examined: number; updated: number; skipped: number }> {
   const source = await mailSourceFor(userGoogleSub);
   if (!source) throw new Error("not connected");

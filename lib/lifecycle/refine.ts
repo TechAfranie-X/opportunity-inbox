@@ -66,6 +66,10 @@ export const NOT_AN_OFFER = /\b(?:search|tips|scam|webinar|template|question|tim
 export const NOT_AN_OFFER_FOR_YOU = /\b(?:offers? (?:you )?(?:a )?(?:free|discount)|% off|special offer|limited[- ]time offer|refer a friend|offer expires? (?:soon )?on sale)\b/i;
 const OFFER_FROM = new Set<string>(["status_update", "follow_up", "interview_invite", "recruiter_outreach"]);
 
+/** A calendar invitation whose title is an interview. */
+export const CALENDAR_INVITE = /^\s*(?:(?:updated|new) )?invitation(?: from [^:]{1,40})?\s*:/i;
+export const INTERVIEW_TITLE = /\binterviews?\b/i;
+export const PRACTICE_TITLE = /\b(?:mock|practice|prep(?:aration)?|workshop|info(?:rmation)? session|webinar|panel|career fair|office hours)\b/i;
 const TRAILING_CONNECTORS = /\s+(?:and|the|of|for|at|&|to)(?:\s+the)?$/i;
 const LEADING_CONNECTORS = /^(?:and|the|of|for|&)\s+(?:the\s+)?(?=[A-Z0-9])/;
 const TEAM_ONLY = /^(?:the\s+)?(?:[\w&-]+\s+){0,2}(?:team|teams|department|group)$/i;
@@ -157,6 +161,12 @@ export function refineEvents(events: EffectiveEvent[], options: { resolveEmploye
     if (company !== e.company) r.company = company;
     const role = cleanRole(e.role);
     if (role !== e.role) r.role = role;
+    // stored events too: an interview's calendar invitation read as an assessment (phantom "assessment due" beside the real interview)
+    if (!e.outbound && CALENDAR_INVITE.test(e.subject ?? "") && INTERVIEW_TITLE.test(e.subject ?? "") && !PRACTICE_TITLE.test(e.subject ?? "") && (e.type === "assessment" || e.type === "assessment_completed")) {
+      r.type = "interview_scheduled";
+      if (e.eventDate) r.dateKind = "scheduled";
+      r.signals = [...e.signals, "calendar invitation for an interview (refined)"];
+    }
     if (OFFER_FROM.has(r.type) && OFFER_SUBJECT.test(e.subject ?? "") && !NOT_AN_OFFER_FOR_YOU.test(e.subject ?? "") && !NOT_AN_OFFER.test(e.subject ?? "")) {
       r.type = "offer";
       r.signals = withoutNearMiss(e.signals).concat("offer (refined)");

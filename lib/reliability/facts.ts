@@ -3,7 +3,7 @@ import type { ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
 import { parseSender } from "../opportunities/normalize.ts";
 import { resolveCompany } from "../recruiting/entity/resolve.ts";
 import { classifySender } from "../recruiting/entity/vendors.ts";
-import { NOT_AN_OFFER, NOT_AN_OFFER_FOR_YOU, OFFER_SUBJECT } from "../lifecycle/refine.ts";
+import { NOT_AN_OFFER, NOT_AN_OFFER_FOR_YOU, OFFER_SUBJECT, CALENDAR_INVITE, INTERVIEW_TITLE, PRACTICE_TITLE } from "../lifecycle/refine.ts";
 import { NEAR_MISS } from "./flags.ts";
 
 /**
@@ -49,6 +49,12 @@ export function applyFacts(email: Pick<RecruitingEmail, "subject" | "bodyText" |
     set({ confidence: Math.min(out.confidence, 0.3), eventDate: null, dateKind: null, reviewReasons: [...(out.reviewReasons ?? []), "possible: a generic assessment result, not tied to an application"] }, NEAR_MISS);
   }
   out = applyTextFacts(email, out);
+
+  // A calendar invitation whose TITLE is an interview ("Invitation: Your Upcoming Virtual Interviews with X @ Fri Nov 20, 10am") is the interview being scheduled. Its body is
+  // boilerplate that can mention an assessment, and read as one it produces a phantom "assessment due" beside the real interview.
+  if (CALENDAR_INVITE.test(email.subject ?? "") && INTERVIEW_TITLE.test(email.subject ?? "") && !PRACTICE_TITLE.test(email.subject ?? "") && (out.type === "assessment" || out.type === "assessment_completed" || out.type === "status_update" || out.type === "follow_up")) {
+    set({ type: "interview_scheduled", dateKind: out.eventDate ? "scheduled" : out.dateKind, fieldConfidence: { type: Math.max(out.fieldConfidence?.type ?? 0, 0.7), company: out.fieldConfidence?.company ?? out.confidence, role: out.fieldConfidence?.role ?? out.confidence } }, "calendar invitation for an interview (fact)");
+  }
   return out;
 }
 
