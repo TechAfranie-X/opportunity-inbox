@@ -134,3 +134,10 @@ test("an acceptance or response deadline is captured as the deadline of an offer
   const plain = one(mail("d2", "Program Office <office@nsf-workshop.example>", "Congratulations, you have been selected", "Hi Sam, congratulations: you have been selected to attend the workshop held on October 28, 2026 in the main hall.", "2026-10-24T12:00:00Z"));
   assert.ok(!plain || plain.eventDate?.toISOString().slice(0, 10) !== "2026-10-28" || plain.dateKind !== "deadline");
 });
+
+test("an outbound message saying the student will join is an acceptance; a question or a decline is not", async () => {
+  const { studentAcceptance } = await import("./facts.ts");
+  const base = { id: "o", gmailMessageId: "o", gmailThreadId: "t", occurredAt: new Date(), outbound: true, senderName: "", senderDomain: "", subject: "", type: "user_reply", company: null, role: null, eventDate: null, eventDateHasTime: false, dateKind: null, confidence: 0.5, reviewReasons: [], signals: [] } as never;
+  for (const body of ["Hi Dana, I will be joining the team this summer, and I have completed the pre-start paperwork.", "Thank you! I'm excited to join in June."]) assert.ok(studentAcceptance(outMail("a", "t", "Re: Offer", body, "2026-01-02T00:00:00Z"), base).signals.includes("student:accepts"), body);
+  for (const body of ["Could you tell me whether I will be joining the Austin or the Denver office?", "Thanks, but I have decided to decline the offer.", "I will send the signed forms tomorrow."]) assert.ok(!studentAcceptance(outMail("b", "t", "Re: Offer", body, "2026-01-02T00:00:00Z"), base).signals.includes("student:accepts"), body);
+});

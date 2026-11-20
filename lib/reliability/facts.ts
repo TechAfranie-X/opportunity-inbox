@@ -197,10 +197,12 @@ export function bodyAct(email: RecruitingEmail): ExtractedEvent | null {
  * silence or from onboarding mail). It counts only after an offer exists in the same opportunity (the reducer checks), so "I accept the time" earlier in a
  * thread is harmless. A refusal wording vetoes it. Wording families, not phrases: English, Spanish, French, German, Portuguese, Italian.
  */
-const ACCEPT = /\b(?:i(?:'m| am)? (?:\w+ ){0,3}accept\b|(?:happily|gladly|pleased|delighted|thrilled|excited|happy|glad) to accept|accept(?:ing)? (?:the|your|this|that) (?:\w+ ){0,2}(?:offer|position|role|internship|scholarship|fellowship|place)|j['’]accepte|accepte (?:avec|votre|l['’])|\bacepto\b|\bacepta(?:mos)?\b|nehme (?:\w+ ){0,4}an\b|nehme (?:\w+ ){0,3}(?:angebot|stelle|stipendium|zusage)|\bzusage\b|\baceito\b|\baceitar\b|\baccetto\b|\baccettiamo\b)/i;
+const ACCEPT = /\b(?:i(?:'m| am)? (?:\w+ ){0,3}accept\b|(?:happily|gladly|pleased|delighted|thrilled|excited|happy|glad) to accept|accept(?:ing)? (?:the|your|this|that) (?:\w+ ){0,2}(?:offer|position|role|internship|scholarship|fellowship|place)|j['’]accepte|accepte (?:avec|votre|l['’])|\bacepto\b|\bacepta(?:mos)?\b|nehme (?:\w+ ){0,4}an\b|nehme (?:\w+ ){0,3}(?:angebot|stelle|stipendium|zusage)|\bzusage\b|\baceito\b|\baceitar\b|\baccetto\b|\baccettiamo\b|\bwill be (?:joining|starting|working)\b|\b(?:excited|happy|thrilled|looking forward|eager|ready) to (?:join|start|begin|work)\b|\bi(?:'m| am) (?:in|on board)\b|\blooking forward to (?:joining|starting)\b)/i;
 const REFUSE = /\b(?:decline|declining|declined|unable to accept|cannot accept|can(?:'|’)?t accept|not able to accept|no puedo aceptar|rechaz\w*|lehne\w*|ablehne\w*|recuso|n[ãa]o posso aceitar|rifiuto|non posso accettare|refuse\w*|ne peux pas accepter|d[ée]cline)\b/i;
+/** A question about joining is not a statement of joining. */
+const QUESTIONING = /\b(?:whether|if|which|when|where|could you|can you|would you|do you)\b[^.!?\n]{0,70}\b(?:i will be|i'?ll be|joining|starting)\b/i;
 export function studentAcceptance(email: RecruitingEmail, event: ExtractedEvent): ExtractedEvent {
   const text = `${email.subject}\n${email.bodyText.slice(0, 700)}`;
-  if (!ACCEPT.test(text) || REFUSE.test(text)) return event;
+  if (!ACCEPT.test(text) || REFUSE.test(text) || QUESTIONING.test(text)) return event;
   return { ...event, signals: [...event.signals, "student:accepts"] };
 }
