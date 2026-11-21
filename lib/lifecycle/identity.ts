@@ -29,7 +29,15 @@ const CONSEQUENTIAL = new Set<EventType>(["rejection", "withdrawn", "offer", "in
 const STAGE_BEARING = new Set<EventType>(["applied", "recruiter_outreach", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer", "rejection", "withdrawn"]);
 
 /** The employer name rests only on the sender (or on very weak evidence). */
-export const weakEmployer = (e: EffectiveEvent) => !!e.company && !e.corrected && !e.confirmed && (e.signals.includes("employer:sender-only") || (e.fieldConfidence?.company ?? 1) < 0.45);
+/** The message's own subject names the employer (any significant word of the name): independent evidence that the name did not come from the sender alone. */
+const subjectNamesEmployer = (e: EffectiveEvent): boolean => {
+  if (!e.company || !e.subject) return false;
+  const norm = (x: string) => x.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  const subj = ` ${norm(e.subject)} `;
+  const words = norm(e.company).split(" ").filter((w) => w.length >= 4 && !["group", "company", "corporation", "international", "technologies", "services", "solutions", "systems", "careers", "talent"].includes(w));
+  return words.length > 0 && words.some((w) => subj.includes(` ${w} `) || subj.includes(` ${w}s `));
+};
+export const weakEmployer = (e: EffectiveEvent) => !!e.company && !e.corrected && !e.confirmed && !subjectNamesEmployer(e) && (e.signals.includes("employer:sender-only") || (e.fieldConfidence?.company ?? 1) < 0.45);
 /** "Corvid" is an alias of "Corvid Systems": the shorter name's words are a leading part of the longer one's, and the longer adds at most two words. Equal names are the strict case, not this one. */
 export function employerAlias(a: string | null | undefined, b: string | null | undefined): boolean {
   const toks = (x: string) => x.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9]+/).filter(Boolean);
@@ -294,7 +302,13 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
   // A role the reader COPIED from an earlier message ("role-inherited", or a reply/continuity event that took its anchor's role) is not evidence about THIS message: automated senders reuse one thread for several
   // roles, so an inherited role would pull a role-less message into whichever application the thread started with. For identity such an event states no role.
   const original = new Map(input.map((e) => [e.id, e] as const));
-  const events = input.map((e) => { if (BORROWED_ROLE.some((x) => e.signals.includes(x)) && !e.corrected && !e.confirmed) { const stripped = { ...e, role: null }; if (e.role) borrowedRole.set(stripped, e.role); return stripped; } return e; });
+  const events = input.map((e0) => {
+    // a position the message itself names ("…for the Internship - Digital, North America position") is the role for identity when the stored role is generic
+    const named = ctx?.attribution && !e0.corrected && !e0.confirmed && !specific(e0.role) ? e0.signals.find((x) => x.startsWith("role:named:"))?.slice(11) : undefined;
+    const e = named && specific(named) ? { ...e0, role: named } : e0;
+    if (BORROWED_ROLE.some((x) => e.signals.includes(x)) && !e.corrected && !e.confirmed && !named) { const stripped = { ...e, role: null }; if (e.role) borrowedRole.set(stripped, e.role); return stripped; }
+    return e;
+  });
   const restore = (g: Group[]) => { for (const x of g) x.events = x.events.map((e) => (original.get(e.id) ? { ...e, role: original.get(e.id)!.role } : e)); return g; };
   const sorted = [...events].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.id.localeCompare(b.id));
   // a person's "belongs with" constraints form components; an event in a component whose group exists joins it directly

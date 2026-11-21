@@ -86,3 +86,10 @@ test("a condition is not an ending: 'if you are not selected' and 'you will not 
   assert.equal(ownEnding({ subject: "Next steps", bodyText: "Thank you for completing your application. You will not be able to proceed to the next phase if the questionnaire is not completed." }), false);
   assert.equal(ownEnding({ subject: "Update", bodyText: "Thank you for your application. Unfortunately, we are not able to move forward with your candidacy." }), true);
 });
+
+import { namedRole } from "./evidence.ts";
+test("the position a message names in its own words is extracted; generic phrases are not", () => {
+  assert.equal(namedRole({ subject: "Your application with Acme", bodyText: "Although your skills are impressive, other candidates have been selected to move forward for the Internship - Digital, North America position. If a suitable position matches you will be contacted." }), "Internship - Digital, North America");
+  assert.equal(namedRole({ subject: "Update", bodyText: "Thank you for your application for Software Engineer Intern (Summer 2027). We will be in touch." }), "Software Engineer Intern (Summer 2027)");
+  assert.equal(namedRole({ subject: "Update", bodyText: "We will move forward to the next round of the process for the team." }), null);
+});

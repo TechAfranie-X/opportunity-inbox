@@ -22,12 +22,16 @@ if (rb) {
 }
 const refresh = process.argv.includes("--refresh"); // targeted: re-derive the ending signals of rows that have them (and any listed message-id prefixes), removing the ones the text no longer supports
 const extra = refresh && process.argv[process.argv.indexOf("--refresh") + 1]?.match(/^[0-9a-f,]+$/) ? process.argv[process.argv.indexOf("--refresh") + 1].split(",") : [];
+const isStale = (x: string) => STALE.includes(x) || x.startsWith("role:named:");
 const STALE = ["ending:own", "withdrawal:ack", "ending:wording", "own:receipt"];
 const modeled = process.argv.includes("--modeled-unclassed"); // targeted: only model-found or near-miss events that carry no message class yet (the mail the class facts exist for)
-const rows = rowsOf(await db.execute(modeled
+const roleLess = process.argv.includes("--role-less"); // targeted: events whose stored role is empty or a bare word, where the message may name its position itself
+const rows = rowsOf(await db.execute(roleLess
+  ? sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and signals::text not like '%role:named:%' and (role is null or length(role) < 14 or lower(role) in ('internship', 'intern', 'position')) and type not in ('user_reply')`
+  : modeled
   ? sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and signals::text not like '%class:%' and (signals::text like '%semantic:event%' or signals::text like '%near-miss%')`
   : refresh
-  ? sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and (signals::text like '%ending:own%' or signals::text like '%withdrawal:ack%' or signals::text like '%ending:wording%' or signals::text like '%terminal:proposed%' or type = 'rejection' or left(gmail_message_id, 8) = any(string_to_array(${extra.join(",")}, ',')))`
+  ? sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and (signals::text like '%role:named:%' or signals::text like '%ending:own%' or signals::text like '%withdrawal:ack%' or signals::text like '%ending:wording%' or signals::text like '%terminal:proposed%' or type = 'rejection' or left(gmail_message_id, 8) = any(string_to_array(${extra.join(",")}, ',')))`
   : sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null`));
 const emails = [];
 // a run can outlive one access token (an hour): refresh before every batch of 100 messages, and say how far it is
@@ -40,8 +44,8 @@ const plan: Record<string, string[]> = {}; const removals: Record<string, string
 for (const r of rows) {
   const m = by.get(r.gmail_message_id as string); if (!m) continue;
   const have = r.signals as string[];
-  const add = evidenceSignals(m, { type: r.type as never, signals: refresh ? have.filter((x) => !STALE.includes(x)) : have, outbound: false }).filter((x) => !have.includes(x));
-  if (refresh) { const fresh = evidenceSignals(m, { type: r.type as never, signals: have.filter((x) => !STALE.includes(x)), outbound: false }); const stale = have.filter((x) => STALE.includes(x) && !fresh.includes(x)); if (stale.length) removals[r.id as string] = stale; }
+  const add = evidenceSignals(m, { type: r.type as never, signals: refresh ? have.filter((x) => !isStale(x)) : have, outbound: false }).filter((x) => !have.includes(x));
+  if (refresh) { const fresh = evidenceSignals(m, { type: r.type as never, signals: have.filter((x) => !isStale(x)), outbound: false }); const stale = have.filter((x) => isStale(x) && !fresh.includes(x)); if (stale.length) removals[r.id as string] = stale; }
   if (add.length === 0) continue;
   plan[r.id as string] = add; for (const a of add) { tally[a] = (tally[a] ?? 0) + 1; (names[a] ??= new Set()).add(String(r.company).slice(0, 18)); }
 }

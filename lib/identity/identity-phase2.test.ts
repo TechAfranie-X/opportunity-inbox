@@ -152,3 +152,13 @@ test("a message whose subject names an externship does not join the same employe
   const ext2 = ev("applied", 0, { company: "Alcon", role: "2026 Innovate Boldly Externship", gmailThreadId: "C", subject: "Application received" });
   assert.deepEqual(sizes(groupEventsV2([ext2, ext], { attribution: true })).sort(), [1, 1].length === 2 ? [2] : []);
 });
+
+test("a rejection that names its position in its own words joins that application, not the other requisition's", () => {
+  const ux = ev("applied", 0, { company: "Acme", role: "Internship - UX Design", gmailThreadId: "A", subject: "Application received for Internship - UX Design (62217)" });
+  const dig = ev("applied", 1, { company: "Acme", role: "Internship - Digital, North America", gmailThreadId: "B", subject: "Application received for Internship - Digital (62240)" });
+  const rej = ev("rejection", 30, { company: "Acme", role: "Internship", gmailThreadId: "C", signals: ["role:named:Internship - Digital, North America"], fieldConfidence: { type: 0.9, company: 0.9, role: 0.4 } });
+  const g = groupEventsV2([ux, dig, rej], { attribution: true });
+  assert.deepEqual(sizes(g).sort(), [1, 2]);
+  assert.ok(g.find((x) => x.events.length === 2)!.events.some((e) => e.id === dig.id && e.type === "applied"));
+  assert.ok(g.find((x) => x.events.length === 2)!.events.some((e) => e.id === rej.id));
+});

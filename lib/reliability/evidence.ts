@@ -208,3 +208,24 @@ const WITHDRAWAL_ACK = /\b(?:(?:understand|sorry to hear)(?: why| that)? you(?:'
 export function withdrawalAcknowledged(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
   return WITHDRAWAL_ACK.test(unquoted(`${email.subject}\n${email.bodyText}`));
 }
+
+
+/**
+ * The position a message NAMES in its own words ("…selected to move forward for the Internship - Digital, North America position", "your application for Software Engineer Intern (Summer 2027)"),
+ * or null. Identity evidence for a message whose stored role is generic. Wording families, current text only.
+ */
+const NAMED_ROLE = [
+  /\b(?:for|to|regarding) (?:the |our )?([A-Z0-9][\w ,&/()'’+.-]{6,80}?) (?:position|role|opportunity)\b/,
+  /\b(?:your )?application (?:for|to) (?:the )?([A-Z0-9][\w ,&/()'’+.-]{6,80}?)(?: position| role|\.|,| at | with |\n|$)/,
+  /\bapply(?:ing)? (?:for|to) (?:the )?([A-Z0-9][\w ,&/()'’+.-]{6,80}?)(?: position| role|\.|,| at |\n|$)/,
+];
+const NOT_A_ROLE = /^(?:the |our |this |that |your |a |an |next |another |other |any |each )|\b(?:next step|next round|team|company|process|opportunities|openings)\b/i;
+export function namedRole(email: Pick<RecruitingEmail, "subject" | "bodyText">): string | null {
+  const text = unquoted(`${email.subject}\n${email.bodyText}`).replace(/\r/g, "").replace(/\s+/g, " ");
+  for (const re of NAMED_ROLE) {
+    const m = re.exec(text);
+    const role = m?.[1]?.trim().replace(/[ ,.-]+$/, "");
+    if (role && role.length >= 8 && role.length <= 70 && !/[.!?]\s/.test(role) && !NOT_A_ROLE.test(role) && /\b(?:intern(?:ship)?|engineer|developer|analyst|scientist|designer|manager|associate|fellow|apprentice|co-?op|extern(?:ship)?|researcher|program|programme|ux|design|data|software|product)\b/i.test(role)) return role;
+  }
+  return null;
+}

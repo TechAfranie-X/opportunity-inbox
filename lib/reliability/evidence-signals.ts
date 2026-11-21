@@ -1,7 +1,7 @@
 import { requisitionOf } from "../identity/represented-employer.ts";
 import { notAProcess } from "../semantic/assist.ts";
 import type { ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
-import { endingWording, marketingFact, ownApplicationStatement, ownEnding, withdrawalAcknowledged } from "./evidence.ts";
+import { endingWording, namedRole, marketingFact, ownApplicationStatement, ownEnding, withdrawalAcknowledged } from "./evidence.ts";
 import { messageClass } from "./message-class.ts";
 
 /**
@@ -20,6 +20,9 @@ export function evidenceSignals(m: RecruitingEmail, e: Pick<ExtractedEvent, "typ
   // (an "applied" receipt that mentions an ending in passing is still a receipt)
   if (!c && ownEnding(m) && !marketingFact(m) && !notAProcess(m) && !(e.type === "applied" && ownApplicationStatement(m))) out.push("ending:own");
   if (!c && withdrawalAcknowledged(m)) out.push("withdrawal:ack");
+  // a position the message itself names (identity evidence for a message whose stored role is generic)
+  const named = c ? null : namedRole(m);
+  if (named) out.push(`role:named:${named}`);
   // the message states the reader's own application (a receipt) and contains no ending sentence: a rule-typed "rejection" on it is a mistake
   if (!c && ownApplicationStatement(m) && !endingWording(m) && !withdrawalAcknowledged(m)) out.push("own:receipt");
   // a requisition / job number the message states is identity evidence (only the id is kept, never text)
