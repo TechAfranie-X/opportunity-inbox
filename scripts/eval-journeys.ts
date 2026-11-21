@@ -48,7 +48,7 @@ const collectOnly = process.argv.includes("--collect-only");
 const roleVerdicts: RoleVerdicts = roleCachePath && existsSync(roleCachePath) ? rolesFromJson(JSON.parse(readFileSync(roleCachePath, "utf8"))) : new Map();
 const repCachePath = process.argv.includes("--represented-cache") ? process.argv[process.argv.indexOf("--represented-cache") + 1] : null;
 const represented: RepresentedMap = repCachePath && existsSync(repCachePath) ? representedFromJson(JSON.parse(readFileSync(repCachePath, "utf8"))) : new Map();
-const reviewList: { kind: string; tier: string; suggestion: boolean; justified: boolean; type: string }[] = [];
+const reviewList: { scenario: string; messageId: string; kind: string; tier: string; suggestion: boolean; justified: boolean; type: string }[] = [];
 let rolePairsSeen = 0;
 const trace: ShadowTrace = new Map();
 const perMessage: { scenario: string; id: string; expectInPipeline: boolean; expectType: string | null; gotType: string | null; state: string | null; placement: string | null; terminal: string | null; belief: number | null; verdict: unknown; ambiguous: boolean; opp: string | null; possibleLink: string | null }[] = [];
@@ -215,7 +215,7 @@ for (const sc of fx.scenarios) {
     else if (m) justified = fx.reviewLabels ? m.expect.ask === true : (!m.expect.inPipeline || m.expect.type !== q.event.type || (!!m.expect.opportunityKey && contraKeys.has(m.expect.opportunityKey)));
     if (q.possible && fx.reviewLabels) justified = m?.expect.ask === true;
     if (q.suggestion) c.suggestions++;
-    reviewList.push({ kind: q.kind ?? "doubt", tier: q.tier, suggestion: !!q.suggestion, justified, type: q.event.type });
+    reviewList.push({ scenario: sc.id, messageId: q.event.gmailMessageId, kind: q.kind ?? "doubt", tier: q.tier, suggestion: !!q.suggestion, justified, type: q.event.type });
     if (justified) c.reviewJustified++; else if (verbose) bad(`${sc.id}/${q.event.gmailMessageId} REVIEW unnecessary (${q.possible ? "possible" : q.event.type}, co=${q.event.company}/${q.event.fieldConfidence?.company}, type=${q.event.fieldConfidence?.type}) :: ${m?.subject} :: ${q.reasons.join(" | ").slice(0, 120)}`);
     if (q.tier === "important") { c.attention++; if (justified) c.attentionJustified++; }
   }
