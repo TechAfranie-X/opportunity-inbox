@@ -13,7 +13,7 @@ import type { ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
  *  date binding    a date belongs to the thing it is about: not to quoted history, not to a competing offer, not to the sender's promise to update, not to a cancelled event.
  */
 
-const QUOTE_START = [
+export const QUOTE_START = [
   /^\s*>/m,
   /^\s*On .{3,160}wrote:\s*$/m,
   /^\s*-{2,}\s*(?:original message|forwarded message)\s*-{2,}/im,

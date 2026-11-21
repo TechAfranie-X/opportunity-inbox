@@ -20,6 +20,8 @@ export type ReaderInput = {
   body: string; // redacted, truncated
   received: string; // ISO timestamp, used only to resolve relative dates
   threadMessages: number;
+  /** Present only for the context-separated reader (READER_INPUT=parts): `body` is then ONLY what the sender wrote now (plus forwarded evidence); the rest is context that no event may be grounded in. */
+  context?: { quoted: string; forwarded: string; signature: string; isReply: boolean; isForward: boolean };
   /** Employers the deterministic resolver found evidence for. The model chooses among these or quotes one from the text. */
   candidates: Array<{ id: string; name: string }>;
 };

@@ -8,7 +8,7 @@
 import { writeFileSync } from "node:fs";
 import { loadWorkspace } from "../lib/recruiting/store.ts";
 import { reviewOptions } from "../lib/recruiting/product-config.ts";
-import { attentionCount, buildReviewQueue } from "../lib/recruiting/review.ts";
+import { attentionCount, autoResolved, buildReviewQueue } from "../lib/recruiting/review.ts";
 const sub = process.argv[2]; const details = process.argv.includes("--details");
 const ws = await loadWorkspace(sub, new Date());
 const STAGE = new Set(["applied", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer", "rejection", "withdrawn"]);
@@ -35,6 +35,8 @@ console.log(`opportunities ${ws.opportunities.length} (${open.length} open jobs)
 console.log(`--- Review burden`);
 console.log(`rows built ${queue.length} for ${perMsg.size} unique Gmail messages (duplicate rows ${dupRows}); shown as needs-you ${attentionCount(queue)} (important ${important.length}), housekeeping ${house.length}, weak suggestions ${weak.length}`);
 console.log(`weak suggestions that repeat an earlier subject: ${repeated}; asked although a message class explains them: ${classedAsked}; resolved by class and not asked: ${suppressedByClass}`);
+const resolvedBy = new Map<string, number>(); for (const r of autoResolved(ws.opportunities)) resolvedBy.set(r.resolution.resolver, (resolvedBy.get(r.resolution.resolver) ?? 0) + 1);
+console.log(`investigator: resolved with stated evidence (listed on the Review screen, not hidden): ${[...resolvedBy.values()].reduce((a, c) => a + c, 0)} ${JSON.stringify(Object.fromEntries(resolvedBy))}`);
 console.log(`--- Invariants (target 0)`);
 list("explicit ending text but the application is still open", endedButOpen);
 list("open applications resting on an unsettled (proposed) ending", proposedOpen);

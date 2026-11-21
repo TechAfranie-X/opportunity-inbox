@@ -99,3 +99,31 @@ export function demoteNonReceipts(events: EffectiveEvent[]): { kept: EffectiveEv
   const demote = (e: EffectiveEvent) => e.type === "applied" && !e.outbound && !e.corrected && !e.confirmed && e.signals.includes("semantic:event") && !e.signals.includes("entry:corroborated") && !e.signals.some((s) => s.startsWith("decision:"));
   return { kept: events.filter((e) => !demote(e)), demoted: events.filter(demote).map((e) => ({ ...e, signals: [...e.signals, "near-miss", "near-miss:weak", "entry:not-a-receipt"] })) };
 }
+
+
+/**
+ * A third party writing ABOUT an employer (an immigration firm, a background-check vendor, an assessment platform, a recruiting agency) is not that employer. When the message subject names exactly one employer
+ * that the student has a real application with, and the sender is not that employer (its domain does not carry the name) and the stored company is not named in the subject, the message is the vendor's mail for
+ * that employer: the company becomes the named employer (identity evidence `relation:vendor_for:<employer>`), so it attaches to that journey instead of creating a "company" out of the vendor.
+ */
+export function attachVendorMail(events: EffectiveEvent[]): EffectiveEvent[] {
+  const norm = (x: string) => x.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  const PLATFORMS = /\b(?:linkedin|handshake|indeed|glassdoor|ripplematch|forage|workday|greenhouse|lever|smartrecruiters|icims|taleo|ashby|hirevue|codesignal|hackerrank|codility|google|microsoft teams|zoom|slack|calendly|goodtime)\b/i;
+  const real = new Map<string, string>(); // companyKey -> display name, from rule-found, non-weak, non-class events
+  for (const e of events) if (!e.outbound && e.company && !/^unknown/i.test(e.company) && !PLATFORMS.test(e.company) && !e.signals.includes("semantic:event") && !e.signals.includes("employer:sender-only") && !e.signals.some((s) => s.startsWith("class:"))) real.set(companyKey(e.company), e.company);
+  const names = [...real].filter(([, n]) => norm(n).length >= 4).map(([k, n]) => ({ key: k, name: n, words: norm(n).split(" ").filter((w) => w.length >= 4) }));
+  const MAIL_ABOUT = new Set(["assessment", "assessment_completed", "status_update", "follow_up", "interview_invite", "interview_scheduled", "offer", "rejection", "recruiter_outreach"]);
+  return events.map((e) => {
+    if (e.outbound || e.corrected || e.confirmed || !e.company || !e.subject || !MAIL_ABOUT.has(e.type) || e.signals.some((s) => s.startsWith("decision:"))) return e;
+    // only a SUSPECT stored company is re-attributed: it came from the sender alone, or with low confidence
+    if (!(e.signals.includes("employer:sender-only") || (e.fieldConfidence?.company ?? 1) < 0.5)) return e;
+    const subj = ` ${norm(e.subject)} `;
+    const own = norm(e.company).split(" ").filter((w) => w.length >= 3);
+    if (own.some((w) => subj.includes(` ${w} `))) return e; // the stored company is named in the subject: nothing to attach
+    const domain = norm(e.senderDomain ?? "").replace(/ /g, "");
+    if (own.some((w) => w.length >= 4 && domain.includes(w))) return e; // the sender IS the stored company
+    const hit = names.filter((n) => n.key !== companyKey(e.company!) && n.words.length > 0 && n.words.every((w) => subj.includes(` ${w} `)) && !domain.includes(n.words[0]) && !own.some((w) => n.words.includes(w)));
+    if (hit.length !== 1) return e;
+    return { ...e, company: hit[0].name, signals: [...e.signals, `relation:vendor_for:${hit[0].name}`] };
+  });
+}

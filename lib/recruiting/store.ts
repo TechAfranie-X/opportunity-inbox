@@ -4,7 +4,7 @@ import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-or
 import { getDb } from "@/lib/db";
 import { refineEvents } from "@/lib/lifecycle/refine";
 import { deleteEvidenceLedgers } from "@/lib/ledger/store";
-import { applyEntryPolicy, demoteNonReceipts, promoteDecisiveNearMisses, neutralizeClassed, proposeMissedEndings, retypeAssessmentPlatforms, retypeUnverifiedClaims } from "@/lib/recruiting/entry-policy";
+import { applyEntryPolicy, attachVendorMail, demoteNonReceipts, promoteDecisiveNearMisses, neutralizeClassed, proposeMissedEndings, retypeAssessmentPlatforms, retypeUnverifiedClaims } from "@/lib/recruiting/entry-policy";
 import { entryPolicyOn, identityContext } from "@/lib/recruiting/product-config";
 import { withConfirmationConflicts, type LatestReading } from "@/lib/recruiting/confirmation-conflicts";
 import {
@@ -109,6 +109,7 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
   // Entry policy (ENTRY_POLICY=off to roll back): a model-only reading cannot create an application; those events wait as "possible" until a person confirms them.
   if (entryPolicyOn()) {
     // uncorroborated model-only "applied" waits as possible BEFORE class neutralisation retypes it (a security code typed applied must not survive as a status update)
+    if (process.env.VENDOR_RELATIONS !== "off") events = attachVendorMail(events);
     const nonReceipts = demoteNonReceipts(events);
     events = retypeAssessmentPlatforms(neutralizeClassed(proposeMissedEndings(retypeUnverifiedClaims(nonReceipts.kept))));
     possible.push(...nonReceipts.demoted);

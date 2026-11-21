@@ -163,3 +163,22 @@ test("Review asks ONE question per Gmail message, and mail the message-class fac
   const q2 = buildReviewQueue([], undefined, [classed, plain], new Date(Date.UTC(2026, 6, 1)));
   assert.deepEqual(q2.map((q) => q.event.company), ["Plain Co"]);
 });
+
+import { attachVendorMail } from "./entry-policy.ts";
+test("a vendor's mail that names one of the student's employers attaches to that employer; an employer's own mail and ambiguous subjects do not", () => {
+  const real = ev("applied", 1, { company: "Salesforce", role: "Summer 2027 Intern" });
+  const vendor = ev("assessment", 5, { company: "Berry Appleman & Leiden", subject: "Salesforce | Owusu Agyei, Afrane | 1012.11891", senderDomain: "bal.com", signals: ["employer:sender-only"] });
+  const own = ev("status_update", 6, { company: "Salesforce", subject: "Salesforce interview update", senderDomain: "salesforce.com" });
+  const ambiguous = ev("status_update", 7, { company: "Berry Appleman & Leiden", subject: "Salesforce and Adobe forms", senderDomain: "bal.com", signals: ["employer:sender-only"] });
+  const partner = ev("status_update", 8, { company: "Partner Org", subject: "Follow-up on Salesforce career academy application", senderDomain: "partnerorg.org" });
+  const employerSelf = ev("status_update", 9, { company: "Alcon", subject: "RE: LinkedIn Profile Link", senderDomain: "alcon.com", signals: ["employer:sender-only"] });
+  const adobe = ev("applied", 2, { company: "Adobe" });
+  const out = attachVendorMail([real, vendor, own, ambiguous, adobe, partner, employerSelf]);
+  assert.equal(out[1].company, "Salesforce");
+  assert.ok(out[1].signals.includes("relation:vendor_for:Salesforce"));
+  assert.equal(out[2].company, "Salesforce");
+  assert.ok(!out[2].signals.some((s) => s.startsWith("relation:")));
+  assert.equal(out[3].company, "Berry Appleman & Leiden", "two employers named: no guess");
+  assert.equal(out[5].company, "Partner Org", "a partner whose company is not suspect is not re-attributed");
+  assert.equal(out[6].company, "Alcon", "the sender is the stored company");
+});

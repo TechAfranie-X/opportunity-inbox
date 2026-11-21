@@ -7,7 +7,7 @@ import { isDatabaseConfigured } from "@/lib/db";
 import { toFloating } from "@/lib/recruiting/actions";
 import { EVENT_NOUN, formatDay } from "@/lib/recruiting/format";
 import { entityState } from "@/lib/recruiting/presentation";
-import { buildReviewQueue } from "@/lib/recruiting/review";
+import { autoResolved, buildReviewQueue } from "@/lib/recruiting/review";
 import { reviewOptions } from "@/lib/recruiting/product-config";
 import { loadWorkspace } from "@/lib/recruiting/store";
 import { isSampleUser } from "@/lib/gmail/sample";
@@ -47,6 +47,7 @@ export default async function ReviewPage() {
     source: `${item.event.senderName || item.event.senderDomain}: ${item.event.subject}`,
     gmailThread: sample ? null : item.event.gmailThreadId,
   }));
+  const resolvedList = reviewOptions().investigate ? autoResolved(workspace.opportunities).map((r) => ({ id: r.event.id, company: r.company, role: r.role, date: formatDay(r.event.occurredAt), source: `${r.event.senderName || r.event.senderDomain}: ${r.event.subject}`, explanation: r.resolution.explanation })) : [];
   const editors = Object.fromEntries(queue.map((item) => [item.event.id, <EventEditor key={item.event.id} event={item.event} compact />]));
 
   return (
@@ -56,6 +57,21 @@ export default async function ReviewPage() {
       <div className="mt-8">
         <Triage items={items} editors={editors} />
       </div>
+      {resolvedList.length > 0 ? (
+        <details className="mt-10">
+          <summary className="link-quiet cursor-pointer">Resolved automatically · {resolvedList.length}</summary>
+          <p className="t-meta mb-2 mt-3 max-w-[56ch] text-ink-3">Doubts the evidence we already hold settles. Each says why; open the opportunity to correct anything.</p>
+          <ul className="list border-y border-line">
+            {resolvedList.map((r) => (
+              <li key={r.id} className="py-3">
+                <p className="font-medium tracking-tight">{r.company}{r.role ? ` · ${r.role}` : ""} <span className="t-meta tnum text-ink-3">{r.date}</span></p>
+                <p className="t-meta truncate text-ink-3">{r.source}</p>
+                <p className="t-meta mt-1 text-ink-2">{r.explanation}</p>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
     </AppShell>
   );
 }

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ReaderInput } from "../recruiting/reader/types.ts";
 import { SEMANTIC_GUIDE, SEMANTIC_GUIDE_VERSION } from "./guide-v2.ts";
+import { SEMANTIC_GUIDE_V4_VERSION } from "./guide-v4.ts";
 import type { SemanticReader } from "./port.ts";
 import { verifyReading, type VerifiedReading } from "./reading.ts";
 
@@ -24,7 +25,7 @@ export type Transport = (request: { system: string; user: string; model: string 
 export const DEFAULT_HOSTED_MODEL = "claude-haiku-5-5";
 const BATCH = 8;
 
-const inputHash = (i: ReaderInput) => createHash("sha256").update(JSON.stringify([SEMANTIC_GUIDE_VERSION, i.from, i.subject, i.body, i.candidates.map((c) => c.name)])).digest("hex");
+const inputHash = (i: ReaderInput) => createHash("sha256").update(JSON.stringify([i.context ? SEMANTIC_GUIDE_V4_VERSION : SEMANTIC_GUIDE_VERSION, i.from, i.subject, i.body, i.candidates.map((c) => c.name), i.context ?? null])).digest("hex");
 
 export function createHostedReader(opts: { transport: Transport; env: Record<string, string | undefined>; model?: string; cache?: Map<string, VerifiedReading> }): SemanticReader {
   if (!hostedApproval(opts.env)) throw new Error("Hosted semantic reader is disabled: it needs the owner's explicit approval (SEMANTIC_HOSTED_APPROVED).");
@@ -50,7 +51,7 @@ export function createModelReader(opts: { transport: Transport; model?: string; 
     const step = opts.batch ?? BATCH;
     for (let at = 0; at < todo.length; at += step) {
       const batch = todo.slice(at, at + step);
-      const user = JSON.stringify(batch.map((i) => ({ key: i.key, from: i.from, subject: i.subject, body: i.body, received: i.received, employer_candidates: i.candidates.map((c) => c.name) })));
+      const user = JSON.stringify(batch.map((i) => ({ key: i.key, from: i.from, subject: i.subject, body: i.body, received: i.received, employer_candidates: i.candidates.map((c) => c.name), ...(i.context ? { context: { is_reply: i.context.isReply, is_forward: i.context.isForward, quoted_history: i.context.quoted, signature: i.context.signature } } : {}) })));
       let parsed: unknown;
       try {
         const text = await opts.transport({ system: opts.guide ?? SEMANTIC_GUIDE, user, model });

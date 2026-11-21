@@ -1,3 +1,4 @@
+import { investigate, type Resolution } from "../investigate/resolve.ts";
 import { eventNeedsReview } from "./opportunity.ts";
 import { isWeakNearMiss } from "../reliability/flags.ts";
 import { DEFAULT_POLICY, type Policy } from "./policy.ts";
@@ -33,7 +34,13 @@ export type ReviewItem = {
   similar?: number;
 };
 
-export type ReviewOptions = { prioritize?: boolean };
+export type ReviewOptions = { prioritize?: boolean; /** Resolve doubts that the evidence already held resolves (lib/investigate); they are listed, not hidden. INVESTIGATE=off turns it off. */ investigate?: boolean };
+
+/** The doubts the investigator resolved, with the evidence and the reason: shown to the person, never silently dropped. */
+export const autoResolved = (opportunities: Opportunity[]): { resolution: Resolution; company: string; role: string | null; event: EffectiveEvent }[] => {
+  const res = investigate(opportunities);
+  return opportunities.flatMap((o) => o.events.filter((e) => res.has(e.id)).map((e) => ({ resolution: res.get(e.id)!, company: o.company, role: o.role, event: e })));
+};
 
 const DAY_MS = 86_400_000;
 const IMPORTANT_AT = 45;
@@ -125,6 +132,9 @@ export function buildReviewQueue(opportunities: Opportunity[], policy: Policy = 
     if (!sug || event.corrected || event.confirmed || event.outbound) continue;
     items.push({ event, opportunityKey: o.key, company: o.company, role: o.role, reasons: ["This message may belong to another of your applications, but the evidence is not strong enough to join them. Keep them apart, or link them?"], impact: 10, why: "An optional suggestion", tier: "routine", kind: "suggestion" });
   }
+  // the investigator: a doubt the evidence already held resolves is not put to the person (it is listed under "Resolved automatically" with its reason)
+  const resolved = options.investigate ? investigate(opportunities) : new Map<string, Resolution>();
+  if (resolved.size > 0) for (let i = items.length - 1; i >= 0; i--) if (items[i].kind === "doubt" && resolved.has(items[i].event.id)) items.splice(i, 1);
   items.sort((a, b) => b.impact - a.impact || b.event.occurredAt.getTime() - a.event.occurredAt.getTime());
   const maybe = possible
     // Mail that the message-class facts already explain (an event, survey, platform notice, community message, security code, logistics, programme acceptance) is RESOLVED by evidence, not asked about

@@ -11,7 +11,7 @@ import { looksLikeInjection } from "./inject.ts";
  * digests are never sent); each input is redacted and truncated (lib/recruiting/reader/redact.ts), and carries the deterministic resolver's
  * employer candidates so the reader chooses among grounded names instead of inventing one. The key is the message id and stays local.
  */
-export function semanticInputs(emails: RecruitingEmail[], selfNames: string[] = []): ReaderInput[] {
+export function semanticInputs(emails: RecruitingEmail[], selfNames: string[] = [], opts: { parts?: boolean } = { parts: process.env.READER_INPUT === "parts" }): ReaderInput[] {
   const eligible = emails.filter((e) => !e.outbound && !looksLikeInjection(`${e.subject}\n${e.bodyText}`) && planRead(e).read); // an email that addresses the AI is never sent to it
   if (eligible.length === 0) return [];
   const res = resolveBatch(eligible.map((e) => ({ id: e.id, threadId: e.threadId, from: e.from, replyTo: e.replyTo, subject: e.subject, body: e.bodyText })));
@@ -21,6 +21,6 @@ export function semanticInputs(emails: RecruitingEmail[], selfNames: string[] = 
     const r = res.get(e.id);
     const names: string[] = [];
     for (const n of [r?.entity?.name, ...(r?.alternatives ?? []).map((a) => a.name), ...(r?.evidence ?? []).filter((x) => x.weight >= 0.3).map((x) => x.name)]) if (n && !names.some((x) => sameOrg(x, n))) names.push(n);
-    return buildReaderInput(e, e.id, names, perThread.get(e.threadId) ?? 1, selfNames);
+    return buildReaderInput(e, e.id, names, perThread.get(e.threadId) ?? 1, selfNames, opts);
   });
 }
