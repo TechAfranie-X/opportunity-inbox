@@ -34,7 +34,7 @@ const jOf = new Map<string, string>(); for (const j of set.journeys) for (const 
 const oppsOf = new Map<string, Set<string>>(); const jsIn = new Map<string, Set<string>>();
 for (const [m, j] of jOf) { const w = where.get(m); if (!w || set.items.find((x) => x.id === m)!.expect === "none" && false) continue; if (!w) continue; (oppsOf.get(j) ?? oppsOf.set(j, new Set()).get(j)!).add(w.opp.key); (jsIn.get(w.opp.key) ?? jsIn.set(w.opp.key, new Set()).get(w.opp.key)!).add(j); }
 const split = [...oppsOf].filter(([, s]) => s.size > 1).map(([j]) => j);
-const merged = [...jsIn].filter(([, s]) => s.size > 1).map(([k, s]) => [...s].sort().join("+"));
+const merged = [...jsIn].filter(([, s]) => s.size > 1).map(([, s]) => [...s].sort().join("+"));
 const mergedPairs = new Set(merged);
 // lifecycle
 const life: { closed: number; verified: number; proposed: number; missed: number; settledWrong: number; activeTruth: number; offerTruth: number; offerOk: number; rejOk: number; rejTruth: number } = { closed: 0, verified: 0, proposed: 0, missed: 0, settledWrong: 0, activeTruth: 0, offerTruth: 0, offerOk: 0, rejOk: 0, rejTruth: 0 };

@@ -13,20 +13,23 @@ import type { RecruitingEmail } from "../recruiting/types.ts";
  */
 export type MessageClass = "event" | "survey" | "notice" | "community" | "program-acceptance";
 const EVENT = /\b(?:webinar|info(?:rmation)? session|session (?:confirmation|reminder)|you(?:'|’)re registered|registration (?:confirm|reminder)|rsvp\b|wait\s?list|irl event|office hours|virtual (?:event|session|series)|career fair|open evening|meet-?up|tech talk|tech stories|launch your career|ama\b|showcase|(?:event|session) (?:reminder|confirmation|is happening)|your .{0,40}\bevent\b)/i;
-const SURVEY = /\b(?:survey|your feedback matters|how did your .{0,40} go|rate your experience|tell us about your experience)\b/i;
+const SURVEY = /\b(?:survey|your feedback matters|rate your experience|tell us about your experience)\b/i;
 const NOTICE = /\b(?:the following contact .{0,60} has reached out|viewed your profile|jobs? (?:matching|for you)|new (?:job )?matches|recommended jobs|job alert|new roles? at)\b/i;
 const COMMUNITY = /\b(?:officially connected with|joined the .{0,40} community|welcome to the .{0,40} community|has invited you to (?:work|join)|(?:visit|tour) (?:has been|is) scheduled|thanks for registering for your .{0,30} visit)\b/i;
 const ACCEPTED_INTO = /\b(?:congratulations|you(?:'|’)re in\b|you(?:'|’)ve been (?:accepted|selected)|acceptance to|welcome to the)\b/i;
 const PROGRAMME = /\b(?:program(?:me)?|academy|cohort|fellowship|bootcamp|accelerator|career journey|institute)\b/i;
 const EMPLOYMENT = /\b(?:internship|externship|intern\b|job|position|employment|role\b|compensation|stipend|salary|start date|offer letter|offer of|paid)\b/i;
 
+/** The employer asks the reader to take a step in their OWN process (an interview invitation, an assessment to complete): never an event, whatever else the message says. */
+const OWN_STEP = /\b(?:(?:would like to )?invite you to (?:our |an? |the |your )?[\w -]{0,40}\binterviews?\b|(?:schedule|book) your (?:\w+ )?interview|your (?:upcoming )?(?:\w+ )?interview (?:is|has been|will)|complete (?:your|the|an?) (?:online )?(?:assessment|coding challenge))/i;
 export function messageClass(m: Pick<RecruitingEmail, "subject" | "bodyText">): MessageClass | null {
   if (ownApplicationStatement(m)) return null;
   const lead = unquoted(`${m.subject}\n${m.bodyText.slice(0, 1600)}`);
-  if (SURVEY.test(lead)) return "survey";
+  if (OWN_STEP.test(lead)) return null;
+  if (ACCEPTED_INTO.test(lead) && PROGRAMME.test(lead) && !EMPLOYMENT.test(lead) && explicitOffer(m as RecruitingEmail) === null) return "program-acceptance";
+  if (SURVEY.test(m.subject) || SURVEY.test(m.bodyText.slice(0, 400))) return "survey";
   if (NOTICE.test(lead)) return "notice";
   if (COMMUNITY.test(lead)) return "community";
   if (EVENT.test(m.subject) || EVENT.test(lead.slice(0, 500))) return "event";
-  if (ACCEPTED_INTO.test(lead) && PROGRAMME.test(lead) && !EMPLOYMENT.test(lead) && explicitOffer(m as RecruitingEmail) === null) return "program-acceptance";
   return null;
 }

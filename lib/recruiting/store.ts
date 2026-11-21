@@ -4,7 +4,7 @@ import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-or
 import { getDb } from "@/lib/db";
 import { refineEvents } from "@/lib/lifecycle/refine";
 import { deleteEvidenceLedgers } from "@/lib/ledger/store";
-import { applyEntryPolicy, proposeMissedEndings, retypeUnverifiedClaims } from "@/lib/recruiting/entry-policy";
+import { applyEntryPolicy, demoteNonReceipts, neutralizeClassed, proposeMissedEndings, retypeAssessmentPlatforms, retypeUnverifiedClaims } from "@/lib/recruiting/entry-policy";
 import { entryPolicyOn, identityContext } from "@/lib/recruiting/product-config";
 import { withConfirmationConflicts, type LatestReading } from "@/lib/recruiting/confirmation-conflicts";
 import {
@@ -107,7 +107,10 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
   const ident = identityContext();
   // Entry policy (ENTRY_POLICY=off to roll back): a model-only reading cannot create an application; those events wait as "possible" until a person confirms them.
   if (entryPolicyOn()) {
-    events = proposeMissedEndings(retypeUnverifiedClaims(events));
+    events = retypeAssessmentPlatforms(neutralizeClassed(proposeMissedEndings(retypeUnverifiedClaims(events))));
+    const nonReceipts = demoteNonReceipts(events);
+    events = nonReceipts.kept;
+    possible.push(...nonReceipts.demoted);
     const { kept, demoted } = applyEntryPolicy(events, (evs) => buildOpportunities(evs, new Map(), parsePolicy(process.env.OPPORTUNITY_POLICY), ident));
     events = kept;
     possible.push(...demoted);

@@ -111,3 +111,30 @@ test("a hackathon application is not the employer's job application", () => {
   const hack = ev("applied", 3, { subject: "Update on your Code for Good Hackathon - 2027 Summer Internship", role: "2027 Summer Internship", gmailThreadId: "B" });
   assert.deepEqual(sizes(groupEventsV2([job, hack], { attribution: true })), [1, 1]);
 });
+
+test("one Gmail thread with the same specific role stays one application although the employer is named differently (host vs sender organisation)", () => {
+  const a = ev("applied", 0, { company: "Stanford", role: "2026 LCLS Summer Internship", gmailThreadId: "T", subject: "Confirmation of your application" });
+  const b = ev("offer", 20, { company: "SLAC National Accelerator Laboratory", role: "2026 LCLS Summer Internship", gmailThreadId: "T", subject: "Program offer" });
+  assert.deepEqual(sizes(groupEventsV2([a, b], { attribution: true })), [2]);
+  assert.deepEqual(sizes(groupEventsV2([a, b])), [1, 1], "unchanged without the option");
+  const other = ev("offer", 20, { company: "Other Lab", role: "Data Platform Engineering Internship", gmailThreadId: "T" });
+  assert.deepEqual(sizes(groupEventsV2([a, other], { attribution: true })), [1, 1], "a different role is still a different application");
+  const otherThread = ev("offer", 20, { company: "SLAC National Accelerator Laboratory", role: "2026 LCLS Summer Internship", gmailThreadId: "U" });
+  assert.deepEqual(sizes(groupEventsV2([a, otherThread], { attribution: true })), [1, 1], "without thread evidence the names alone still keep them apart");
+});
+
+test("a receipt for 'Claude' that names 'Claude Corps', and a later rejection from 'Claude Corps Fellowship', are one application", () => {
+  const a = ev("applied", 0, { company: "Claude", role: null, gmailThreadId: "A", subject: "We received your Claude Corps application", senderName: "Claude Corps", senderDomain: "anthropic.com" });
+  const b = ev("rejection", 5, { company: "Claude Corps Fellowship", role: "Claude Corps Fellow", gmailThreadId: "B", subject: "Your Claude Corps Fellowship application", senderName: "Claude Corps", senderDomain: "anthropic.com" });
+  assert.deepEqual(sizes(groupEventsV2([a, b], { attribution: true })), [2]);
+  const c = ev("rejection", 5, { company: "Claude Corps Fellowship", role: "Claude Corps Fellow", gmailThreadId: "B", subject: "Your application", senderName: "Other", senderDomain: "other.com" });
+  const a2 = { ...a, subject: "We received your application", senderName: "Somebody" };
+  assert.deepEqual(sizes(groupEventsV2([a2, c], { attribution: true })), [1, 1], "no message names the longer form: the names alone do not link");
+});
+
+test("a role-matched reply with no cycle, months after the group's season ended and in no shared thread, starts no part of the old application", () => {
+  const old = { ...ev("applied", 0, { role: "Software Engineering Intern (Summer 2026)", gmailThreadId: "A" }), occurredAt: new Date(Date.UTC(2026, 5, 20)) };
+  const late = { ...ev("status_update", 0, { role: "Software Engineering Intern", gmailThreadId: "Z" }), occurredAt: new Date(Date.UTC(2026, 9, 4)) };
+  assert.deepEqual(sizes(groupEventsV2([old, late], { cycleEnded: true })), [1, 1]);
+  assert.deepEqual(sizes(groupEventsV2([old, late])), [2], "unchanged without the option");
+});

@@ -72,11 +72,15 @@ export function closureFact(email: Pick<RecruitingEmail, "subject" | "bodyText">
 const ENDING_CUE = new RegExp([
   String.raw`\b(?:unfortunately|regret(?:fully)?\b|we are sorry to|we(?:'|’)re sorry to|sorry to (?:inform|tell|let you know)|not (?:be )?(?:moving|proceeding|progressing|advancing|continuing)\b|(?:will|would|do|does|are|were|we(?:'|’)re|we are|can)\s*not (?:be )?(?:able to )?(?:move|moving|proceed|proceeding|progress|progressing|extend|offer|continue|continuing|select|selecting|consider|considering|invite|inviting)\b|won(?:'|’)t be (?:moving|proceeding|progressing|able|continuing)|unable to (?:move|proceed|progress|extend|offer|continue|invite|advance)|not (?:been )?(?:selected|shortlisted|successful|eligible|chosen)|(?:decided|chosen|chose|opted) (?:not to|to (?:pursue|move forward with|proceed with|go (?:in|with)|take|select|continue with))|(?:pursue|pursuing|move forward with|proceed with|moving forward with) (?:other|another|different) (?:candidate|applicant|direction)|other (?:candidates?|applicants?)\b|different direction|(?:position|role|vacancy) (?:has|have) (?:been )?filled|(?:made|make|reached|come to) (?:the|a) decision not to|concluded (?:the|our) (?:search|hiring)|(?:completed|finished|closed) (?:our )?hiring for|more (?:applications|applicants|candidates) than we (?:are|were) able|not (?:been )?chosen|unable to offer|not able to (?:offer|extend)|declin(?:e|ed|ing) your application|no longer (?:be )?(?:under consideration|being considered|considered|in consideration))`,
 ].join("|"), "i");
+const FIRST_PERSON = /\b(?:I|I'm|I’m|I've|I’ve|I'd|my|myself)\b/;
+const EMPLOYER_VOICE = /\b(?:we|our|us|your|you)\b/i;
 export function endingWording(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
   const text = unquoted(`${email.subject}\n${email.bodyText}`);
   // judged sentence by sentence: a footer that says "unsubscribe" must not hide an ending sentence elsewhere in the message
   for (const sentence of text.split(/(?<=[.!?])\s+|\n+/)) {
     if (sentence.length > 400 || CLOSURE_NOT_ABOUT_YOU.test(sentence)) continue;
+    // the reader's own narration ("Unfortunately, I was ill and could not reply") is not an employer ending a process: an employer speaks as we/our to you/your
+    if (FIRST_PERSON.test(sentence) && !EMPLOYER_VOICE.test(sentence)) continue;
     const cue = ENDING_CUE.exec(sentence);
     if (cue && !OFFER_OR_NEXT.test(sentence.slice(0, cue.index))) return true;
   }

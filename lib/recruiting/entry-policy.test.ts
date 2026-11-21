@@ -100,3 +100,24 @@ test("events, surveys, notices and community messages do not create applications
   const prog = buildOpportunities([ev("offer", 1, { company: "Prog Co", signals: ["class:program-acceptance"] })]);
   assert.equal(prog[0].kind, "mentorship");
 });
+
+import { neutralizeClassed } from "./entry-policy.ts";
+test("an event, survey, notice or community message cannot move a stage; confirmed ones and ordinary ones are untouched", () => {
+  const out = neutralizeClassed([ev("interview_invite", 1, { signals: ["class:event"] }), ev("assessment", 2, { signals: ["class:survey"] }), ev("interview_invite", 3, { signals: ["class:event"], confirmed: true }), ev("interview_invite", 4, { signals: [] })]);
+  assert.deepEqual(out.map((e) => e.type), ["status_update", "status_update", "interview_invite", "interview_invite"]);
+});
+
+import { retypeAssessmentPlatforms } from "./entry-policy.ts";
+test("an interview-typed invitation from an online-assessment platform is an assessment; the same type from an employer is unchanged", () => {
+  const out = retypeAssessmentPlatforms([ev("interview_invite", 1, { senderDomain: "hackerrank.com" }), ev("interview_invite", 2, { senderDomain: "jpmorgan.com" }), ev("interview_invite", 3, { senderDomain: "mail.codesignal.com" }), ev("interview_invite", 4, { senderDomain: "hackerrank.com", confirmed: true })]);
+  assert.deepEqual(out.map((e) => e.type), ["assessment", "interview_invite", "assessment", "interview_invite"]);
+});
+
+import { demoteNonReceipts } from "./entry-policy.ts";
+test("a model-only 'applied' that is not a receipt waits as possible; receipts, corroborated and confirmed ones stay", () => {
+  const mk = (subject: string, extra: object = {}) => ev("applied", 1, { subject, signals: ["semantic:event"], ...extra });
+  const r = demoteNonReceipts([mk("Welcome to Google AI Plus"), mk("Thank you for applying to Duolingo!"), mk("Security code for your account"), mk("Welcome aboard", { confirmed: true }), mk("Newsletter", { signals: ["semantic:event", "entry:corroborated"] })]);
+  assert.deepEqual(r.demoted.map((e) => e.subject), ["Welcome to Google AI Plus", "Security code for your account"]);
+  assert.equal(r.kept.length, 3);
+  assert.ok(r.demoted[0].signals.includes("near-miss:weak"));
+});

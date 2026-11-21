@@ -1,3 +1,4 @@
+import { requisitionOf } from "../identity/represented-employer.ts";
 import { companyKey } from "../recruiting/company.ts";
 import { classifySender } from "../recruiting/entity/vendors.ts";
 import type { EffectiveEvent, EventType } from "../recruiting/types.ts";
@@ -47,8 +48,8 @@ const eventCycle = (e: EffectiveEvent, ctx?: IdentityContext): Cycle => {
 };
 /** An APPLIED event is a receipt only when its subject says so; an availability confirmation, a portal code or a kickoff message typed "applied" is not another application. */
 const RECEIPT_WORDS = /(appl|candidat|solicitud|bewerbung|postulaci|received|recib|recebid|eingang|bestätig|confirm|thank|danke|gracias|obrigad|merci|grazie)/i;
-const NOT_RECEIPT = /\b(?:availability|interview|assessment|reminder|portal|access code|security code|verif\w*|survey|kick-?off|welcome|onboarding|orientation|agenda|schedule[d]?)\b/i;
-const receiptLike = (e: EffectiveEvent) => !e.subject || (RECEIPT_WORDS.test(e.subject) && !NOT_RECEIPT.test(e.subject));
+const NOT_RECEIPT = /\b(?:communication|preferences?|subscri\w*|newsletter|availability|interview|assessment|reminder|portal|access code|security code|verif\w*|survey|kick-?off|welcome|onboarding|orientation|agenda|schedule[d]?)\b/i;
+export const receiptLike = (e: EffectiveEvent) => !e.subject || (RECEIPT_WORDS.test(e.subject) && !NOT_RECEIPT.test(e.subject));
 const SEASON_END: Record<string, [number, number]> = { spring: [5, 30], summer: [7, 31], fall: [11, 31], winter: [2, 31] }; // [month index, day]
 const PROCESS_TYPES = new Set<EventType>(["applied", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer"]);
 /** The group's single recruiting cycle is over for hiring purposes: its latest season ended more than 30 days before this event. */
@@ -137,8 +138,15 @@ export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, cor
   return ok ? "match" : "conflict";
 }
 
+/** Two receipts that state the SAME requisition, or the same specific role within half a day, are one application's confirmations (a portal and a mailbox both write), not two applications. */
+const repeatDelivery = (x: EffectiveEvent, e: EffectiveEvent) => (!!reqOf(e) && reqOf(e) === reqOf(x)) || (specific(e.role) && specific(x.role) && Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) < DAY / 2 && roleRelationV2(x.role!, e.role!) === "match");
+
+const isClassed = (x: EffectiveEvent) => x.signals.some((q) => /^class:(?:event|survey|notice|community)$/.test(q));
+
 function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean, ctx?: IdentityContext): boolean {
   if (rel === "conflict") return false;
+  // event, survey, notice and community messages (message-class signals) cluster with each other, never with an application's own mail, unless the same Gmail thread ties them to it
+  if (ctx?.attribution && !viaThread && !e.linkedTo && !e.confirmed && isClassed(e) !== g.events.every(isClassed)) return false;
   // a new application after a rejection is a new opportunity; but progress (an assessment, an interview, an offer) in the SAME thread for a compatible role is
   // far more often the same process continuing than a new one, so it joins and the contradiction is surfaced for a person (lib/lifecycle/contradictions.ts)
   // a message that takes the employer's own ending back ("please disregard our previous message") continues that process whatever type it was read as
@@ -146,9 +154,13 @@ function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean,
   // (Phase 2) the employer confirming an ending that is already recorded (a rejection after the student's withdrawal, a second notice of the same rejection) is the same application, not a new one
   const confirmsEnding = !!ctx?.confirmEndings && rel === "match" && (e.type === "rejection" || e.type === "withdrawn") && (viaThread || e.occurredAt.getTime() - lastAt(g) <= 30 * DAY);
   if (endedByEmployerOrUser(g) && !NEUTRAL.has(e.type) && !retraction && !confirmsEnding && !(viaThread && REOPENS.has(e.type))) return false;
+  // a message that states a requisition number starts or continues THAT application: it does not join a group made only of uncorroborated model readings (event invitations, outreach) that states none
+  if (ctx?.attribution && reqOf(e) && g.events.every((x) => !reqOf(x) && x.signals.includes("semantic:event") && !x.signals.includes("entry:corroborated") && !x.corrected && !x.confirmed)) return false;
   const gap = e.occurredAt.getTime() - lastAt(g);
   if (rel === "generic" && ctx?.cycleEnded && PROCESS_TYPES.has(e.type) && cycleOver(g, e)) return false;
   if (rel === "generic") return gap <= (viaThread ? GENERIC_WINDOW_WITH_THREAD : GENERIC_WINDOW);
+  // a role-matched message with no cycle of its own, long after the group's single recruiting season ended, outside any shared thread: a new cycle's mail, not the old application
+  if (!viaThread && ctx?.cycleEnded && eventCycle(e, ctx).years.length === 0 && cycleOver(g, e)) return false;
   if (viaThread) return true;
   const gc = groupCycle(g), ec = eventCycle(e, ctx);
   const positiveCycle = gc.years.length > 0 && ec.years.length > 0; // already known not to conflict, so they share a year
@@ -201,8 +213,9 @@ function breakTieByEvidence<T extends { g: Group }>(candidates: T[], e: Effectiv
 }
 const breakTie = <T extends { g: Group }>(candidates: T[], e: EffectiveEvent): T | null => breakTieByEvidence(candidates, e) ?? breakTieByLifecycle(candidates, e);
 
-const reqOf = (e: EffectiveEvent): string | null => e.signals.find((x) => x.startsWith("req:"))?.slice(4) ?? null;
+const reqOf = (e: EffectiveEvent): string | null => e.signals.find((x) => x.startsWith("req:"))?.slice(4) ?? (e.subject ? requisitionOf(e.subject) : null); // the subject is stored; a number it states needs no stamp
 const strongRole = (r: string | null | undefined) => specific(r) && roleCore(r).length >= 2;
+const companyKeyEq = (g: Group, e: EffectiveEvent) => !!g.company && !!e.company && companyKey(g.company) === companyKey(e.company);
 export type Attribution = { link: Group | null; suggest: Group | null; score: number; reasons: string[] };
 /**
  * Evidence-scored attribution of a message to one of several candidate applications (Phase 2). Each candidate is scored on independent kinds of evidence; a hard conflict (a different cycle,
@@ -221,8 +234,15 @@ export function attribute(groups: Group[], e: EffectiveEvent, ctx?: IdentityCont
     const add = (kind: string, pts: number, why: string) => { score += pts; kinds.add(kind); reasons.push(why); };
     if (er && reqs.has(er)) add("requisition", 3, "same requisition");
     if (e.company && companyKey(g.company) === companyKey(e.company)) add("employer", 2, "same employer");
-    else if (e.company && employerAlias(g.company, e.company)) add("employer", 1, "employer name is a form of the same name");
+    else if (e.company && employerAlias(g.company, e.company)) add("employer", weakEmployer(e) || g.events.every((x) => !x.company || weakEmployer(x)) ? 2 : 1, "employer name is a form of the same name");
     else if (!weakEmployer(e) && e.company && !g.events.every((x) => !x.company || weakEmployer(x))) continue; // two confident, different employers
+    // a message that states the LONGER form of the employer name ("Claude Corps" in a receipt for "Claude", whose rejection comes from "Claude Corps Fellowship") is evidence for the alias
+    if (e.company && employerAlias(g.company, e.company)) {
+      const [short, long] = g.company.length < e.company.length ? [g.company, e.company] : [e.company, g.company];
+      const toks = (x: string) => x.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9]+/).filter(Boolean);
+      const phrase = toks(long).slice(0, toks(short).length + 1).join(" ");
+      if ([...g.events, e].some((x) => toks(x.subject ?? "").join(" ").includes(phrase))) add("name", 2, "a message names the longer employer form");
+    }
     const gr = groupRole(g);
     if (strongRole(e.role) && strongRole(gr) && roleRelationV2(gr!, e.role) === "match") add("role", 2, "same specific role");
     else if (specific(e.role) && specific(gr) && roleRelationV2(gr!, e.role) === "match") add("role-weak", 0.5, "similar generic role");
@@ -230,6 +250,8 @@ export function attribute(groups: Group[], e: EffectiveEvent, ctx?: IdentityCont
     if (eu && [...gu].some((u) => unitsMatch(u, eu))) add("team", 1, "same team");
     if (g.threads.has(e.gmailThreadId)) add("thread", 2, "same Gmail thread");
     if (e.senderName && g.events.some((x) => !x.outbound && x.senderName === e.senderName && x.senderDomain === e.senderDomain && Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) <= 45 * DAY)) add("sender", 1, "same sender");
+    // mail arriving within days of the application's own, from a name that is a form of its employer: one burst of mail about one application, not a coincidence of names
+    if (kinds.has("employer") && !companyKeyEq(g, e) && Math.abs(e.occurredAt.getTime() - lastAt(g)) <= 3 * DAY) add("timing", 1, "arrived within days");
     if (e.occurredAt.getTime() - lastAt(g) <= 30 * DAY) score += 0.5;
     scored.push({ g, score, kinds, reasons });
   }
@@ -270,7 +292,10 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
       const threadEmployerOk = (g: Group) => sameEmployer(g) || (!!ctx?.weakEmployerThreads && (weakEmployer(e) || g.events.every((x) => !x.company || weakEmployer(x))));
       // 1. the Gmail thread: evidence, weighed like any other. A thread can hold several opportunities (automated mail reuses one subject), so every group that
       //    has mail in this thread is a candidate and the same checks apply to each; a specific role match beats a generic one, then recency.
-      const inThread = groups.filter((g) => g.threads.has(e.gmailThreadId) && threadEmployerOk(g)).map((g) => ({ g, rel: relation(g, e, ctx, true) })).filter(({ g, rel }) => allowed(g, e, rel, true, ctx));
+      // The employer NAME may differ inside one thread when the message names the host and the receipt the sender's organisation (a university and its laboratory; a firm and its fellows
+      // programme): a name that is a form of the other's, or the SAME specific role (two or more role words) in the same Gmail thread, keeps the thread's evidence in play.
+      const threadNamesDiffer = (g: Group) => !!ctx?.attribution && !!e.company && !!g.company && (employerAlias(g.company, e.company) || e.signals.includes("reply-in-recruiting-thread") || (specific(e.role) && specific(groupRole(g)) && roleRelationV2(groupRole(g)!, e.role) === "match"));
+      const inThread = groups.filter((g) => g.threads.has(e.gmailThreadId) && (threadEmployerOk(g) || threadNamesDiffer(g))).map((g) => ({ g, rel: relation(g, e, ctx, true) })).filter(({ g, rel }) => allowed(g, e, rel, true, ctx));
       const threadMatches = inThread.filter((s) => s.rel === "match");
       const threadGenerics = inThread.filter((s) => s.rel === "generic");
       // ABSTAIN here too: a role-less message in a thread that already holds two applications for DIFFERENT roles cannot be told from either by the thread alone.
@@ -286,7 +311,7 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
       }
       if (!target && !ambiguous) {
         const pool = e.company
-          ? groups.filter((g) => g.company && companyKey(g.company) === companyKey(e.company!))
+          ? groups.filter((g) => (g.company && companyKey(g.company) === companyKey(e.company!)) || (!!ctx?.attribution && g.events.some((x) => !!x.company && companyKey(x.company) === companyKey(e.company!) && !weakEmployer(x))))
           : e.senderDomain ? groups.filter((g) => !g.company && g.events.some((x) => x.senderDomain === e.senderDomain)) : [];
         const scored = pool.map((g) => ({ g, rel: relation(g, e, ctx) })).filter(({ g, rel }) => allowed(g, e, rel, false, ctx));
         const matches = scored.filter((s) => s.rel === "match");
@@ -304,7 +329,7 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
           target = pick.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
           // One receipt is sent per application: a role-less receipt in ANOTHER thread, when the candidate already holds a receipt from a different thread, starts another
           // application (two receipts in one thread, or a repeat delivery within hours, still join).
-          if (target && e.type === "applied" && (!specific(e.role) || !!ctx?.distinctThreadReceipts) && (!ctx?.distinctThreadReceipts || receiptLike(e)) && target.events.some((x) => x.type === "applied" && x.gmailThreadId !== e.gmailThreadId && (ctx?.distinctThreadReceipts || Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) >= DAY / 2)) && !target.threads.has(e.gmailThreadId)) target = undefined;
+          if (target && e.type === "applied" && (!specific(e.role) || !!ctx?.distinctThreadReceipts) && (!ctx?.distinctThreadReceipts || receiptLike(e)) && target.events.some((x) => x.type === "applied" && x.gmailThreadId !== e.gmailThreadId && !repeatDelivery(x, e) && (!ctx?.distinctThreadReceipts || receiptLike(x)) && (ctx?.distinctThreadReceipts || Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) >= DAY / 2)) && !target.threads.has(e.gmailThreadId)) target = undefined;
         }
         // (Phase 2) Evidence-scored attribution, only when this message's own employer name has no application at all (so it can never pull a message away from an exact-employer candidate).
         if (!target && !ambiguous && ctx?.attribution && pool.length === 0) {

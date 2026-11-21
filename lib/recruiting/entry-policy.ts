@@ -1,4 +1,5 @@
 import { NEAR_MISS, NEAR_MISS_WEAK } from "../reliability/flags.ts";
+import { receiptLike } from "../lifecycle/identity.ts";
 import { companyKey } from "./company.ts";
 import type { EffectiveEvent, Opportunity } from "./types.ts";
 
@@ -51,4 +52,30 @@ export function proposeMissedEndings(events: EffectiveEvent[]): EffectiveEvent[]
   const anchored = (e: EffectiveEvent) => !!e.company && anchors.some((a) => a.company && companyKey(a.company) === companyKey(e.company!) && a.occurredAt.getTime() <= e.occurredAt.getTime());
   return events.map((e) => (e.signals.includes("ending:wording") && (e.type === "status_update" || e.type === "follow_up") && !e.corrected && !e.confirmed && !e.outbound && !e.signals.some((s) => s.startsWith("decision:")) && anchored(e)
     ? { ...e, type: "rejection" as const, signals: [...e.signals, "terminal:proposed", "ending:proposed-from-update"] } : e));
+}
+
+/**
+ * A message that is an event, survey, platform notice or community message (message-class signal) cannot move an application's stage: an RSVP is not an interview, a webinar reminder is not an
+ * assessment. Its type becomes a plain update (it stays visible, attached where it was found). Confirmed and corrected events are the person's word and are left alone.
+ */
+export function neutralizeClassed(events: EffectiveEvent[]): EffectiveEvent[] {
+  const STAGE = new Set(["applied", "recruiter_outreach", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer", "rejection", "withdrawn"]);
+  return events.map((e) => (STAGE.has(e.type) && !e.corrected && !e.confirmed && !e.outbound && e.signals.some((s) => /^class:(?:event|survey|notice|community)$/.test(s)) && !e.signals.some((s) => s.startsWith("decision:"))
+    ? { ...e, type: "status_update" as const, signals: [...e.signals, "type:neutralized-by-class"] } : e));
+}
+
+/** Online-assessment platforms send tests, not interviews: an interview-typed invitation from one is an assessment. Confirmed and corrected events are left alone. */
+const ASSESSMENT_PLATFORMS = /(?:^|\.)(?:hackerrank|codesignal|codility|testgorilla|vervoe|pymetrics|criteria)\.(?:com|io|net|co)$/i;
+export function retypeAssessmentPlatforms(events: EffectiveEvent[]): EffectiveEvent[] {
+  return events.map((e) => ((e.type === "interview_invite" || e.type === "interview_scheduled") && !e.corrected && !e.confirmed && !e.outbound && ASSESSMENT_PLATFORMS.test(e.senderDomain ?? "") && !e.signals.some((s) => s.startsWith("decision:"))
+    ? { ...e, type: "assessment" as const, signals: [...e.signals, "type:assessment-platform"] } : e));
+}
+
+/**
+ * A model-only "applied" whose subject is not a receipt (a welcome message, a promotion, a security code, a reminder) states no application and has no corroborating wording: it waits as a
+ * possible item instead of riding into a real application. Receipts, corroborated events, and anything a person confirmed or corrected stay.
+ */
+export function demoteNonReceipts(events: EffectiveEvent[]): { kept: EffectiveEvent[]; demoted: EffectiveEvent[] } {
+  const demote = (e: EffectiveEvent) => e.type === "applied" && !e.outbound && !e.corrected && !e.confirmed && e.signals.includes("semantic:event") && !e.signals.includes("entry:corroborated") && !e.signals.some((s) => s.startsWith("decision:")) && !receiptLike(e);
+  return { kept: events.filter((e) => !demote(e)), demoted: events.filter(demote).map((e) => ({ ...e, signals: [...e.signals, "near-miss", "near-miss:weak", "entry:not-a-receipt"] })) };
 }

@@ -20,7 +20,7 @@ if (rb) {
   for (const [id, added] of Object.entries(back)) for (const sig of added) await db.execute(sql`update recruiting_events set signals = (select coalesce(jsonb_agg(x), '[]'::jsonb) from jsonb_array_elements(signals) x where x <> to_jsonb(${sig}::text)) where id = ${id}::uuid and user_google_sub = ${sub} and correction is null`);
   console.log(`rolled back ${Object.keys(back).length} rows`); process.exit(0);
 }
-const rows = rowsOf(await db.execute(sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and signals::text not like '%near-miss%'`));
+const rows = rowsOf(await db.execute(sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and (signals::text not like '%near-miss%' or signals::text like '%semantic:%')`));
 const emails = [];
 const token = await refreshGmailAccessToken((await getGmailRefreshToken(sub))!);
 for (let i = 0; i < rows.length; i += 20) emails.push(...(await fetchEmailsById(token, rows.slice(i, i + 20).map((r) => r.gmail_message_id as string))).emails);

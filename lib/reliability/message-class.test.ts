@@ -20,3 +20,23 @@ test("a message that states the reader's own application is never classed away",
   assert.equal(messageClass(m("Application received", "We received your application. Join our webinar next week to learn more.")), null);
   assert.equal(messageClass(m("Thank you for applying to the Summit Program!", "Your application has been submitted.")), null);
 });
+
+test("an acceptance into a programme that also says \"community\" is a programme acceptance, not a community message", () => {
+  assert.equal(messageClass(m("Congratulations! You're in!", "You've been accepted to the 2026-27 cohort of the AI Program. Welcome to our national community of Fellows.")), "program-acceptance");
+});
+
+import { endingWording } from "./evidence.ts";
+test("a student's own apology is not an employer's ending; the employer's sentence still is", () => {
+  assert.equal(endingWording({ subject: "Re: Internship", bodyText: "Unfortunately, I was ill and could not reply for some weeks." }), false);
+  assert.equal(endingWording({ subject: "Update", bodyText: "Unfortunately, we will not be moving forward with your candidacy." }), true);
+  assert.equal(endingWording({ subject: "Update", bodyText: "I wanted to share that our last intern positions have been filled, so we won’t be moving forward with your candidacy." }), true);
+});
+
+test("a recruiter's conversational 'How did your interview go?' inside a next-step message is not a survey", () => {
+  assert.equal(messageClass(m("Next Steps", "Hi, How did your last interview go? I'm excited to share we would like to move forward in the process! I would like to set up a recruiter screen.")), null);
+});
+
+test("an employer's interview invitation or assessment request is never classed as an event", () => {
+  assert.equal(messageClass(m("Invitation to Interview with Acme", "Thank you for your interest in Acme. We would like to invite you to our Externship Interviews. This virtual session is 45 minutes.")), null);
+  assert.equal(messageClass(m("Next step", "Please complete the online assessment within 7 days. This virtual event series is optional.")), null);
+});
