@@ -13,6 +13,7 @@ import { cacheSemanticReader } from "@/lib/semantic/cache-reader";
 import { sampleSemanticReader } from "@/lib/semantic/sample-reader";
 import { buildPredictions } from "@/lib/recruiting/predictions";
 import { PRODUCT_READER_VERSION } from "@/lib/recruiting/product-version";
+import { saveEvidenceLedgers } from "@/lib/ledger/store";
 import { contactAnchors, countEvents, evaluatedMessageIds, inheritStoredRoles, loadWorkspace, markSynced, pruneReclassified, recentThreadAnchors, saveExtractedEvents, savePredictions } from "@/lib/recruiting/store";
 import { runSync, type EngineResult, type SyncStore } from "@/lib/recruiting/sync-engine";
 import { SEMANTIC_GUIDE_V3_COMPACT } from "@/lib/semantic/guide-v3";
@@ -99,6 +100,7 @@ const storeFor = (sub: string, readerVersion: string): SyncStore => ({
   evaluatedIds: (ids) => evaluatedMessageIds(sub, ids, readerVersion),
   saveEvents: (events) => saveExtractedEvents(sub, events),
   savePredictions: async (p) => { await savePredictions(sub, p); },
+  saveLedgers: async (entries) => { await saveEvidenceLedgers(sub, entries, readerVersion); },
   prune: async (scanned, kept) => { await pruneReclassified(sub, scanned, kept); },
   recentAnchors: (days) => recentThreadAnchors(sub, days),
   contactAnchors: (keys) => contactAnchors(sub, keys),
@@ -130,6 +132,8 @@ export async function syncRecruitingMail(userGoogleSub: string, opts: { /** Test
       embargoBefore: isSampleUser(userGoogleSub) ? null : embargoBefore(),
       extract: readMail,
       deferable: isContinuityCandidate,
+      // Shadow evidence ledger: off unless EVIDENCE_LEDGER=shadow. It records claims and the shadow engine's verdict beside the product's pipeline and changes no decision.
+      ledger: process.env.EVIDENCE_LEDGER === "shadow",
       // The second reader is OFF unless SEMANTIC_READER names an adapter. The only adapter is the development cache (never production):
       // no model is hosted, called or paid for. See lib/semantic/port.ts for the contract any real adapter must honour.
       ...semanticConfig(userGoogleSub),

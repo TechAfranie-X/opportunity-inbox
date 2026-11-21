@@ -22,7 +22,11 @@
     "test:guard": "node --test scripts/freeze-guard.test.mjs",
     "e2e:sample": "node --env-file=.env.local --import ./scripts/loader/register.mjs scripts/e2e-sample.ts",
     "bench:lifecycle": "node scripts/lifecycle-bench.mjs",
-    "bench:lifecycle:check": "node scripts/lifecycle-bench.mjs --check"
+    "bench:lifecycle:check": "node scripts/lifecycle-bench.mjs --check",
+    "eval:gate": "node --no-warnings --import ./scripts/loader/register.mjs scripts/eval-gate.ts",
+    "eval:compare": "node --no-warnings --import ./scripts/loader/register.mjs scripts/eval-compare.ts --out eval/compare-phase1.md",
+    "integrity:check": "node --env-file=.env.local --no-warnings --import ./scripts/loader/register.mjs scripts/integrity-check.ts",
+    "hooks:install": "git config core.hooksPath .githooks"
   },
   "dependencies": {
     "drizzle-orm": "0.45.3",

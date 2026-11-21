@@ -101,3 +101,9 @@ Not done / open, in priority order:
 7. No real-browser verification of either account (Today rollover, Pipeline buckets, Coinbase routes/search, Gmail click-through) and no Gmail click-through of any finding; account 2 needs its owner.
 8. Unexplained: 15 corrected rows were rewritten between the 01:11 snapshot and later on 2026-11-20 (before the v6 work). Not claimed byte-identical.
 Nothing here continues automatically; no scheduler remains configured after this session.
+
+
+## Update after Phase 1 (2026-11-20, see docs/phase1-foundation.md)
+- Direction set by the owner: evidence ledger, unified decision engine, existing reducer and correction protections retained. Built in shadow mode only; no production decision changed. The model-alone-never-ends-a-candidacy gate (c45c215) is still in the production pipeline and its regression is still live; the shadow engine restores the pre-regression numbers offline.
+- Integrity record, new facts: 124 of 139 corrected rows carry the restore-transaction versions; the 15 others each carry their own later version; none of the 139 changed since 06:41 or during Phase 1 (`scripts/integrity-check.ts` compare: OK). The cause of the 15 earlier rewrites is still UNRESOLVED (a pre-guard worker or per-row UI actions both fit; the data cannot separate them).
+- Fixture N and J to M are contaminated development fixtures now; the fresh independent evaluation (fixture O) is reserved for release validation.

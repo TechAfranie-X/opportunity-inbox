@@ -38,7 +38,7 @@ const replay = process.argv.includes("--replay");
 const engine = process.argv.includes("--engine") ? process.argv[process.argv.indexOf("--engine") + 1] : "current";
 if (engine !== "current" && engine !== "shadow") throw new Error(`unknown --engine ${engine}`);
 const trace: ShadowTrace = new Map();
-const perMessage: { scenario: string; id: string; expectInPipeline: boolean; expectType: string | null; gotType: string | null; state: string | null; placement: string | null; terminal: string | null }[] = [];
+const perMessage: { scenario: string; id: string; expectInPipeline: boolean; expectType: string | null; gotType: string | null; state: string | null; placement: string | null; terminal: string | null; belief: number | null; verdict: unknown }[] = [];
 const jsonOut = process.argv.includes("--json") ? process.argv[process.argv.indexOf("--json") + 1] : null;
 const modelId = process.argv.includes("--model") ? process.argv[process.argv.indexOf("--model") + 1] : "mlx-community/Qwen3-4B-Instruct-2507-4bit";
 const reader = useModel ? createModelReader({ transport: localTransport(), model: modelId, batch: 4, idPrefix: "local", guide: SEMANTIC_GUIDE_V3_COMPACT }) : null;
@@ -95,7 +95,7 @@ for (const sc of fx.scenarios) {
   for (const m of msgs) {
     const got = byMsg.get(m.id);
     const tv = trace.get(m.id);
-    perMessage.push({ scenario: sc.id, id: m.id, expectInPipeline: m.expect.inPipeline, expectType: m.expect.type, gotType: got?.type ?? null, state: tv?.state ?? null, placement: tv?.placement ?? null, terminal: tv?.terminal ?? null });
+    perMessage.push({ scenario: sc.id, id: m.id, expectInPipeline: m.expect.inPipeline, expectType: m.expect.type, gotType: got?.type ?? null, state: tv?.state ?? null, placement: tv?.placement ?? null, terminal: tv?.terminal ?? null, belief: tv?.recruiting.belief ?? null, verdict: tv ? { reasons: tv.reasons, for: tv.recruiting.for, against: tv.recruiting.against, type: tv.type.value, typeFor: tv.type.for, typeAgainst: tv.type.against } : null });
     if (m.expect.inPipeline && got) { c.tp++; if (m.expect.type) { c.typeN++; if (got.type === m.expect.type) c.typeOk++; else bad(`${sc.id}/${m.id} TYPE ${got.type} != ${m.expect.type} :: ${m.subject}`); } }
     else if (m.expect.inPipeline) { c.fn++; bad(`${sc.id}/${m.id} MISSED (${m.expect.type}) :: ${m.subject}`); }
     else if (got) { c.fp++; bad(`${sc.id}/${m.id} FALSE POSITIVE as ${got.type} :: ${m.subject}`); }

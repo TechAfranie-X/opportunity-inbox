@@ -20,6 +20,13 @@ Do not add features outside the current milestone unless explicitly requested.
 - Preserve clear boundaries between UI, business logic, integrations, and persistence.
 - Validate external data before trusting or storing it.
 
+## Decision-logic changes (mandatory gate)
+- Any change to how a message is read, typed, attributed, decided or turned into a lifecycle (`lib/recruiting`, `lib/reliability`, `lib/semantic`, `lib/lifecycle`, `lib/identity`, `lib/decision`, `lib/ledger`, `lib/discovery`) must pass the cached-replay gate before it is committed: `npm run eval:gate` (a few seconds, no model call, no Gmail). `npm test` runs it too.
+- The gate replays the frozen development fixtures in `eval/dev` against `eval/baseline.json`. A fixture or cache change invalidates the baseline; rewriting the baseline is deliberate (`--write-baseline`, with a note) and is never done to make a regression disappear.
+- A guard that removes evidence needs a test that fails without it, and must be measured on the replay first. Prefer weighing a claim in the decision engine to deleting it.
+- Never tune against a fixture whose failures were inspected and then call it generalisation evidence. The fresh sealed fixture stays outside the repository.
+- `npm run hooks:install` enables the pre-commit hook that runs the gate when decision-logic files are staged.
+
 ## Security and privacy
 - Never expose secrets in client-side code.
 - Never commit API keys, OAuth secrets, access tokens, or refresh tokens.

@@ -50,6 +50,13 @@
       "when": 1794121361108,
       "tag": "0006_furry_sebastian_shaw",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795224585300,
+      "tag": "0007_evidence_ledgers",
+      "breakpoints": true
     }
   ]
 }

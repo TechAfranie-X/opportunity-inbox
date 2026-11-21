@@ -1,7 +1,7 @@
 {
  "version": 1,
  "engine": "current",
- "commit": "34dfb81+uncommitted",
+ "commit": "34dfb81",
  "note": "Frozen Phase 1 baseline: the CURRENT product pipeline (applyAssist with the model-alone gate from c45c215) on frozen fixtures J-N plus adversarial X, replayed from cached readings. Known regression versus eval/reference-8ee0e95.json. The shadow engine is compared against this; no production decision has changed.",
  "fixtures": {
   "J": {

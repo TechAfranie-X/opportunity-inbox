@@ -27,6 +27,7 @@ try {
   execFileSync("npx", ["drizzle-kit", "migrate"], { env: { ...process.env, DATABASE_URL: url.toString() }, stdio: "ignore" });
   process.env.DATABASE_URL = url.toString();
   process.env.SAMPLE_LOGIN = "1";
+  process.env.EVIDENCE_LEDGER = "shadow"; // the shadow evidence ledger is off in production by default; this journey exercises it (claims only, per account, deleted with the data)
   // The journey must not depend on whatever the developer enabled in .env.local: a local model would read the whole synthetic mailbox. An explicit value still wins.
   if (process.env.SEMANTIC_READER === "local") process.env.SEMANTIC_READER = "off"; // (.env.local is loaded before this line)
 
@@ -172,8 +173,29 @@ try {
   for (const marker of ["We received your application and will be in touch", "I'm a recruiter at", "Please complete it by", "pleased to extend you an offer"]) assert.equal(dump.includes(marker), false, `body text stored: ${marker}`);
   step("no message body text in the database");
 
+  // 8b. the shadow evidence ledger: recorded under the flag, claims only, versioned history, isolated per account, refuses content-shaped data, deleted with the account's data
+  const q = (query: string) => execFileSync("docker", ["exec", CONTAINER, "psql", "-U", decodeURIComponent(admin.username), "-d", SCRATCH, "-At", "-c", query]).toString().trim();
+  const { saveEvidenceLedgers, loadEvidenceLedgers } = await import("../lib/ledger/store.ts");
+  const mine = await loadEvidenceLedgers(SAMPLE_SUB);
+  assert.ok(mine.length >= 50, `ledger rows recorded: ${mine.length}`);
+  assert.ok(Number(q("select count(distinct reader_version) from evidence_ledgers")) >= 2, "a reader upgrade ADDS ledger rows; the earlier version's stay (append-only history)");
+  const ledgerDump = q("select claims::text || verdict::text || coalesce(sender_domain,'') from evidence_ledgers");
+  for (const marker of ["We received your application and will be in touch", "I'm a recruiter at", "Please complete it by", "pleased to extend you an offer", "Dear ", "Best regards", "Sincerely"]) assert.equal(ledgerDump.includes(marker), false, `message text in the ledger: ${marker}`);
+  const sampleBefore = mine.length;
+  const OTHER = "other-account-sub";
+  await saveEvidenceLedgers(OTHER, mine.slice(0, 3));
+  assert.equal((await loadEvidenceLedgers(OTHER)).length, 3);
+  assert.equal((await loadEvidenceLedgers(SAMPLE_SUB)).length, sampleBefore, "writing another account's ledger leaves this account's untouched");
+  const poisoned = { ...mine[0], ledger: { ...mine[0].ledger, claims: [{ ...mine[0].ledger.claims[0], kind: "employer" as const, value: "We have decided not to move forward\nwith your application", id: "x" }] } };
+  await assert.rejects(saveEvidenceLedgers(SAMPLE_SUB, [poisoned]), /invalid ledger/, "content-shaped data is refused");
+  step("evidence ledger: recorded, claims only, versioned, isolated per account, content refused");
+
   // 9. delete everything
   await store.deleteRecruitingData(SAMPLE_SUB);
+  assert.equal((await loadEvidenceLedgers(SAMPLE_SUB)).length, 0, "delete my data removes the ledger");
+  assert.equal((await loadEvidenceLedgers(OTHER)).length, 3, "and only this account's");
+  await store.deleteRecruitingData(OTHER);
+  assert.equal((await loadEvidenceLedgers(OTHER)).length, 0);
   assert.equal((await store.loadWorkspace(SAMPLE_SUB, real)).opportunities.length, 0);
   step("delete my data empties the workspace");
   console.log("E2E PASSED");

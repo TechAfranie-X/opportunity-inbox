@@ -3,6 +3,7 @@ import "server-only";
 import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { refineEvents } from "@/lib/lifecycle/refine";
+import { deleteEvidenceLedgers } from "@/lib/ledger/store";
 import {
   actionDismissals,
   eventPredictions,
@@ -274,6 +275,7 @@ export async function deleteRecruitingData(userGoogleSub: string) {
   await db.delete(opportunityOverrides).where(eq(opportunityOverrides.userGoogleSub, userGoogleSub));
   await db.delete(actionDismissals).where(eq(actionDismissals.userGoogleSub, userGoogleSub));
   await db.delete(recruitingSync).where(eq(recruitingSync.userGoogleSub, userGoogleSub));
+  await deleteEvidenceLedgers(userGoogleSub); // the evidence ledger is derived from this mailbox and goes with it
 }
 
 export async function disconnectGmail(userGoogleSub: string) {

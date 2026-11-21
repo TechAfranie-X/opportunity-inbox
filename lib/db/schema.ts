@@ -160,6 +160,34 @@ export const eventPredictions = pgTable(
   ],
 );
 
+/**
+ * The evidence ledger (lib/ledger): every reading made of one message, kept side by side, plus the shadow engine's verdict. STRUCTURED CLAIMS ONLY: enumerated values, short
+ * employer/role names the events table already holds, and the model's evidence as a hash and offset. There is deliberately no body, quotation, prompt or raw model response column,
+ * and `parseLedger` rejects anything that could carry one. Written only when EVIDENCE_LEDGER=shadow; nothing in the product reads it yet. Per account, deleted with the account's data.
+ */
+export const evidenceLedgers = pgTable(
+  "evidence_ledgers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userGoogleSub: text("user_google_sub").notNull(),
+    gmailMessageId: text("gmail_message_id").notNull(),
+    gmailThreadId: text("gmail_thread_id").notNull(),
+    /** The product reader version the claims were produced under: a new version adds a row, the old one stays (append-only history). */
+    readerVersion: text("reader_version").notNull(),
+    decisionVersion: text("decision_version").notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
+    senderDomain: text("sender_domain").notNull().default(""),
+    outbound: boolean("outbound").notNull().default(false),
+    claims: jsonb("claims").$type<unknown[]>().notNull(),
+    verdict: jsonb("verdict").$type<Record<string, unknown>>().notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("evidence_ledgers_user_message_version_unique").on(table.userGoogleSub, table.gmailMessageId, table.readerVersion),
+    index("evidence_ledgers_user_idx").on(table.userGoogleSub),
+  ],
+);
+
 /** A named, fixed set of messages to evaluate on. Membership is frozen once `frozen_at` is set. */
 export const evalDatasets = pgTable(
   "eval_datasets",

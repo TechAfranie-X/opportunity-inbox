@@ -2,6 +2,7 @@ import type { Prediction } from "./predictions.ts";
 import type { ReadContext, ThreadAnchor } from "./extract.ts";
 import { contactKeysOf, reconcilePredictions } from "../discovery/continuity.ts";
 import { isNearMiss } from "../reliability/flags.ts";
+import { buildChunkLedgers, type LedgerEntry } from "../ledger/chunk.ts";
 import { applyAssist } from "../semantic/assist.ts";
 import { applyConsensus } from "../semantic/consensus.ts";
 import { reconcileReadings } from "../semantic/employer.ts";
@@ -47,6 +48,8 @@ export type SyncStore = {
   evaluatedIds(ids: string[]): Promise<Set<string>>;
   saveEvents(events: ExtractedEvent[]): Promise<void>;
   savePredictions(predictions: Prediction[]): Promise<void>;
+  /** Shadow-mode evidence ledger (lib/ledger). Optional; nothing reads it back into a product decision. */
+  saveLedgers?(entries: LedgerEntry[]): Promise<void>;
   prune(scannedIds: string[], keptIds: string[]): Promise<void>;
   /** Earlier anchors for these contact keys (hashed sender addresses), so continuity survives chunk and sync boundaries. Optional. */
   contactAnchors?(keys: string[]): Promise<Map<string, ThreadAnchor>>;
@@ -83,6 +86,8 @@ export type EngineParams = {
    * a second reader ran, its verified relationship evidence. Off unless supplied.
    */
   identity?: (events: ExtractedEvent[], emails: Map<string, RecruitingEmail>, readings: Map<string, VerifiedReading>) => ExtractedEvent[];
+  /** Record the evidence ledger and the shadow engine's verdict for each message read (EVIDENCE_LEDGER=shadow). Off by default; it never changes a decision and a failure here loses only the record. */
+  ledger?: boolean;
   /** Name tokens of the account holder, removed from what the second reader sees. */
   selfNames?: string[];
   predict: (emails: RecruitingEmail[]) => Prediction[];
@@ -167,6 +172,8 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
     const threadIds = [...new Set(inboundEvents.map((e) => e.gmailThreadId))];
     const outbound = threadIds.length ? (await outboundOf(threadIds)).filter(allowed) : [];
     let events = tagEvents(p.extract([...inbound, ...outbound], context), via);
+    const ruleEvents = events; // what the rule reader said, before any second reader touched it (the ledger records both sides)
+    let chunkOpinions = new Map<string, import("../recruiting/reader/types.ts").VerifiedOutput>();
     let semanticFailed = false;
     if (p.semantic) {
       try {
@@ -177,6 +184,7 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
           for (const [k, v] of readings) readingLog.set(k, v);
           opinions = new Map([...readings].map(([k, v]) => [k, v.output] as const));
         } else opinions = await p.semantic.opine(inputs);
+        chunkOpinions = opinions;
         for (const [k, v] of opinions) opinionLog.set(k, v); // kept for this run so the deferred pass can use them without a second call
         events = (p.semanticMode === "assist" ? applyAssist : applyConsensus)(events, inbound, opinions);
         if (readingLog.size > 0) events = reconcileReadings(events, readingLog);
@@ -186,6 +194,9 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
       }
     }
     if (p.identity) events = p.identity(events, new Map(inbound.map((m) => [m.id, m] as const)), readingLog);
+    if (p.ledger && store.saveLedgers) {
+      try { await store.saveLedgers(buildChunkLedgers(inbound, ruleEvents, chunkOpinions)); } catch { /* the ledger is a shadow record: losing it never fails or alters a sync */ }
+    }
     await store.saveEvents(events);
     const eventIds = new Set(events.filter((e) => !isNearMiss(e)).map((e) => e.gmailMessageId)); // a near miss is still "no event" for continuity
     const held = p.deferable ? inbound.filter((e) => !eventIds.has(e.id) && deferred.size < DEFER_MAX && p.deferable!(e)) : [];
