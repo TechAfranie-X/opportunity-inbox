@@ -57,3 +57,21 @@ test("the model's role answer is parsed defensively", () => {
   assert.equal(parseRoleAnswer('[{"i":9,"same":true},{"i":1,"same":"yes"}]', 2).size, 0, "unknown index and non-boolean are ignored");
   assert.equal(parseRoleAnswer("[not json", 1).size, 0);
 });
+
+test("one receipt per application holds for specific roles too: the same role received in a different Gmail thread is another application", () => {
+  const r = (thread: string, d: number) => ev("applied", d, { gmailThreadId: thread });
+  assert.deepEqual(sizes(groupEventsV2([r("A", 0), r("B", 1)], { distinctThreadReceipts: true })), [1, 1]);
+  assert.deepEqual(sizes(groupEventsV2([r("A", 0), r("A", 0.1)], { distinctThreadReceipts: true })), [2], "a repeat delivery shares its thread");
+  assert.deepEqual(sizes(groupEventsV2([r("A", 0), r("B", 1)])), [2], "unchanged without the option");
+});
+
+test("a requisition number is identity: the same number is one application, different numbers are two, whatever the wording", () => {
+  const withReq = (id: string, d: number, thread: string) => ev("applied", d, { gmailThreadId: thread, signals: [`req:${id}`] });
+  const a = withReq("4471", 0, "A"), b = withReq("5120", 0.2, "B");
+  assert.deepEqual(sizes(groupEventsV2([a, b], { attribution: true })), [1, 1], "two numbers, two applications");
+  const later = ev("interview_invite", 5, { gmailThreadId: "C", signals: ["req:4471"] });
+  const g = groupEventsV2([a, b, later], { attribution: true });
+  assert.deepEqual(g.map((x) => x.events.length).sort(), [1, 2]);
+  assert.ok(g.find((x) => x.events.length === 2)!.events.some((e) => e.id === a.id), "the message with number 4471 joins the application with number 4471");
+  assert.deepEqual(sizes(groupEventsV2([ev("applied", 0, { gmailThreadId: "A", signals: ["req:4471"] }), ev("applied", 0.2, { gmailThreadId: "A", signals: ["req:5120"] })])), [2], "unchanged without the option");
+});

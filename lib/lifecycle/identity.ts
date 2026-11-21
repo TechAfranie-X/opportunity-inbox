@@ -89,6 +89,8 @@ export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, cor
   const ec = cycleOf(e.role);
   if (cyclesConflict(groupCycle(g), ec)) return "conflict";
   if (programConflictWithGroup(g, e)) return "conflict";
+  // (Phase 2) A requisition / job reference number is identity: the same number is the same application, and two different numbers are two applications, whatever the wording says.
+  if (ctx?.attribution) { const er = reqOf(e); const gr = new Set(g.events.map(reqOf).filter((x): x is string => !!x)); if (er && gr.size > 0) return gr.has(er) ? "match" : "conflict"; }
   // The hiring unit is soft identity evidence: at one employer, two applications to different units are different applications, and a message naming the unit one of them
   // is for belongs to it. Only when BOTH sides name a unit; a side that names none says nothing.
   const eu = unitOf(e), gu = unitsOf(g);
@@ -273,7 +275,7 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
           target = pick.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
           // One receipt is sent per application: a role-less receipt in ANOTHER thread, when the candidate already holds a receipt from a different thread, starts another
           // application (two receipts in one thread, or a repeat delivery within hours, still join).
-          if (target && e.type === "applied" && !specific(e.role) && target.events.some((x) => x.type === "applied" && x.gmailThreadId !== e.gmailThreadId && (ctx?.distinctThreadReceipts || Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) >= DAY / 2)) && !target.threads.has(e.gmailThreadId)) target = undefined;
+          if (target && e.type === "applied" && (!specific(e.role) || !!ctx?.distinctThreadReceipts) && target.events.some((x) => x.type === "applied" && x.gmailThreadId !== e.gmailThreadId && (ctx?.distinctThreadReceipts || Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) >= DAY / 2)) && !target.threads.has(e.gmailThreadId)) target = undefined;
         }
         // (Phase 2) Evidence-scored attribution, only when this message's own employer name has no application at all (so it can never pull a message away from an exact-employer candidate).
         if (!target && !ambiguous && ctx?.attribution && pool.length === 0) {
