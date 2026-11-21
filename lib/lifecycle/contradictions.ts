@@ -1,3 +1,4 @@
+import { cycleOf } from "./cycle.ts";
 import type { EffectiveEvent } from "../recruiting/types.ts";
 
 /**
@@ -8,7 +9,7 @@ import type { EffectiveEvent } from "../recruiting/types.ts";
  *  - ambiguous_identity: a message that names no role at an employer with several live applications; it was kept apart rather than guessed
  *  - offer_ended: an offer followed by a rejection or withdrawal (rescinded, declined, or a mistake)
  */
-export type Contradiction = { kind: "reopened" | "offer_ended" | "ambiguous_identity"; eventIds: string[]; text: string };
+export type Contradiction = { kind: "reopened" | "offer_ended" | "ambiguous_identity" | "mixed_cycles"; eventIds: string[]; text: string };
 
 const PROGRESS = new Set(["assessment", "interview_invite", "interview_scheduled", "offer"]);
 const ENDING = new Set(["rejection", "withdrawn"]);
@@ -35,5 +36,9 @@ export function detectContradictions(events: EffectiveEvent[]): Contradiction[] 
     if (e.type === "offer") lastOffer = e;
   }
   for (const e of events) if (e.signals.includes("identity:ambiguous") && !e.corrected && !e.confirmed) out.push({ kind: "ambiguous_identity", eventIds: [e.id], text: "We could not tell which of your applications to this employer this message is about. Check where it belongs." });
+  // Messages of one application that state two different recruiting YEARS ("Summer 2026" and "Summer 2027"): either two applications were merged or one process spans cycles. Never silent.
+  const years = new Set<number>();
+  for (const e of events) if (!e.outbound) for (const y of cycleOf(e.role).years) years.add(y);
+  if (years.size > 1) out.push({ kind: "mixed_cycles", eventIds: [events[events.length - 1].id], text: `This application's messages mention more than one recruiting cycle (${[...years].sort().join(" and ")}). Check whether they are one application or two.` });
   return out;
 }

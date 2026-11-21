@@ -37,6 +37,14 @@ export function employerAlias(a: string | null | undefined, b: string | null | u
   const [short, long] = x.length < y.length ? [x, y] : [y, x];
   return long.length - short.length <= 2 && short.every((t, i) => t === long[i]) && short.join("").length >= 4;
 }
+/** The role a message had BEFORE identity stripped a borrowed one (its cycle is still evidence). */
+const borrowedRole = new WeakMap<object, string>();
+const eventCycle = (e: EffectiveEvent, ctx?: IdentityContext): Cycle => {
+  const own = cycleOf(e.role);
+  if (own.years.length > 0 || !ctx?.borrowedCycle) return own;
+  const b = borrowedRole.get(e);
+  return b ? cycleOf(b) : own;
+};
 const specific = (role: string | null | undefined) => !!role && !isRoleFragment(role) && roleCore(role).length > 0;
 export const isSpecificRole = specific;
 /** Two role names that can never be the same application whatever they are called: a different recruiting cycle or programme type. Never overruled by a role-equivalence judgment. */
@@ -54,6 +62,8 @@ export type IdentityContext = {
    *  kinds of evidence agree (employer, a specific role, a requisition number, a team, the Gmail thread, sender continuity) and nothing vetoes it. Otherwise it stays separate; a weaker best
    *  candidate is recorded as a low-priority suggestion with the reasons. No link is ever made from an employer-name resemblance alone. */
   attribution?: boolean;
+  /** A role COPIED from another message is not evidence about which job a message is, but the recruiting cycle it states (the year and season) still is: a message whose thread says "Summer 2027" cannot join an application for "Summer 2026". */
+  borrowedCycle?: boolean;
 };
 export function groupCycle(g: Group): Cycle {
   const years = new Set<number>(), seasons = new Set<string>();
@@ -86,7 +96,7 @@ const unitsMatch = (a: string, b: string) => a === b || a.includes(b) || b.inclu
 export type Relation = "match" | "generic" | "conflict";
 /** How an event relates to an established opportunity, from role, cycle and program alone (time and thread are weighed by the caller). */
 export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, corroborated = false): Relation {
-  const ec = cycleOf(e.role);
+  const ec = eventCycle(e, ctx);
   if (cyclesConflict(groupCycle(g), ec)) return "conflict";
   if (programConflictWithGroup(g, e)) return "conflict";
   // (Phase 2) A requisition / job reference number is identity: the same number is the same application, and two different numbers are two applications, whatever the wording says.
@@ -123,7 +133,7 @@ function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean,
   const gap = e.occurredAt.getTime() - lastAt(g);
   if (rel === "generic") return gap <= (viaThread ? GENERIC_WINDOW_WITH_THREAD : GENERIC_WINDOW);
   if (viaThread) return true;
-  const gc = groupCycle(g), ec = cycleOf(e.role);
+  const gc = groupCycle(g), ec = eventCycle(e, ctx);
   const positiveCycle = gc.years.length > 0 && ec.years.length > 0; // already known not to conflict, so they share a year
   return positiveCycle || gap <= SPECIFIC_WINDOW_NO_CYCLE;
 }
@@ -220,7 +230,7 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
   // A role the reader COPIED from an earlier message ("role-inherited", or a reply/continuity event that took its anchor's role) is not evidence about THIS message: automated senders reuse one thread for several
   // roles, so an inherited role would pull a role-less message into whichever application the thread started with. For identity such an event states no role.
   const original = new Map(input.map((e) => [e.id, e] as const));
-  const events = input.map((e) => (BORROWED_ROLE.some((x) => e.signals.includes(x)) && !e.corrected && !e.confirmed ? { ...e, role: null } : e));
+  const events = input.map((e) => { if (BORROWED_ROLE.some((x) => e.signals.includes(x)) && !e.corrected && !e.confirmed) { const stripped = { ...e, role: null }; if (e.role) borrowedRole.set(stripped, e.role); return stripped; } return e; });
   const restore = (g: Group[]) => { for (const x of g) x.events = x.events.map((e) => (original.get(e.id) ? { ...e, role: original.get(e.id)!.role } : e)); return g; };
   const sorted = [...events].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.id.localeCompare(b.id));
   // a person's "belongs with" constraints form components; an event in a component whose group exists joins it directly

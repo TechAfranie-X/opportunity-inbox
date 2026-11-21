@@ -75,3 +75,12 @@ test("a requisition number is identity: the same number is one application, diff
   assert.ok(g.find((x) => x.events.length === 2)!.events.some((e) => e.id === a.id), "the message with number 4471 joins the application with number 4471");
   assert.deepEqual(sizes(groupEventsV2([ev("applied", 0, { gmailThreadId: "A", signals: ["req:4471"] }), ev("applied", 0.2, { gmailThreadId: "A", signals: ["req:5120"] })])), [2], "unchanged without the option");
 });
+
+test("a borrowed role's recruiting cycle still separates applications: Summer 2027 mail cannot join a Summer 2026 application", () => {
+  const first = ev("applied", 0, { role: "Software Engineering Intern (Summer 2026)", gmailThreadId: "A" });
+  const later = ev("assessment", 100, { role: "Software Engineering Intern (Summer 2027)", gmailThreadId: "A", signals: ["role-inherited"] });
+  assert.deepEqual(sizes(groupEventsV2([first, later])), [2], "unchanged without the option: the borrowed role is ignored entirely");
+  assert.deepEqual(sizes(groupEventsV2([first, later], { borrowedCycle: true })), [1, 1]);
+  const sameYear = ev("assessment", 20, { role: "Software Engineering Intern (Summer 2026)", gmailThreadId: "A", signals: ["role-inherited"] });
+  assert.deepEqual(sizes(groupEventsV2([first, sameYear], { borrowedCycle: true })), [2], "the same cycle still joins");
+});

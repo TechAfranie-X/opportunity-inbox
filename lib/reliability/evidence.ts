@@ -83,6 +83,21 @@ export function endingWording(email: Pick<RecruitingEmail, "subject" | "bodyText
   return CLOSURE.test(text) && closureFact(email);
 }
 
+/**
+ * The message STATES the reader's own application: a receipt or confirmation ("we received your application", "thank you for applying", "your application has been submitted / is under review",
+ * "you have applied"), or a direct request of the reader inside their own process ("we would like to invite you to interview", "complete your assessment for your application"). A
+ * deterministic fact about the text. It is what lets a model-found application enter the pipeline: evidence the student actually applied, not an alert, an event registration or marketing.
+ * Does not hold for "apply now" calls to action, job recommendations or newsletters.
+ */
+const OWN_APPLICATION = new RegExp([
+  String.raw`\b(?:we(?:'|’)?(?:ve| have)? (?:received|got) your (?:[\w&'’.-]+ ){0,5}application|(?:thank(?:s| you)|thanks) (?:you )?for (?:applying|your application|submitting your application|your interest in applying)|your (?:[\w&'’.-]+ ){0,5}application (?:has been|was|is) (?:successfully )?(?:received|submitted|complete[d]?|under review|being reviewed|in review)|(?:you(?:'|’)?ve|you have) (?:successfully )?(?:applied|submitted your application)|application (?:received|confirmation|submitted)|(?:we(?:'|’)re|we are) (?:currently )?reviewing your application|thank you for your application)`,
+  String.raw`\b(?:we (?:would|'d) like to invite you to (?:interview|complete|schedule|take|a (?:call|chat|phone|video))|invite you to (?:interview|complete (?:an?|our|the) (?:online )?(?:assessment|test|challenge)|schedule (?:an?|your) (?:interview|call))|(?:schedule|book|confirm) your (?:interview|assessment)|your (?:interview|assessment|coding challenge) (?:is|has been) (?:scheduled|confirmed|booked)|(?:complete|finish) (?:your|the) (?:online )?(?:assessment|coding challenge) (?:for|to continue))`,
+].join("|"), "i");
+export function ownApplicationStatement(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
+  const text = unquoted(`${email.subject}\n${email.bodyText}`);
+  return OWN_APPLICATION.test(text);
+}
+
 // ------------------------------------------------------------------ marketing
 const ALERT_SUBJECT = new RegExp([
   String.raw`\bjobs? (?:for you|you (?:might|may|could) (?:like|be interested)|picks?|alerts?|recommendations?|matching|digest|newsletter|near you)\b`,

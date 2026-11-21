@@ -1,9 +1,10 @@
 import { candidateEvent } from "../reliability/assess.ts";
 import { NEAR_MISS_WEAK, isNearMiss, isWeakNearMiss } from "../reliability/flags.ts";
-import { applyTextFacts, studentAcceptance } from "../reliability/facts.ts";
+import { applyTextFacts, explicitOffer, studentAcceptance } from "../reliability/facts.ts";
 import { buildLedger } from "../ledger/build.ts";
 import type { VerifiedOutput } from "../recruiting/reader/types.ts";
-import { endingWording } from "../reliability/evidence.ts";
+import { endingWording, marketingFact, ownApplicationStatement } from "../reliability/evidence.ts";
+import { notAProcess } from "../semantic/assist.ts";
 import { requisitionOf } from "../identity/represented-employer.ts";
 import { outboundEvent } from "../recruiting/extract.ts";
 import { PRODUCT_READER_VERSION } from "../recruiting/product-version.ts";
@@ -114,6 +115,9 @@ export function shadowAssist(events: ExtractedEvent[], emails: RecruitingEmail[]
   return result.map((e) => {
     const m = byId.get(e.gmailMessageId);
     const id = m && !e.outbound ? requisitionOf(`${m.subject}\n${m.bodyText.slice(0, 3000)}`) : null;
-    return id && !e.signals.some((x) => x.startsWith("req:")) ? { ...e, signals: [...e.signals, `req:${id}`] } : e;
+    let out = id && !e.signals.some((x) => x.startsWith("req:")) ? { ...e, signals: [...e.signals, `req:${id}`] } : e;
+    // A model-found application is CORROBORATED (and may enter the pipeline) when the message itself states the reader's own application and is not marketing or a notice
+    if (m && !e.outbound && e.signals.includes("semantic:event") && !out.signals.includes("entry:corroborated") && ownApplicationStatement(m) && !marketingFact(m) && !notAProcess(m) && (!["offer", "rejection", "withdrawn"].includes(e.type) || (e.type === "offer" ? explicitOffer(m) !== null : endingWording(m)))) out = { ...out, signals: [...out.signals, "entry:corroborated"] };
+    return out;
   });
 }

@@ -44,3 +44,17 @@ test("the same appointment is one application, and one interview is never shown 
   const acts = buildActions([...o1, ...o2], new Date("2026-09-19T12:00:00Z"));
   assert.equal(acts.filter((x) => x.kind === "upcoming_interview").length, 1);
 });
+
+test("a model-found application that the message itself states is corroborated and enters the pipeline", () => {
+  const strong = ev("applied", 1, { company: "Receipt Co", signals: ["semantic:event", "entry:corroborated"] });
+  const { kept, demoted } = applyEntryPolicy([strong], build);
+  assert.equal(kept.length, 1);
+  assert.equal(demoted.length, 0);
+});
+
+test("an application whose messages state two recruiting cycles is flagged, never silent", () => {
+  const a = ev("applied", 1, { company: "Cycle Co", role: "Software Engineering Intern (Summer 2026)", gmailThreadId: "T" });
+  const b = ev("assessment", 5, { company: "Cycle Co", role: "Software Engineering Intern (Summer 2027)", gmailThreadId: "T" });
+  const o = buildOpportunities([a, b]);
+  assert.ok(o.some((x) => (x.contradictions ?? []).some((c) => c.kind === "mixed_cycles")) || o.length === 2, "either separated by cycle or flagged");
+});

@@ -35,3 +35,9 @@ test("a footer that says 'unsubscribe' does not hide an ending sentence elsewher
 test("quoted earlier mail is not read as the message's own wording", () => {
   assert.equal(endingWording(m("Thanks, I'll reply soon.\n\nOn Mon, Oct 5 Recruiter wrote:\n> We have decided to pursue other candidates for this position.")), false);
 });
+
+import { ownApplicationStatement } from "./evidence.ts";
+test("the student's own application is stated by a receipt or a direct request inside the process; not by an alert, an invitation to an event, or a call to action", () => {
+  for (const body of ["We received your Claude Corps application.", "Thank you for applying to Lumen Works!", "Your application has been submitted and is under review.", "We would like to invite you to interview for the Analyst role.", "You have successfully applied."]) assert.equal(ownApplicationStatement(m(body)), true, body);
+  for (const body of ["Jobs matching your profile: Analyst at Northwind. Apply now!", "You're invited to our open evening. Register now.", "Applications open soon, don't miss out.", "Welcome to the community! Set up your profile.", "Your account has been verified."]) assert.equal(ownApplicationStatement(m(body)), false, body);
+});
