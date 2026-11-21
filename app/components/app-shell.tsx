@@ -16,6 +16,7 @@ import { cachedBrandUrls } from "@/lib/brand/cache";
 import { connectedGmailAccount } from "@/lib/gmail/account";
 import { lookupKeys } from "@/lib/identity/names";
 import { attentionCount, buildReviewQueue } from "@/lib/recruiting/review";
+import { reviewOptions } from "@/lib/recruiting/product-config";
 import type { EffectiveEvent, Opportunity } from "@/lib/recruiting/types";
 
 type NavId = "today" | "pipeline" | "activity" | "review";
@@ -65,7 +66,7 @@ export async function AppShell({
   width?: "reading" | "mid" | "wide";
   children: ReactNode;
 }) {
-  const reviewQueue = demo ? [] : buildReviewQueue(opportunities, undefined, possible);
+  const reviewQueue = demo ? [] : buildReviewQueue(opportunities, undefined, possible, new Date(), reviewOptions());
   const reviewCount = attentionCount(reviewQueue);
   const housekeepingCount = reviewQueue.filter((i) => !i.weak && i.tier === "routine").length;
   const hrefOf = (item: (typeof NAV)[number]) => (demo ? item.demoHref : item.href);

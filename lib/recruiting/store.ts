@@ -4,6 +4,8 @@ import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-or
 import { getDb } from "@/lib/db";
 import { refineEvents } from "@/lib/lifecycle/refine";
 import { deleteEvidenceLedgers } from "@/lib/ledger/store";
+import { applyEntryPolicy } from "@/lib/recruiting/entry-policy";
+import { entryPolicyOn, identityContext } from "@/lib/recruiting/product-config";
 import { withConfirmationConflicts, type LatestReading } from "@/lib/recruiting/confirmation-conflicts";
 import {
   actionDismissals,
@@ -101,7 +103,14 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
   // A near miss the language model read and judged not recruiting is not offered either (it stays stored, metadata only, and a person's "Looks right" still wins).
   const hidden = all.filter((e) => isNearMiss(e) && isSemanticExcluded(e) && !e.confirmed && !e.corrected);
   const possible = all.filter((e) => isNearMiss(e) && !e.confirmed && !e.corrected && !hidden.includes(e));
-  const events = all.filter((e) => !possible.includes(e) && !hidden.includes(e));
+  let events = all.filter((e) => !possible.includes(e) && !hidden.includes(e));
+  const ident = identityContext();
+  // Entry policy (ENTRY_POLICY=off to roll back): a model-only reading cannot create an application; those events wait as "possible" until a person confirms them.
+  if (entryPolicyOn()) {
+    const { kept, demoted } = applyEntryPolicy(events, (evs) => buildOpportunities(evs, new Map(), parsePolicy(process.env.OPPORTUNITY_POLICY), ident));
+    events = kept;
+    possible.push(...demoted);
+  }
   const overrides = new Map<string, OpportunityOverride>(
     overrideRows.flatMap((o) =>
       o.status === "closed" || o.status === "active"
@@ -111,7 +120,7 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
   );
   // Thresholds are configuration (OPPORTUNITY_POLICY, JSON), not code: they are chosen from measured risk-coverage, not by hand.
   const policy = parsePolicy(process.env.OPPORTUNITY_POLICY);
-  let opportunities = buildOpportunities(events, overrides, policy);
+  let opportunities = buildOpportunities(events, overrides, policy, ident);
   // OFF by default (CONFIRMATION_CONFLICTS=on): ask about a plain "Looks right" that the latest reading of the same message disagrees with. Nothing is rewritten.
   if (process.env.CONFIRMATION_CONFLICTS === "on") opportunities = withConfirmationConflicts(opportunities, await latestReadings(userGoogleSub, events.filter((e) => e.confirmed && !e.corrected).map((e) => e.gmailMessageId)));
   const actions = buildActions(opportunities, toFloating(now), new Set(dismissalRows.map((d) => d.actionId)), policy);

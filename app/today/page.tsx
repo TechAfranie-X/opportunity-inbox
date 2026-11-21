@@ -9,6 +9,7 @@ import { embargoHidingMail, EMBARGO_CUTOFF } from "@/lib/gmail/embargo";
 import { isSampleUser } from "@/lib/gmail/sample";
 import { findGmailConnection } from "@/lib/gmail/credentials";
 import { attentionCount, buildReviewQueue } from "@/lib/recruiting/review";
+import { reviewOptions } from "@/lib/recruiting/product-config";
 import { toFloating } from "@/lib/recruiting/actions";
 import { buildBriefing } from "@/lib/recruiting/briefing";
 import { loadWorkspace, recordUsage } from "@/lib/recruiting/store";
@@ -35,7 +36,7 @@ export default async function TodayPage() {
   const today = now.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" });
   const updated = workspace.lastSyncedAt?.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
-  const toCheck = neverSynced ? 0 : attentionCount(buildReviewQueue(workspace.opportunities, undefined, workspace.possible));
+  const toCheck = neverSynced ? 0 : attentionCount(buildReviewQueue(workspace.opportunities, undefined, workspace.possible, new Date(), reviewOptions()));
   const hiding = !isSampleUser(sub) && embargoHidingMail(real);
 
   return (

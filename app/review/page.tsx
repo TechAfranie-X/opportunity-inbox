@@ -8,6 +8,7 @@ import { toFloating } from "@/lib/recruiting/actions";
 import { EVENT_NOUN, formatDay } from "@/lib/recruiting/format";
 import { entityState } from "@/lib/recruiting/presentation";
 import { buildReviewQueue } from "@/lib/recruiting/review";
+import { reviewOptions } from "@/lib/recruiting/product-config";
 import { loadWorkspace } from "@/lib/recruiting/store";
 import { isSampleUser } from "@/lib/gmail/sample";
 
@@ -20,7 +21,7 @@ export default async function ReviewPage() {
   const real = new Date();
   const now = toFloating(real);
   const workspace = await loadWorkspace(sub, real);
-  const queue = buildReviewQueue(workspace.opportunities, undefined, workspace.possible, now);
+  const queue = buildReviewQueue(workspace.opportunities, undefined, workspace.possible, now, reviewOptions());
   const updated = workspace.lastSyncedAt?.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   const sample = isSampleUser(sub);
 

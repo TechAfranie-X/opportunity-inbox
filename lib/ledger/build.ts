@@ -1,4 +1,4 @@
-import { closureFact, marketingFact } from "../reliability/evidence.ts";
+import { closureFact, endingWording, marketingFact } from "../reliability/evidence.ts";
 import { explicitOffer } from "../reliability/facts.ts";
 import { CONFLICT_PREFIX, MEMBERSHIP_PREFIX, isNearMiss, isWeakNearMiss } from "../reliability/flags.ts";
 import { notAProcess, ownProcessWording } from "../semantic/assist.ts";
@@ -25,6 +25,7 @@ export function factClaims(email: RecruitingEmail): Claim[] {
   const out: Claim[] = [];
   const fact = (name: FactName, producer: string) => add(out, "fact", producer, "fact", name, 1);
   if (closureFact(email)) fact("closure_wording", "closureFact");
+  if (endingWording(email)) fact("ending_wording", "endingWording");
   const mk = marketingFact(email);
   if (mk === "alert") fact("marketing_alert", "marketingFact");
   if (mk === "bulk") fact("marketing_bulk", "marketingFact");

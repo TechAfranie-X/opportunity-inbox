@@ -13,7 +13,8 @@ const reading = (id: string, o: Partial<VerifiedOutput>): VerifiedOutput => ({ k
 const OPTS = { readerVersion: "test" };
 
 const CLOSURE = "Dear Sam,\nThank you for your interest in the Analyst role at Lumen Works. After careful consideration, we have decided not to move forward with your application at this time.\nBest,\nTalent team";
-const BLAND = "Hello Sam, we wanted to share an update on your application to Lumen Works. We are not progressing your candidacy this time. Thank you.";
+const BLAND = "Hello Sam, we wanted to share an update on your application to Lumen Works. Thank you for your interest and for your time.";
+const ENDING = "Hello Sam, we wanted to share an update on your application to Lumen Works. We have decided to pursue other candidates for this role. Thank you.";
 const PROMO = "Join the Lumen Works Insiders community for free career tips and events. Unsubscribe | Manage preferences | View in browser. You're receiving this because you subscribed. Sponsored.";
 const ALERT = "Jobs matching your profile: Analyst at Northwind, Engineer at Halden. Unsubscribe | Manage preferences | View in browser. You're receiving this email because you set up a job alert. Sponsored";
 
@@ -109,4 +110,22 @@ test("shadow engine: nothing is removed from the rule reader's events, and a con
   const ev = out.find((e) => e.gmailMessageId === "r1")!;
   assert.equal(ev.type, "rejection");
   assert.ok(ev.signals.some((x) => x.startsWith("decision:")) && ev.signals.includes("terminal:proposed"), "the event says its ending is proposed, not verified");
+});
+
+test("an everyday ending sentence corroborates the model's ending: verified, where the same reading without one is only proposed", () => {
+  const withSentence = decide(buildLedger(mail("m11", "Application update", ENDING), null, reading("m11", {}), OPTS));
+  assert.equal(withSentence.terminal, "verified");
+  assert.ok(withSentence.type.for.some((id) => id.endsWith("ending_wording")));
+  const without = decide(buildLedger(mail("m12", "Application update", BLAND), null, reading("m12", {}), OPTS));
+  assert.equal(without.terminal, "proposed");
+});
+
+test("a rule-found rejection with no ending sentence (a receipt typed as a rejection) is proposed, never settled", () => {
+  const receipt = mail("m13", "Thank you for applying", "Hello Sam, thank you for your interest in Lumen Works. Your application has been received and is being reviewed.");
+  const ruleEvent = { gmailMessageId: "m13", gmailThreadId: "t-m13", occurredAt: NOW, outbound: false, senderName: "Talent", senderDomain: "lumen-works.example", subject: receipt.subject, type: "rejection" as const, company: "Lumen Works", role: null, eventDate: null, eventDateHasTime: false, dateKind: null, confidence: 0.8, fieldConfidence: { type: 0.8, company: 0.8, role: 0 }, reviewReasons: [], signals: [] };
+  const out = shadowAssist([ruleEvent], [receipt], new Map([["m13", reading("m13", { recruiting: true, type: "applied", stage: "applied" })]]));
+  assert.ok(out[0].signals.includes("terminal:proposed"));
+  const real = mail("m14", "Update", ENDING);
+  const out2 = shadowAssist([{ ...ruleEvent, gmailMessageId: "m14", gmailThreadId: "t-m14", subject: "Update" }], [real], new Map([["m14", reading("m14", {})]]));
+  assert.ok(!out2[0].signals.includes("terminal:proposed"), "a real ending sentence settles it");
 });

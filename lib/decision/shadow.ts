@@ -3,6 +3,7 @@ import { NEAR_MISS_WEAK, isNearMiss, isWeakNearMiss } from "../reliability/flags
 import { applyTextFacts, studentAcceptance } from "../reliability/facts.ts";
 import { buildLedger } from "../ledger/build.ts";
 import type { VerifiedOutput } from "../recruiting/reader/types.ts";
+import { endingWording } from "../reliability/evidence.ts";
 import { requisitionOf } from "../identity/represented-employer.ts";
 import { outboundEvent } from "../recruiting/extract.ts";
 import { PRODUCT_READER_VERSION } from "../recruiting/product-version.ts";
@@ -46,9 +47,13 @@ export function shadowAssist(events: ExtractedEvent[], emails: RecruitingEmail[]
     return withState({ ...base, confidence: conf, fieldConfidence: { type: conf, company: base.fieldConfidence?.company ?? 0, role: 0 } }, v);
   };
 
-  const out = events.map((e) => {
+  const out = events.map((e0) => {
+    let e = e0;
     const m = byId.get(e.gmailMessageId);
     if (!m || e.outbound) return e;
+    // A rule-found REJECTION settles an application only when the message contains a sentence that ends it. The rule reader types a receipt ("your application has been received") as a rejection
+    // now and then; without an ending sentence the ending is only proposed (the application stays active and visible).
+    if (!isNearMiss(e) && e.type === "rejection" && !e.signals.includes("terminal:proposed") && !endingWording(m)) e = { ...e, signals: [...e.signals, "terminal:proposed"] };
     const op = opinions.get(e.gmailMessageId);
     const v = verdictFor(m, e, op);
     if (!usable(op)) return e;

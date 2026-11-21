@@ -222,7 +222,17 @@ export function buildActions(
     }
   }
 
-  return items.sort(
+  // The same appointment can reach two applications (a calendar invitation and the email about it); the person must never see one interview twice. Dated actions of one kind at one employer
+  // for the same moment are one action: keep the highest priority.
+  const best = new Map<string, ActionItem>();
+  const undated: ActionItem[] = [];
+  for (const it of items) {
+    if (!it.due || (it.kind !== "upcoming_interview" && it.kind !== "assessment_deadline")) { undated.push(it); continue; }
+    const k = `${it.kind}|${it.company.toLowerCase()}|${it.due.getTime()}`;
+    const prior = best.get(k);
+    if (!prior || it.priority > prior.priority) best.set(k, it);
+  }
+  return [...undated, ...best.values()].sort(
     (a, b) => BUCKET_ORDER[a.bucket] - BUCKET_ORDER[b.bucket] || b.priority - a.priority,
   );
 }

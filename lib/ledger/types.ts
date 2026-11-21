@@ -19,7 +19,8 @@ export type ClaimKind = (typeof CLAIM_KINDS)[number];
 
 /** Deterministic facts about a message. Each is a yes/no property of the text; none carries text. */
 export const FACT_NAMES = [
-  "closure_wording", // terminal wording about the reader's own application
+  "closure_wording", // terminal wording about the reader's own application (strict)
+  "ending_wording", // an everyday sentence that ends the application ("we have decided not to move forward", "not selected", "pursue other candidates")
   "marketing_alert", // a job-recommendation digest
   "marketing_bulk", // mass-mail markers with no personal anchor
   "not_own_process", // subject is a membership / welcome / promotion with nothing about the reader's own process

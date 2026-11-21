@@ -63,6 +63,26 @@ export function closureFact(email: Pick<RecruitingEmail, "subject" | "bodyText">
   return !anchor;
 }
 
+/**
+ * A BROADER test than `closureFact`: does the message contain a sentence that ends the reader's application, in everyday wording ("we regret to inform you", "we've decided to pursue other
+ * candidates", "unable to move forward with your application", "not selected", "won't be moving forward with your candidacy")? `closureFact` is deliberately strict (it can confirm without error) and on
+ * real mail it recognised fewer than half of the genuine rejections, so it cannot decide anything on its own. This one is the corroboration a rule-found rejection needs before it SETTLES an
+ * application: the reader's type plus an actual ending sentence. Without one the ending is only proposed. Wording families, not any employer's template.
+ */
+const ENDING_CUE = new RegExp([
+  String.raw`\b(?:unfortunately|regret(?:fully)?\b|we are sorry to|we(?:'|’)re sorry to|sorry to (?:inform|tell|let you know)|not (?:be )?(?:moving|proceeding|progressing|advancing|continuing)\b|(?:will|would|do|does|are|were|we(?:'|’)re|we are|can)\s*not (?:be )?(?:able to )?(?:move|moving|proceed|proceeding|progress|progressing|extend|offer|continue|continuing|select|selecting|consider|considering|invite|inviting)\b|won(?:'|’)t be (?:moving|proceeding|progressing|able|continuing)|unable to (?:move|proceed|progress|extend|offer|continue|invite|advance)|not (?:been )?(?:selected|shortlisted|successful|eligible|chosen)|(?:decided|chosen|chose|opted) (?:not to|to (?:pursue|move forward with|proceed with|go (?:in|with)|take|select|continue with))|(?:pursue|pursuing|move forward with|proceed with|moving forward with) (?:other|another|different) (?:candidate|applicant|direction)|other (?:candidates?|applicants?)\b|different direction|(?:position|role|vacancy) (?:has|have) (?:been )?filled|(?:made|make|reached|come to) (?:the|a) decision not to|concluded (?:the|our) (?:search|hiring)|(?:completed|finished|closed) (?:our )?hiring for|more (?:applications|applicants|candidates) than we (?:are|were) able|not (?:been )?chosen|unable to offer|not able to (?:offer|extend)|declin(?:e|ed|ing) your application|no longer (?:be )?(?:under consideration|being considered|considered|in consideration))`,
+].join("|"), "i");
+export function endingWording(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
+  const text = unquoted(`${email.subject}\n${email.bodyText}`);
+  // judged sentence by sentence: a footer that says "unsubscribe" must not hide an ending sentence elsewhere in the message
+  for (const sentence of text.split(/(?<=[.!?])\s+|\n+/)) {
+    if (sentence.length > 400 || CLOSURE_NOT_ABOUT_YOU.test(sentence)) continue;
+    const cue = ENDING_CUE.exec(sentence);
+    if (cue && !OFFER_OR_NEXT.test(sentence.slice(0, cue.index))) return true;
+  }
+  return CLOSURE.test(text) && closureFact(email);
+}
+
 // ------------------------------------------------------------------ marketing
 const ALERT_SUBJECT = new RegExp([
   String.raw`\bjobs? (?:for you|you (?:might|may|could) (?:like|be interested)|picks?|alerts?|recommendations?|matching|digest|newsletter|near you)\b`,

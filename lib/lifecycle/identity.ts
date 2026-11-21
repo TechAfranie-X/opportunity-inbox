@@ -90,6 +90,8 @@ export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, cor
   if (cyclesConflict(groupCycle(g), ec)) return "conflict";
   if (programConflictWithGroup(g, e)) return "conflict";
   // (Phase 2) A requisition / job reference number is identity: the same number is the same application, and two different numbers are two applications, whatever the wording says.
+  // (Phase 2) The same appointment is the same application: an interview at one employer at the same scheduled moment (a calendar invitation and the email about it, or a reminder) is one process.
+  if (ctx?.attribution && e.eventDateHasTime && e.eventDate && (e.type === "interview_scheduled" || e.type === "interview_invite") && g.events.some((x) => x.eventDateHasTime && x.eventDate && x.eventDate.getTime() === e.eventDate!.getTime() && (x.type === "interview_scheduled" || x.type === "interview_invite"))) return "match";
   if (ctx?.attribution) { const er = reqOf(e); const gr = new Set(g.events.map(reqOf).filter((x): x is string => !!x)); if (er && gr.size > 0) return gr.has(er) ? "match" : "conflict"; }
   // The hiring unit is soft identity evidence: at one employer, two applications to different units are different applications, and a message naming the unit one of them
   // is for belongs to it. Only when BOTH sides name a unit; a side that names none says nothing.

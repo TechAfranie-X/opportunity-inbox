@@ -117,7 +117,7 @@ for (const sc of fx.scenarios) {
       for (const [k, v] of judged) roleVerdicts.set(k, v);
       if (roleCachePath) writeFileSync(roleCachePath, JSON.stringify(rolesToJson(roleVerdicts), null, 1));
     }
-    identityCtx = { roleVerdicts, weakEmployerThreads: true, distinctThreadReceipts: true, confirmEndings: true, attribution: process.env.EXP_ATTR !== "0" };
+    identityCtx = { roleVerdicts: process.env.EXP_ROLES === "0" ? new Map() : roleVerdicts, weakEmployerThreads: true, distinctThreadReceipts: true, confirmEndings: true, attribution: process.env.EXP_ATTR !== "0" };
     if (collectOnly) continue;
   }
   const opps: Opportunity[] = buildOpportunities(events, new Map(), DEFAULT_POLICY, identityCtx);

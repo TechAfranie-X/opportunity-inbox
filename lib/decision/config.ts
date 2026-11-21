@@ -22,6 +22,7 @@ export const DECISION_CONFIG = {
   /** Deterministic facts: signed contribution to "this is the reader's own process". */
   recruitingFact: {
     closure_wording: 3,
+    ending_wording: 1.5,
     own_process_wording: 1.5,
     explicit_offer: 2.5,
     not_own_process: -2,
@@ -31,7 +32,7 @@ export const DECISION_CONFIG = {
     rule_doubt_conflict: 0,
   },
   /** Facts that support a specific event type. */
-  typeFact: { closure_wording: { type: "rejection", weight: 3 }, explicit_offer: { type: "offer", weight: 3 } },
+  typeFact: { closure_wording: { type: "rejection", weight: 3 }, ending_wording: { type: "rejection", weight: 2 }, explicit_offer: { type: "offer", weight: 3 } },
   /** A receipt, a bare status or a nudge says little about what the message really is; the same subject carries a receipt one day and a rejection the next. */
   lowInformationTypes: ["status_update", "applied", "follow_up"],
   lowInformationFactor: 0.4,
