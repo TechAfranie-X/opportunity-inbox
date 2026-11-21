@@ -76,3 +76,27 @@ test("one message that names no employer does not create an application", () => 
   const named = ev("applied", 1, { company: "Named Co", signals: [] });
   assert.equal(applyEntryPolicy([named], build).kept.length, 1);
 });
+
+import { proposeMissedEndings } from "./entry-policy.ts";
+test("an update whose text ends the application is shown as a PROPOSED rejection; confirmed, corrected and engine-decided events are left alone", () => {
+  const upd = ev("status_update", 3, { company: "Missed Co", signals: ["ending:wording"] });
+  const anchor = ev("applied", 1, { company: "Missed Co", signals: [] });
+  const out = proposeMissedEndings([anchor, upd, ev("status_update", 4, { signals: ["ending:wording"], confirmed: true }), ev("status_update", 5, { signals: ["ending:wording", "decision:verified"] }), ev("status_update", 6, { signals: [] })]);
+  assert.equal(out[1].type, "rejection");
+  assert.ok(out[1].signals.includes("terminal:proposed"));
+  assert.deepEqual(out.slice(2).map((e) => e.type), ["status_update", "status_update", "status_update"]);
+  const unanchored = proposeMissedEndings([ev("status_update", 3, { company: "Alone Co", signals: ["ending:wording"] })]);
+  assert.equal(unanchored[0].type, "status_update", "no application at that employer: not proposed");
+  const opp = buildOpportunities([anchor, out[1]]);
+  assert.equal(opp[0].status, "active", "proposed, not settled");
+  assert.equal(opp[0].proposedEnding?.outcome, "rejected");
+});
+
+test("events, surveys, notices and community messages do not create applications; a programme acceptance is a programme, not a job", () => {
+  const evt = ev("applied", 1, { company: "Event Co", signals: ["class:event"] });
+  assert.equal(applyEntryPolicy([evt], build).kept.length, 0);
+  const real = ev("applied", 1, { company: "Real Co", signals: [] }), stray = ev("status_update", 2, { company: "Real Co", gmailThreadId: real.gmailThreadId, signals: ["class:event"] });
+  assert.equal(applyEntryPolicy([real, stray], build).kept.length, 2, "an event message inside a real application stays with it");
+  const prog = buildOpportunities([ev("offer", 1, { company: "Prog Co", signals: ["class:program-acceptance"] })]);
+  assert.equal(prog[0].kind, "mentorship");
+});

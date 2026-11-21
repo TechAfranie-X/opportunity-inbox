@@ -243,7 +243,9 @@ const MENTORSHIP = /\bmentor(?:ship)?\b/i;
 /** Jobs and internships are the default; a scholarship, fellowship, mentorship program or event (workshop, conference, summit, career fair, hackathon) is typed so it is never mistaken for employer recruiting. */
 const EVENT_WORDS = /\b(?:workshops?|conferences?|summits?|boot ?camps?|webinars?|symposi(?:um|a)|hackathons?|career fairs?|job fairs?|info(?:rmation)? sessions?|expos?|meet-?ups?|seminars?|colloqui(?:um|a)|open house|networking (?:event|night)|competition|contest)\b/i;
 const TITLE_WORDS = /\b(?:intern(?:ship)?|engineer(?:ing)?|developer|analyst|associate|assistant|scientist|researcher|coordinator|manager|designer|technician|consultant|co-?op|apprentice(?:ship)?|trainee|officer|specialist|fellow(?:ship)?)\b/i;
-export function opportunityKind(events: Pick<EffectiveEvent, "subject" | "role">[], company?: string | null): "job" | "scholarship" | "mentorship" | "event" {
+export function opportunityKind(events: (Pick<EffectiveEvent, "subject" | "role"> & { signals?: string[] })[], company?: string | null): "job" | "scholarship" | "mentorship" | "event" {
+  // acceptance INTO a programme (message class, stamped from the real message) is a programme, never a job offer
+  if (events.some((e) => e.signals?.includes("class:program-acceptance"))) return "mentorship";
   const roles = events.map((e) => e.role ?? "").join(" ");
   const text = events.map((e) => `${e.subject ?? ""} ${e.role ?? ""}`).join(" ");
   // a title noun in the ROLE keeps it a job ("Workshop Facilitator Intern", "Conference Coordinator"); an event word in the role/company/subject with no title noun is an event

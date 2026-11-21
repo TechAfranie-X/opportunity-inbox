@@ -45,6 +45,19 @@ const eventCycle = (e: EffectiveEvent, ctx?: IdentityContext): Cycle => {
   const b = borrowedRole.get(e);
   return b ? cycleOf(b) : own;
 };
+/** An APPLIED event is a receipt only when its subject says so; an availability confirmation, a portal code or a kickoff message typed "applied" is not another application. */
+const RECEIPT_WORDS = /(appl|candidat|solicitud|bewerbung|postulaci|received|recib|recebid|eingang|bestätig|confirm|thank|danke|gracias|obrigad|merci|grazie)/i;
+const NOT_RECEIPT = /\b(?:availability|interview|assessment|reminder|portal|access code|security code|verif\w*|survey|kick-?off|welcome|onboarding|orientation|agenda|schedule[d]?)\b/i;
+const receiptLike = (e: EffectiveEvent) => !e.subject || (RECEIPT_WORDS.test(e.subject) && !NOT_RECEIPT.test(e.subject));
+const SEASON_END: Record<string, [number, number]> = { spring: [5, 30], summer: [7, 31], fall: [11, 31], winter: [2, 31] }; // [month index, day]
+const PROCESS_TYPES = new Set<EventType>(["applied", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer"]);
+/** The group's single recruiting cycle is over for hiring purposes: its latest season ended more than 30 days before this event. */
+const cycleOver = (g: Group, e: EffectiveEvent): boolean => {
+  const c = groupCycle(g); if (c.years.length !== 1 || c.seasons.length === 0) return false;
+  const ends = c.seasons.map((s) => SEASON_END[s]).filter(Boolean).map(([m, d]) => Date.UTC(c.years[0], m, d)); if (ends.length === 0) return false;
+  return e.occurredAt.getTime() > Math.max(...ends) + 30 * DAY;
+};
+const isHack = (e: EffectiveEvent) => /hackathon/i.test(e.subject ?? "");
 const specific = (role: string | null | undefined) => !!role && !isRoleFragment(role) && roleCore(role).length > 0;
 export const isSpecificRole = specific;
 /** Two role names that can never be the same application whatever they are called: a different recruiting cycle or programme type. Never overruled by a role-equivalence judgment. */
@@ -64,6 +77,8 @@ export type IdentityContext = {
   attribution?: boolean;
   /** A role COPIED from another message is not evidence about which job a message is, but the recruiting cycle it states (the year and season) still is: a message whose thread says "Summer 2027" cannot join an application for "Summer 2026". */
   borrowedCycle?: boolean;
+  /** A process event with no cycle of its own cannot join an application whose recruiting season ended more than a month earlier: a new process started. */
+  cycleEnded?: boolean;
 };
 export function groupCycle(g: Group): Cycle {
   const years = new Set<number>(), seasons = new Set<string>();
@@ -99,6 +114,7 @@ export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, cor
   const ec = eventCycle(e, ctx);
   if (cyclesConflict(groupCycle(g), ec)) return "conflict";
   if (programConflictWithGroup(g, e)) return "conflict";
+  if (ctx?.attribution && ((isHack(e) && g.events.every((x) => !isHack(x))) || (!isHack(e) && g.events.every(isHack)))) return "conflict"; // a hackathon application is not the employer's job application
   // (Phase 2) A requisition / job reference number is identity: the same number is the same application, and two different numbers are two applications, whatever the wording says.
   // (Phase 2) The same appointment is the same application: an interview at one employer at the same scheduled moment (a calendar invitation and the email about it, or a reminder) is one process.
   if (ctx?.attribution && e.eventDateHasTime && e.eventDate && (e.type === "interview_scheduled" || e.type === "interview_invite") && g.events.some((x) => x.eventDateHasTime && x.eventDate && x.eventDate.getTime() === e.eventDate!.getTime() && (x.type === "interview_scheduled" || x.type === "interview_invite"))) return "match";
@@ -131,6 +147,7 @@ function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean,
   const confirmsEnding = !!ctx?.confirmEndings && rel === "match" && (e.type === "rejection" || e.type === "withdrawn") && (viaThread || e.occurredAt.getTime() - lastAt(g) <= 30 * DAY);
   if (endedByEmployerOrUser(g) && !NEUTRAL.has(e.type) && !retraction && !confirmsEnding && !(viaThread && REOPENS.has(e.type))) return false;
   const gap = e.occurredAt.getTime() - lastAt(g);
+  if (rel === "generic" && ctx?.cycleEnded && PROCESS_TYPES.has(e.type) && cycleOver(g, e)) return false;
   if (rel === "generic") return gap <= (viaThread ? GENERIC_WINDOW_WITH_THREAD : GENERIC_WINDOW);
   if (viaThread) return true;
   const gc = groupCycle(g), ec = eventCycle(e, ctx);
@@ -287,7 +304,7 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
           target = pick.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
           // One receipt is sent per application: a role-less receipt in ANOTHER thread, when the candidate already holds a receipt from a different thread, starts another
           // application (two receipts in one thread, or a repeat delivery within hours, still join).
-          if (target && e.type === "applied" && (!specific(e.role) || !!ctx?.distinctThreadReceipts) && target.events.some((x) => x.type === "applied" && x.gmailThreadId !== e.gmailThreadId && (ctx?.distinctThreadReceipts || Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) >= DAY / 2)) && !target.threads.has(e.gmailThreadId)) target = undefined;
+          if (target && e.type === "applied" && (!specific(e.role) || !!ctx?.distinctThreadReceipts) && (!ctx?.distinctThreadReceipts || receiptLike(e)) && target.events.some((x) => x.type === "applied" && x.gmailThreadId !== e.gmailThreadId && (ctx?.distinctThreadReceipts || Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) >= DAY / 2)) && !target.threads.has(e.gmailThreadId)) target = undefined;
         }
         // (Phase 2) Evidence-scored attribution, only when this message's own employer name has no application at all (so it can never pull a message away from an exact-employer candidate).
         if (!target && !ambiguous && ctx?.attribution && pool.length === 0) {

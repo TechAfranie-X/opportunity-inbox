@@ -1,4 +1,5 @@
 import { NEAR_MISS, NEAR_MISS_WEAK } from "../reliability/flags.ts";
+import { companyKey } from "./company.ts";
 import type { EffectiveEvent, Opportunity } from "./types.ts";
 
 /**
@@ -19,8 +20,10 @@ export function applyEntryPolicy(events: EffectiveEvent[], build: (events: Effec
   for (const o of first) {
     const inbound = o.events.filter((e) => !e.outbound);
     // (a) built only from uncorroborated model readings, or (b) one message that names no employer at all: neither is evidence of an application the person made (all six such cases checked against the real mailbox were junk)
+    // (c) every message is an event, survey, platform notice or community message (the message-class signals): attending or answering, not applying
+    const classOnly = inbound.length > 0 && inbound.every((e) => !e.corrected && !e.confirmed && e.signals.some((x) => /^class:(?:event|survey|notice|community)$/.test(x)));
     const noEmployer = o.company === "Unknown company" && inbound.length === 1 && !inbound[0].corrected && !inbound[0].confirmed;
-    if (inbound.length === 0 || !(inbound.every(modelOnly) || noEmployer)) continue;
+    if (inbound.length === 0 || !(inbound.every(modelOnly) || noEmployer || classOnly)) continue;
     for (const e of o.events) drop.add(e.id);
     for (const e of inbound) demoted.push({ ...e, signals: [...e.signals, NEAR_MISS, NEAR_MISS_WEAK, "entry:uncorroborated"], reviewReasons: [ENTRY_REASON] });
   }
@@ -35,4 +38,17 @@ export function applyEntryPolicy(events: EffectiveEvent[], build: (events: Effec
 export function retypeUnverifiedClaims(events: EffectiveEvent[]): EffectiveEvent[] {
   return events.map((e) => (e.signals.includes("semantic:event") && !e.signals.some((s) => s.startsWith("decision:")) && !e.signals.includes("entry:corroborated") && !e.corrected && !e.confirmed && ["offer", "rejection", "withdrawn"].includes(e.type) && !e.outbound
     ? { ...e, type: "status_update" as const, signals: [...e.signals, `claim:unverified:${e.type}`] } : e));
+}
+
+/**
+ * A stored UPDATE whose text ends the application (signal ending:wording, stamped from the real message) is shown as a PROPOSED rejection: the application stays active and visible, the evidence
+ * is kept, and nothing is settled on it. Confirmed or corrected events are the person's word and are left alone; events the engine decided are left alone.
+ */
+export function proposeMissedEndings(events: EffectiveEvent[]): EffectiveEvent[] {
+  const PROCESS = new Set(["applied", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer"]);
+  // an application ANCHOR at the same employer: a real (not model-only, not a message class) application, assessment, interview or offer event earlier in time
+  const anchors = events.filter((a) => !a.outbound && a.company && PROCESS.has(a.type) && !a.signals.includes("semantic:event") && !a.signals.some((s) => s.startsWith("class:")));
+  const anchored = (e: EffectiveEvent) => !!e.company && anchors.some((a) => a.company && companyKey(a.company) === companyKey(e.company!) && a.occurredAt.getTime() <= e.occurredAt.getTime());
+  return events.map((e) => (e.signals.includes("ending:wording") && (e.type === "status_update" || e.type === "follow_up") && !e.corrected && !e.confirmed && !e.outbound && !e.signals.some((s) => s.startsWith("decision:")) && anchored(e)
+    ? { ...e, type: "rejection" as const, signals: [...e.signals, "terminal:proposed", "ending:proposed-from-update"] } : e));
 }

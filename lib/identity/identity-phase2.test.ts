@@ -37,7 +37,7 @@ test("weak employer names: a name that only names the sender does not stop a rep
 });
 
 test("receipts: a role-less receipt in a different thread is another application; a repeat delivery in the same thread is not", () => {
-  const r = (thread: string, d: number) => ev("applied", d, { role: null, fieldConfidence: { type: 0.9, company: 0.9, role: 0 }, gmailThreadId: thread });
+  const r = (thread: string, d: number) => ev("applied", d, { subject: "Application received", role: null, fieldConfidence: { type: 0.9, company: 0.9, role: 0 }, gmailThreadId: thread });
   assert.deepEqual(sizes(groupEventsV2([r("A", 0), r("B", 0.1)], { distinctThreadReceipts: true })), [1, 1]);
   assert.deepEqual(sizes(groupEventsV2([r("A", 0), r("B", 0.1)])), [2], "unchanged without the option");
   assert.deepEqual(sizes(groupEventsV2([r("A", 0), r("A", 0.1)], { distinctThreadReceipts: true })), [2], "a duplicate delivery shares its thread");
@@ -59,7 +59,7 @@ test("the model's role answer is parsed defensively", () => {
 });
 
 test("one receipt per application holds for specific roles too: the same role received in a different Gmail thread is another application", () => {
-  const r = (thread: string, d: number) => ev("applied", d, { gmailThreadId: thread });
+  const r = (thread: string, d: number) => ev("applied", d, { subject: "Application received", gmailThreadId: thread });
   assert.deepEqual(sizes(groupEventsV2([r("A", 0), r("B", 1)], { distinctThreadReceipts: true })), [1, 1]);
   assert.deepEqual(sizes(groupEventsV2([r("A", 0), r("A", 0.1)], { distinctThreadReceipts: true })), [2], "a repeat delivery shares its thread");
   assert.deepEqual(sizes(groupEventsV2([r("A", 0), r("B", 1)])), [2], "unchanged without the option");
@@ -83,4 +83,31 @@ test("a borrowed role's recruiting cycle still separates applications: Summer 20
   assert.deepEqual(sizes(groupEventsV2([first, later], { borrowedCycle: true })), [1, 1]);
   const sameYear = ev("assessment", 20, { role: "Software Engineering Intern (Summer 2026)", gmailThreadId: "A", signals: ["role-inherited"] });
   assert.deepEqual(sizes(groupEventsV2([first, sameYear], { borrowedCycle: true })), [2], "the same cycle still joins");
+});
+
+test("an 'applied' event that is not a receipt (an availability confirmation, a portal code, a kickoff message) does not start another application", () => {
+  const first = ev("applied", 0, { subject: "Thank You for Applying to Harvey", gmailThreadId: "A" });
+  for (const subject of ["Your interview availability with Harvey was submitted", "Harvey Candidate Portal Access Code", "SCJ 2026 Kickoff Email"]) {
+    const other = ev("applied", 10, { subject, gmailThreadId: "B" });
+    assert.deepEqual(sizes(groupEventsV2([first, other], { distinctThreadReceipts: true })), [2], subject);
+  }
+  const receipt = ev("applied", 10, { subject: "Application received", gmailThreadId: "B" });
+  assert.deepEqual(sizes(groupEventsV2([first, receipt], { distinctThreadReceipts: true })), [1, 1], "a real second receipt is still another application");
+});
+
+test("a process event with no cycle of its own cannot join an application whose season ended over a month earlier", () => {
+  const spring = ev("applied", 0, { role: "Software Engineering Intern (Summer 2026)", gmailThreadId: "A" });
+  const day = (n: number) => new Date(Date.UTC(2026, 8, 1 + n, 12));
+  const early = { ...spring, occurredAt: new Date(Date.UTC(2026, 3, 1)) };
+  const late = ev("assessment", 0, { role: null, gmailThreadId: "A", occurredAt: day(30), fieldConfidence: { type: 0.9, company: 0.9, role: 0 } });
+  assert.deepEqual(sizes(groupEventsV2([early, late])), [2], "unchanged without the option (joined through the thread)");
+  assert.deepEqual(sizes(groupEventsV2([early, late], { cycleEnded: true })), [1, 1], "a November assessment is not part of a Summer 2026 hiring process");
+  const within = ev("assessment", 0, { role: null, gmailThreadId: "A", occurredAt: new Date(Date.UTC(2026, 4, 10)), fieldConfidence: { type: 0.9, company: 0.9, role: 0 } });
+  assert.deepEqual(sizes(groupEventsV2([early, within], { cycleEnded: true })), [2], "inside the hiring season it still joins");
+});
+
+test("a hackathon application is not the employer's job application", () => {
+  const job = ev("applied", 0, { subject: "We received your job application", role: "2027 Summer Internship", gmailThreadId: "A" });
+  const hack = ev("applied", 3, { subject: "Update on your Code for Good Hackathon - 2027 Summer Internship", role: "2027 Summer Internship", gmailThreadId: "B" });
+  assert.deepEqual(sizes(groupEventsV2([job, hack], { attribution: true })), [1, 1]);
 });

@@ -11,4 +11,4 @@ import type { ReviewOptions } from "./review.ts";
 const on = (name: string) => process.env[name] !== "off";
 export const entryPolicyOn = () => on("ENTRY_POLICY");
 export const reviewOptions = (): ReviewOptions => ({ prioritize: on("REVIEW_PRIORITY") });
-export const identityContext = (): IdentityContext | undefined => (on("IDENTITY_V3") ? { weakEmployerThreads: true, distinctThreadReceipts: true, confirmEndings: true, attribution: true, borrowedCycle: true } : undefined);
+export const identityContext = (): IdentityContext | undefined => (on("IDENTITY_V3") ? { weakEmployerThreads: true, distinctThreadReceipts: true, confirmEndings: true, attribution: true, borrowedCycle: true, cycleEnded: true } : undefined);
