@@ -1,0 +1,16 @@
+{
+ "data analyst intern||operations intern": "different",
+ "data analyst intern||software engineer intern": "different",
+ "operations intern||software engineer intern": "different",
+ "summer analyst||summer analyst programme": "same",
+ "grid analytics intern||solar engineering intern": "different",
+ "audience analytics intern||editorial intern": "different",
+ "controls intern||perception intern": "different",
+ "backend engineering intern||mobile engineering intern": "different",
+ "risk advisory intern||strategy analyst intern": "different",
+ "avionics intern||propulsion intern": "different",
+ "quality control internship||regulatory affairs internship": "different",
+ "merchandising intern||supply planning intern": "different",
+ "merchandising intern||store operations intern": "different",
+ "store operations intern||supply planning intern": "different"
+}

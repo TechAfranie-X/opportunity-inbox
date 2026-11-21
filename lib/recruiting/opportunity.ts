@@ -1,5 +1,5 @@
 import { detectContradictions } from "../lifecycle/contradictions.ts";
-import { groupEventsV2, groupRole } from "../lifecycle/identity.ts";
+import { groupEventsV2, groupRole, type IdentityContext } from "../lifecycle/identity.ts";
 import { groupEventsLegacyV2 } from "../lifecycle/identity-v2.ts";
 import { assignKeys } from "../lifecycle/keys.ts";
 import { legacyKeyHeads } from "../lifecycle/legacy.ts";
@@ -92,10 +92,11 @@ export function buildOpportunities(
   events: EffectiveEvent[],
   overrides: Map<string, OpportunityOverride> = new Map(),
   policy: Policy = DEFAULT_POLICY,
+  identity?: IdentityContext,
 ): Opportunity[] {
   const unresolved = refineEvents(events, { resolveEmployers: false }).events; // what the previous generation saw, for key translation only
   events = refineEvents(events).events; // evidence checks that need the whole record (lib/lifecycle/refine.ts)
-  const groups = groupEventsV2(events);
+  const groups = groupEventsV2(events, identity);
   const keys = assignKeys(groups);
   // Keys the previous scheme gave: each old key belongs to the opportunity that holds its most recent event, so old overrides, dismissals and bookmarks resolve.
   const ownerOfEvent = new Map<string, number>();
@@ -110,7 +111,7 @@ export function buildOpportunities(
   legacy.forEach((l, i) => { legacy[i] = l.filter((k) => !currentKeys.has(k) || k === keys[i]); });
   const opportunities = groups.map((group, i): Opportunity => {
     const key = keys[i];
-    const { stage, outcome, status: derived, closedBy } = reduceLifecycle(group.events, policy);
+    const { stage, outcome, status: derived, closedBy, closureProposed } = reduceLifecycle(group.events, policy);
     const override = overrides.get(key) ?? legacy[i].map((k) => overrides.get(k)).find(Boolean);
     const closedByUser = override?.status === "closed";
     const reopened = override?.status === "active";
@@ -123,6 +124,7 @@ export function buildOpportunities(
       outcome,
       status,
       closedBy: status === "closed" ? (closedBy ?? "rejected") : null,
+      ...(closureProposed && status === "closed" && !closedByUser ? { closureProposed: true } : {}),
       legacyKeys: legacy[i],
       firstActivityAt: group.events[0].occurredAt,
       lastActivityAt: group.events[group.events.length - 1].occurredAt,

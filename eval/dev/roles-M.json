@@ -1,0 +1,9 @@
+{
+ "consultant||consultant stagiaire": "same",
+ "backend intern||frontend intern": "different",
+ "mobile engineering intern||trust & safety intern": "different",
+ "global markets summer analyst programme||technology summer analyst programme": "different",
+ "global markets summer analyst||technology summer analyst programme": "different",
+ "global markets summer analyst||global markets summer analyst programme": "same",
+ "graduate software engineer||summer software intern": "different"
+}

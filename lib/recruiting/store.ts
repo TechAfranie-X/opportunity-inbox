@@ -4,6 +4,7 @@ import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-or
 import { getDb } from "@/lib/db";
 import { refineEvents } from "@/lib/lifecycle/refine";
 import { deleteEvidenceLedgers } from "@/lib/ledger/store";
+import { withConfirmationConflicts, type LatestReading } from "@/lib/recruiting/confirmation-conflicts";
 import {
   actionDismissals,
   eventPredictions,
@@ -110,10 +111,21 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
   );
   // Thresholds are configuration (OPPORTUNITY_POLICY, JSON), not code: they are chosen from measured risk-coverage, not by hand.
   const policy = parsePolicy(process.env.OPPORTUNITY_POLICY);
-  const opportunities = buildOpportunities(events, overrides, policy);
+  let opportunities = buildOpportunities(events, overrides, policy);
+  // OFF by default (CONFIRMATION_CONFLICTS=on): ask about a plain "Looks right" that the latest reading of the same message disagrees with. Nothing is rewritten.
+  if (process.env.CONFIRMATION_CONFLICTS === "on") opportunities = withConfirmationConflicts(opportunities, await latestReadings(userGoogleSub, events.filter((e) => e.confirmed && !e.corrected).map((e) => e.gmailMessageId)));
   const actions = buildActions(opportunities, toFloating(now), new Set(dismissalRows.map((d) => d.actionId)), policy);
 
   return { opportunities, possible, actions, lastSyncedAt: syncRows[0]?.lastSyncedAt ?? null, eventCount: events.length };
+}
+
+/** The most recent reading (prediction) of each message, newest wins. Read-only. */
+async function latestReadings(userGoogleSub: string, messageIds: string[]): Promise<Map<string, LatestReading>> {
+  const out = new Map<string, LatestReading>();
+  if (messageIds.length === 0) return out;
+  const rows = await getDb().select({ id: eventPredictions.gmailMessageId, type: eventPredictions.type, decision: eventPredictions.decision, at: eventPredictions.predictedAt }).from(eventPredictions).where(and(eq(eventPredictions.userGoogleSub, userGoogleSub), inArray(eventPredictions.gmailMessageId, messageIds))).orderBy(desc(eventPredictions.predictedAt));
+  for (const r of rows) if (!out.has(r.id)) out.set(r.id, { type: r.type ?? "status_update", recruiting: r.decision === "recruiting" });
+  return out;
 }
 
 /** Upsert freshly extracted fields. Never touches `correction`, so user edits survive re-sync. */

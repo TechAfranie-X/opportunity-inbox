@@ -19,6 +19,9 @@ import { readMail } from "../lib/reliability/assess.ts";
 import { reconcileReadings } from "../lib/semantic/employer.ts";
 import { applyAssist, isSemanticExcluded } from "../lib/semantic/assist.ts";
 import { shadowAssist, type ShadowTrace } from "../lib/decision/shadow.ts";
+import { candidateRolePairs, judgeRolePairs, rolePairKey, rolesFromJson, rolesToJson, type RoleVerdicts } from "../lib/identity/role-equivalence.ts";
+import { isSpecificRole, rolesHardConflict, type IdentityContext } from "../lib/lifecycle/identity.ts";
+import { DEFAULT_POLICY } from "../lib/recruiting/policy.ts";
 import { SEMANTIC_GUIDE_V3_COMPACT } from "../lib/semantic/guide-v3.ts";
 import { createModelReader } from "../lib/semantic/hosted.ts";
 import { semanticInputs } from "../lib/semantic/inputs.ts";
@@ -36,7 +39,13 @@ const useModel = process.argv.includes("--semantic");
 const replay = process.argv.includes("--replay");
 // --engine current|shadow: `current` is the product's decision chain (applyAssist); `shadow` is the evidence-ledger decision engine (lib/decision), run on the SAME readings.
 const engine = process.argv.includes("--engine") ? process.argv[process.argv.indexOf("--engine") + 1] : "current";
-if (engine !== "current" && engine !== "shadow") throw new Error(`unknown --engine ${engine}`);
+if (engine !== "current" && engine !== "shadow" && engine !== "phase2") throw new Error(`unknown --engine ${engine}`);
+// --role-cache <file>: cached role-equivalence judgments (lib/identity/role-equivalence.ts), used by the phase2 engine. Missing pairs are judged by the local model unless --replay (then an error).
+// --collect-only: judge and cache without scoring or printing results (used to prepare a sealed fixture without looking at it).
+const roleCachePath = process.argv.includes("--role-cache") ? process.argv[process.argv.indexOf("--role-cache") + 1] : null;
+const collectOnly = process.argv.includes("--collect-only");
+const roleVerdicts: RoleVerdicts = roleCachePath && existsSync(roleCachePath) ? rolesFromJson(JSON.parse(readFileSync(roleCachePath, "utf8"))) : new Map();
+let rolePairsSeen = 0;
 const trace: ShadowTrace = new Map();
 const perMessage: { scenario: string; id: string; expectInPipeline: boolean; expectType: string | null; gotType: string | null; state: string | null; placement: string | null; terminal: string | null; belief: number | null; verdict: unknown; ambiguous: boolean; opp: string | null }[] = [];
 const jsonOut = process.argv.includes("--json") ? process.argv[process.argv.indexOf("--json") + 1] : null;
@@ -76,13 +85,27 @@ for (const sc of fx.scenarios) {
     if (gaps > 0) console.error(`[model] ${sc.id}: ${gaps} message(s) have no reading`);
     modelMs += Date.now() - s;
     const opinions = new Map([...readings].map(([k, v]) => [k, v.output] as const));
-    read = reconcileReadings(engine === "shadow" ? shadowAssist(read, emails, opinions, trace) : applyAssist(read, emails, opinions), readings);
+    read = reconcileReadings(engine === "current" ? applyAssist(read, emails, opinions) : shadowAssist(read, emails, opinions, trace), readings);
   }
   const effective: EffectiveEvent[] = read.map((e) => ({ ...e, signals: disc.get(e.gmailMessageId) === "sweep" ? [...e.signals, "via:sweep"] : e.signals, id: e.gmailMessageId, corrected: false }));
   const all = refineEvents(effective).events;
   const possible = all.filter((e) => isNearMiss(e) && !isSemanticExcluded(e));
   const events = all.filter((e) => !isNearMiss(e));
-  const opps: Opportunity[] = buildOpportunities(events);
+  let identityCtx: IdentityContext | undefined;
+  if (engine === "phase2") {
+    const pairs = candidateRolePairs(events, isSpecificRole, rolesHardConflict);
+    rolePairsSeen += pairs.length;
+    const missing = pairs.filter((p) => !roleVerdicts.has(rolePairKey(p.a, p.b)));
+    if (missing.length > 0) {
+      if (replay) throw new Error(`replay: ${missing.length} role pair(s) in ${sc.id} have no cached judgment (${roleCachePath ?? "no --role-cache given"})`);
+      const judged = await judgeRolePairs(missing, localTransport(), modelId, roleVerdicts);
+      for (const [k, v] of judged) roleVerdicts.set(k, v);
+      if (roleCachePath) writeFileSync(roleCachePath, JSON.stringify(rolesToJson(roleVerdicts), null, 1));
+    }
+    identityCtx = { roleVerdicts, weakEmployerThreads: true, distinctThreadReceipts: true };
+    if (collectOnly) continue;
+  }
+  const opps: Opportunity[] = buildOpportunities(events, new Map(), DEFAULT_POLICY, identityCtx);
   const actions = buildActions(opps, floating);
   const queue = buildReviewQueue(opps, undefined, possible, floating);
 
@@ -175,6 +198,7 @@ for (const sc of fx.scenarios) {
   }
 }
 
+if (collectOnly) { console.log(`collected ${rolePairsSeen} role pair(s); ${roleVerdicts.size} judgments cached`); process.exit(0); }
 const pct = (a: number, b: number) => (b ? `${((a / b) * 100).toFixed(1)}%` : "n/a");
 const total = c.tp + c.fp + c.fn + c.tn;
 const out = [

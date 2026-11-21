@@ -1,0 +1,14 @@
+{
+ "2027 summer internship technology||2027 technology internship": "same",
+ "2027 summer internship technology||technology internship": "same",
+ "2027 technology internship||technology internship": "same",
+ "data analyst intern||operations rotational program": "different",
+ "data analyst intern||patient experience": "different",
+ "operations rotational program||patient experience": "different",
+ "analyst||analyst program": "different",
+ "summer 2027 engineering internship a new recruiting cycle||systems engineering intern": "same",
+ "summer 2027 engineering internship||systems engineering intern": "same",
+ "summer 2027 engineering internship||summer 2027 engineering internship a new recruiting cycle": "same",
+ "research co op||research co op 2027 a separate cycle": "same",
+ "estagio||estagio em engenharia de energia": "same"
+}

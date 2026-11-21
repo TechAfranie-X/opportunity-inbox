@@ -119,6 +119,10 @@ export type Opportunity = {
   status: "active" | "closed";
   /** Why it is closed: an employer/person ending, an expired request, or no evidence of a candidacy. Null while active. */
   closedBy?: "rejected" | "withdrawn" | "expired" | "not_recruiting" | null;
+  /** The ending rests on one uncorroborated automated reading (decision engine, shadow): shown as "likely ended, please confirm" once the product uses it. */
+  closureProposed?: boolean;
+  /** A person's "Looks right" on a reading that a later, independent reading of the same message disagrees with (lib/recruiting/confirmation-conflicts.ts). Never overrides the confirmation. */
+  confirmationConflicts?: Array<{ eventId: string; text: string }>;
   /** Keys the previous scheme gave to the applications this one continues, so old overrides, dismissals and links still resolve. */
   legacyKeys?: string[];
   firstActivityAt: Date;

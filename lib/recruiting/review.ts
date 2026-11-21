@@ -95,6 +95,14 @@ export function buildReviewQueue(opportunities: Opportunity[], policy: Policy = 
       items.push({ event, opportunityKey: o.key, company: o.company, role: o.role, reasons: [c.text], impact: live, why: o.status === "active" ? "The record disagrees with itself" : why, tier: "important" });
     }
   }
+  // A person's confirmation that a later reading of the same message disagrees with: they stay authoritative, and they are asked.
+  for (const o of opportunities) {
+    for (const c of o.confirmationConflicts ?? []) {
+      const event = o.events.find((e) => e.id === c.eventId);
+      if (!event || items.some((i) => i.event === event && i.reasons.includes(c.text))) continue;
+      items.push({ event, opportunityKey: o.key, company: o.company, role: o.role, reasons: [c.text], impact: Math.max(IMPORTANT_AT, 60), why: "Your confirmation and a later reading disagree", tier: "important" });
+    }
+  }
   items.sort((a, b) => b.impact - a.impact || b.event.occurredAt.getTime() - a.event.occurredAt.getTime());
   const maybe = possible
     .filter((e) => !e.outbound)

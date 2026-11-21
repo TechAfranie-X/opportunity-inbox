@@ -1,6 +1,7 @@
 import { companyKey } from "../recruiting/company.ts";
 import { classifySender } from "../recruiting/entity/vendors.ts";
 import type { EffectiveEvent, EventType } from "../recruiting/types.ts";
+import { rolePairKey, type RoleVerdicts } from "../identity/role-equivalence.ts";
 import { cycleOf, cyclesConflict, isRoleFragment, programsConflict, programsOf, roleCore, roleRelationV2, type Cycle } from "./cycle.ts";
 
 /**
@@ -26,7 +27,20 @@ const REOPENS = new Set<EventType>(["assessment", "interview_invite", "interview
 const CONSEQUENTIAL = new Set<EventType>(["rejection", "withdrawn", "offer", "interview_invite", "interview_scheduled", "assessment", "assessment_completed"]);
 const STAGE_BEARING = new Set<EventType>(["applied", "recruiter_outreach", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer", "rejection", "withdrawn"]);
 
+/** The employer name rests only on the sender (or on very weak evidence). */
+const weakEmployer = (e: EffectiveEvent) => !!e.company && !e.corrected && !e.confirmed && (e.signals.includes("employer:sender-only") || (e.fieldConfidence?.company ?? 1) < 0.45);
 const specific = (role: string | null | undefined) => !!role && !isRoleFragment(role) && roleCore(role).length > 0;
+export const isSpecificRole = specific;
+/** Two role names that can never be the same application whatever they are called: a different recruiting cycle or programme type. Never overruled by a role-equivalence judgment. */
+export const rolesHardConflict = (a: string, b: string): boolean => cyclesConflict(cycleOf(a), cycleOf(b)) || programsConflict(a, b);
+/** Optional extra evidence for grouping. Absent, grouping is exactly what it always was. */
+export type IdentityContext = {
+  roleVerdicts?: RoleVerdicts;
+  /** Phase 2: a name that only names the sender does not keep a message from joining the application it replies to in the same Gmail thread. Off by default (production grouping is unchanged). */
+  weakEmployerThreads?: boolean;
+  /** Phase 2: a role-less receipt in a DIFFERENT Gmail thread is another application whatever the gap in time (one receipt per application; a repeat delivery shares its thread). Off by default. */
+  distinctThreadReceipts?: boolean;
+};
 export function groupCycle(g: Group): Cycle {
   const years = new Set<number>(), seasons = new Set<string>();
   for (const e of g.events) { const c = cycleOf(e.role); c.years.forEach((y) => years.add(y)); c.seasons.forEach((s) => seasons.add(s)); }
@@ -57,7 +71,7 @@ const unitsMatch = (a: string, b: string) => a === b || a.includes(b) || b.inclu
 
 export type Relation = "match" | "generic" | "conflict";
 /** How an event relates to an established opportunity, from role, cycle and program alone (time and thread are weighed by the caller). */
-export function relation(g: Group, e: EffectiveEvent): Relation {
+export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, corroborated = false): Relation {
   const ec = cycleOf(e.role);
   if (cyclesConflict(groupCycle(g), ec)) return "conflict";
   if (programConflictWithGroup(g, e)) return "conflict";
@@ -68,7 +82,14 @@ export function relation(g: Group, e: EffectiveEvent): Relation {
   if (!specific(e.role)) return "generic";
   const roles = g.events.map((x) => x.role).filter((r): r is string => specific(r));
   if (roles.length === 0) return "generic";
-  const ok = roles.some((r) => roleRelationV2(r, e.role) === "match" && !programsConflict(r, e.role) && !cyclesConflict(cycleOf(r), ec));
+  // A semantic judgment that two role NAMES refer to the same job (or different jobs) replaces the token comparison for that pair; hard conflicts (cycle, programme) still apply.
+  const ok = roles.some((r) => {
+    const verdict = ctx?.roleVerdicts?.get(rolePairKey(r, e.role!));
+    // Asymmetric on purpose: "different" may always keep two applications apart, but "same" may only JOIN them when an independent signal (the Gmail thread) agrees. A wrong merge hides an
+    // application; a wrong split is visible and can be linked by a person.
+    const rel = verdict === "different" ? "conflict" : verdict === "same" && corroborated ? "match" : roleRelationV2(r, e.role);
+    return rel === "match" && !programsConflict(r, e.role) && !cyclesConflict(cycleOf(r), ec);
+  });
   return ok ? "match" : "conflict";
 }
 
@@ -135,7 +156,7 @@ const breakTie = <T extends { g: Group }>(candidates: T[], e: EffectiveEvent): T
 
 /** Signals that mark a role the reader COPIED from another message (the thread's first one, or an earlier message from the same sender) instead of reading it from this one. */
 const BORROWED_ROLE = ["role-inherited", "reply-in-recruiting-thread", "known-contact-continuity", "outbound-in-recruiting-thread"];
-export function groupEventsV2(input: EffectiveEvent[]): Group[] {
+export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): Group[] {
   // A role the reader COPIED from an earlier message ("role-inherited", or a reply/continuity event that took its anchor's role) is not evidence about THIS message: automated senders reuse one thread for several
   // roles, so an inherited role would pull a role-less message into whichever application the thread started with. For identity such an event states no role.
   const original = new Map(input.map((e) => [e.id, e] as const));
@@ -156,9 +177,12 @@ export function groupEventsV2(input: EffectiveEvent[]): Group[] {
     let ambiguous: string | null = null;
     if (!target && !e.separate) {
       const sameEmployer = (g: Group) => !e.company || !g.company || companyKey(g.company) === companyKey(e.company);
+      // A name that is only WHO SENT the mail (a webmail or platform brand taken from the sender, never written in the message) is not evidence of a different employer. Within one Gmail
+      // thread, where the thread itself is independent evidence, it must not keep a message from joining the application it replies to.
+      const threadEmployerOk = (g: Group) => sameEmployer(g) || (!!ctx?.weakEmployerThreads && (weakEmployer(e) || g.events.every((x) => !x.company || weakEmployer(x))));
       // 1. the Gmail thread: evidence, weighed like any other. A thread can hold several opportunities (automated mail reuses one subject), so every group that
       //    has mail in this thread is a candidate and the same checks apply to each; a specific role match beats a generic one, then recency.
-      const inThread = groups.filter((g) => g.threads.has(e.gmailThreadId) && sameEmployer(g)).map((g) => ({ g, rel: relation(g, e) })).filter(({ g, rel }) => allowed(g, e, rel, true));
+      const inThread = groups.filter((g) => g.threads.has(e.gmailThreadId) && threadEmployerOk(g)).map((g) => ({ g, rel: relation(g, e, ctx, true) })).filter(({ g, rel }) => allowed(g, e, rel, true));
       const threadMatches = inThread.filter((s) => s.rel === "match");
       const threadGenerics = inThread.filter((s) => s.rel === "generic");
       // ABSTAIN here too: a role-less message in a thread that already holds two applications for DIFFERENT roles cannot be told from either by the thread alone.
@@ -176,7 +200,7 @@ export function groupEventsV2(input: EffectiveEvent[]): Group[] {
         const pool = e.company
           ? groups.filter((g) => g.company && companyKey(g.company) === companyKey(e.company!))
           : e.senderDomain ? groups.filter((g) => !g.company && g.events.some((x) => x.senderDomain === e.senderDomain)) : [];
-        const scored = pool.map((g) => ({ g, rel: relation(g, e) })).filter(({ g, rel }) => allowed(g, e, rel, false));
+        const scored = pool.map((g) => ({ g, rel: relation(g, e, ctx) })).filter(({ g, rel }) => allowed(g, e, rel, false));
         const matches = scored.filter((s) => s.rel === "match");
         const generics = scored.filter((s) => s.rel === "generic");
         const pick = matches.length ? matches : generics;
@@ -192,13 +216,13 @@ export function groupEventsV2(input: EffectiveEvent[]): Group[] {
           target = pick.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;
           // One receipt is sent per application: a role-less receipt in ANOTHER thread, when the candidate already holds a receipt from a different thread, starts another
           // application (two receipts in one thread, or a repeat delivery within hours, still join).
-          if (target && e.type === "applied" && !specific(e.role) && target.events.some((x) => x.type === "applied" && x.gmailThreadId !== e.gmailThreadId && Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) >= DAY / 2) && !target.threads.has(e.gmailThreadId)) target = undefined;
+          if (target && e.type === "applied" && !specific(e.role) && target.events.some((x) => x.type === "applied" && x.gmailThreadId !== e.gmailThreadId && (ctx?.distinctThreadReceipts || Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) >= DAY / 2)) && !target.threads.has(e.gmailThreadId)) target = undefined;
         }
         // An event whose employer is unknown, from an employer's own domain that exactly ONE existing opportunity has written from, belongs with it unless
         // role, cycle, program or the end of that opportunity say otherwise (the same weighing as any other link). Platforms, freemail and several candidates never link this way.
         if (!target && !ambiguous && !e.company && e.senderDomain && classifySender(e.senderDomain) === "employer") {
           const same = groups.filter((g) => g.events.some((x) => x.senderDomain === e.senderDomain));
-          if (same.length === 1 && allowed(same[0], e, relation(same[0], e), false)) target = same[0];
+          if (same.length === 1 && allowed(same[0], e, relation(same[0], e, ctx), false)) target = same[0];
         }
       }
     }
@@ -208,7 +232,7 @@ export function groupEventsV2(input: EffectiveEvent[]): Group[] {
     target.threads.add(e.gmailThreadId);
     byThread.set(e.gmailThreadId, target);
     componentGroup.set(find(e.id), target);
-    if (!target.company && e.company) target.company = e.company;
+    if (e.company && (!target.company || (!!ctx?.weakEmployerThreads && target.events.every((x) => !x.company || weakEmployer(x)) && !weakEmployer(e)))) target.company = e.company; // a name the message itself writes replaces one that only named the sender
   }
   return restore(groups);
 }

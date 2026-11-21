@@ -1,0 +1,10 @@
+{
+ "data analyst||logistics operations": "different",
+ "climate fellow||veridian climate fellowship": "same",
+ "hardware intern||software engineer intern": "different",
+ "software engineer intern||swe intern": "same",
+ "clinical research assistant||patient services coordinator": "different",
+ "spring insight program||summer associate": "different",
+ "advisory summer associate||spring insight program": "same",
+ "advisory summer associate||summer associate": "different"
+}

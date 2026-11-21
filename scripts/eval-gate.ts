@@ -83,7 +83,7 @@ export function compare(base: Metrics, now: Metrics, label: string, tol: { point
 
 function runFixture(root: string, name: string, engine: string): Counts {
   const out = join(mkdtempSafe(), `${name}.json`);
-  execFileSync(process.execPath, ["--no-warnings", "--import", "./scripts/loader/register.mjs", "scripts/eval-journeys.ts", join(root, `eval/dev/journeys-${name}.json`), "--semantic", "--replay", "--cache", join(root, `eval/dev/cache-${name}.json`), "--engine", engine, "--json", out], { cwd: root, stdio: ["ignore", "ignore", "pipe"] });
+  execFileSync(process.execPath, ["--no-warnings", "--import", "./scripts/loader/register.mjs", "scripts/eval-journeys.ts", join(root, `eval/dev/journeys-${name}.json`), "--semantic", "--replay", "--cache", join(root, `eval/dev/cache-${name}.json`), "--engine", engine, ...(engine === "phase2" ? ["--role-cache", join(root, `eval/dev/roles-${name}.json`)] : []), "--json", out], { cwd: root, stdio: ["ignore", "ignore", "pipe"] });
   return (JSON.parse(readFileSync(out, "utf8")) as { counts: Counts }).counts;
 }
 let tmp: string | null = null;
@@ -130,7 +130,22 @@ function main() {
   }
 
   if (!existsSync(basePath)) { console.error(`eval-gate setup error: no baseline at ${basePath}`); process.exit(2); }
-  const base = JSON.parse(readFileSync(basePath, "utf8")) as Baseline;
+  let base = JSON.parse(readFileSync(basePath, "utf8")) as Baseline;
+  // --against best: the RELEASE gate. The shadow engine must be at least as good as the element-wise best of the frozen baseline and the pre-regression reference, on every metric, so
+  // recovering one area cannot be paid for by losing another that either earlier version had. It sits next to the ordinary gate; neither is relaxed to make the other pass.
+  if (process.argv.includes("--against") && arg("--against") === "best") {
+    const ref = JSON.parse(readFileSync(arg("--reference") ?? "eval/reference-8ee0e95.json", "utf8")) as Baseline;
+    const bestOf = (a: Metrics, b: Metrics): Metrics => Object.fromEntries(Object.keys(a).map((k) => [k, LOWER_IS_BETTER.has(k) ? Math.min(a[k], b[k]) : Math.max(a[k], b[k])]));
+    const merged: Baseline = { ...base, engine: "best-of(baseline,reference)", commit: `${base.commit}+${ref.commit}`, pooled: bestOf(base.pooled, ref.pooled), fixtures: {} };
+    for (const f of FIXTURES) {
+      if (ref.fixtures[f].fixtureSha256 !== base.fixtures[f].fixtureSha256 || ref.fixtures[f].cacheSha256 !== base.fixtures[f].cacheSha256) { console.error(`eval-gate setup error: reference and baseline disagree about fixture ${f}`); process.exit(2); }
+      const best = bestOf(metricsOf(base.fixtures[f].counts), metricsOf(ref.fixtures[f].counts));
+      // per-fixture counts are re-derived only for the three per-fixture checks, which are rates; carry the base counts for the hash check and compare the best rates directly
+      merged.fixtures[f] = { ...base.fixtures[f], counts: { ...base.fixtures[f].counts, __best: 1 } };
+      (merged as unknown as { bestRates: Record<string, Metrics> }).bestRates = { ...((merged as unknown as { bestRates?: Record<string, Metrics> }).bestRates ?? {}), [f]: best };
+    }
+    base = merged;
+  }
   const problems: string[] = [];
   for (const f of FIXTURES) {
     const b = base.fixtures[f];
@@ -138,7 +153,8 @@ function main() {
     if (b.fixtureSha256 !== result.hashes[f].fixtureSha256 || b.cacheSha256 !== result.hashes[f].cacheSha256) { console.error(`eval-gate setup error: fixture or cache ${f} differs from the frozen baseline; the baseline is no longer comparable`); process.exit(2); }
   }
   problems.push(...compare(base.pooled, pooled, "pooled", { points: TOLERANCE.points, countShare: TOLERANCE.countShare, countFloor: TOLERANCE.countFloor }));
-  for (const f of FIXTURES) problems.push(...compare(metricsOf(base.fixtures[f].counts), perFixture[f], `fixture ${f}`, { points: TOLERANCE.perFixturePoints, countShare: 1, countFloor: 1e9 }, PER_FIXTURE));
+  const bestRates = (base as unknown as { bestRates?: Record<string, Metrics> }).bestRates;
+  for (const f of FIXTURES) problems.push(...compare(bestRates?.[f] ?? metricsOf(base.fixtures[f].counts), perFixture[f], `fixture ${f}`, { points: TOLERANCE.perFixturePoints, countShare: 1, countFloor: 1e9 }, PER_FIXTURE));
 
   const w = Object.keys(pooled).reduce((a, k) => Math.max(a, k.length), 0);
   console.log(`eval-gate  engine=${engine}  baseline=${base.engine}@${base.commit}`);
