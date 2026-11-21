@@ -58,3 +58,21 @@ test("an application whose messages state two recruiting cycles is flagged, neve
   const o = buildOpportunities([a, b]);
   assert.ok(o.some((x) => (x.contradictions ?? []).some((c) => c.kind === "mixed_cycles")) || o.length === 2, "either separated by cycle or flagged");
 });
+
+import { retypeUnverifiedClaims } from "./entry-policy.ts";
+test("a model-only offer or ending with no evidence does not stand as one; engine-decided, confirmed and corroborated events are left alone", () => {
+  const claim = ev("offer", 1, { company: "Claim Co", signals: ["semantic:event"] });
+  const out = retypeUnverifiedClaims([claim, ev("offer", 2, { signals: ["semantic:event", "decision:verified"] }), ev("offer", 3, { signals: ["semantic:event"], confirmed: true }), ev("offer", 4, { signals: [] }), ev("rejection", 5, { signals: ["semantic:event", "entry:corroborated"] })]);
+  assert.equal(out[0].type, "status_update");
+  assert.ok(out[0].signals.includes("claim:unverified:offer"));
+  assert.deepEqual(out.slice(1).map((e) => e.type), ["offer", "offer", "offer", "rejection"]);
+});
+
+test("one message that names no employer does not create an application", () => {
+  const junk = ev("applied", 1, { company: null, signals: [] });
+  const { kept, demoted } = applyEntryPolicy([junk], build);
+  assert.equal(kept.length, 0);
+  assert.equal(demoted.length, 1);
+  const named = ev("applied", 1, { company: "Named Co", signals: [] });
+  assert.equal(applyEntryPolicy([named], build).kept.length, 1);
+});
