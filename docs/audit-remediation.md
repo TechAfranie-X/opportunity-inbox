@@ -31,7 +31,7 @@ Continuation is NOT automatic: no scheduler is configured. Anything below marked
 - Docker Desktop shut down once during the run (clean exit); the resync is checkpointed and resumed with no loss.
 
 ## Release decision (provisional): NOT READY for unsupervised external student testing
-Open: false-opportunity and Review-burden regression, the person-confirmation conflict, the Harvey split, no browser verification, account 2 not re-read, fixture N not run, final gates not re-run.
+See "Final state" at the end of this file for the current open list (this paragraph is superseded).
 
 ## Data-integrity invariants (checked before and after every backfill and re-evaluation)
 1. Every row carrying a person's correction or confirmation is byte-identical afterwards (hash over id, type, company, role, signals, correction).
@@ -84,3 +84,20 @@ Baseline 5230fa9, rules only, same fixture: recall 59.6, wrong merges 21, split 
 | Review (items, justified, important justified) | 33, 39.4, 75.0 | 38, 50.0, 62.5 | mixed |
 The pre-registered rule "no regression of more than 2 points on precision/recall, status, outcome" is VIOLATED in hybrid mode (recall, status, outcome). In rules-only mode the current code is better than the baseline (status +4.8, outcome +4.8, stage +9.6, evidence +5.7).
 Probable cause (NOT verified; the fixture's failures were deliberately not inspected): the model-alone-never-ends-a-candidacy change (c45c215: `closureFact` corroboration, `notAProcess` veto) removes model-found events and terminal outcomes that the baseline kept, which lowers recall and the status/outcome scores and hides contradictions. It fixed the real Salesforce case but is too blunt on unfamiliar mail. Because fixture N is sealed, any repair must be designed from the real-account and earlier-fixture evidence, validated on a NEW fixture, and needs a reader-version bump plus a full re-read of both accounts (hours).
+
+
+## Final gates (2026-11-20 evening, commit 321bd17)
+lint exit 0; `tsc --noEmit` exit 0; `npm test` 677 / 677 pass; `next build` exit 0; `bench:lifecycle:check` exit 0 (regression safety 20/20, dormancy 4/4); e2e journey PASSED in keyword mode and in `DISCOVERY=sweep` mode (including: a reader upgrade keeps corrections and confirmations, no message text in the database, delete-my-data). After the gates all 139 corrected rows on the two real accounts still had the same row versions (no rewrite).
+
+## Final state and release decision: NOT READY for unsupervised external student testing
+Done and verified: unit/e2e gates; account 1 and account 2 re-read under reader v6 with failed:0; corrected rows never rewritten during the v6 re-reads (row versions identical, 139 rows); Salesforce, NSF, Cisco, Coinbase (two keys), TeamWork on account 1; account 2 is clean (40 Review items, 4 model-only single active records).
+Not done / open, in priority order:
+1. HYBRID REGRESSION on the sealed fixture (above): recall 93.4 -> 84.8, status 89.2 -> 66.7, outcome 59.5 -> 44.4, contradictions 5/6 -> 2/6. Probable cause is the c45c215 model-event veto (unverified). Fixing it needs a design from non-sealed evidence, a NEW fixture, a version bump and a re-read of both accounts.
+2. Account 1 false opportunities and Review burden (352 records, 95 single model-only active, Review 367 vs the audit's 13 + 49).
+3. Most pre-registered fixture N thresholds missed (recall, wrong merges, merging, status, outcome, evidence). The 21 rules-only wrong merges predate this work.
+4. Harvey 2027 role split into two records; one 2026 invite with a possibly wrong Nov 25 date.
+5. Alcon June 5 rejection: a person's confirmation overrides the message text and no "your confirmation disagrees" Review item exists.
+6. ZipRecruiter welcome mail (vetoed as a job board) and the Oct 2025 mail outside the sync window: uncertain.
+7. No real-browser verification of either account (Today rollover, Pipeline buckets, Coinbase routes/search, Gmail click-through) and no Gmail click-through of any finding; account 2 needs its owner.
+8. Unexplained: 15 corrected rows were rewritten between the 01:11 snapshot and later on 2026-11-20 (before the v6 work). Not claimed byte-identical.
+Nothing here continues automatically; no scheduler remains configured after this session.
