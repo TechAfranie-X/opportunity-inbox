@@ -38,7 +38,9 @@ export function detectContradictions(events: EffectiveEvent[]): Contradiction[] 
   for (const e of events) if (e.signals.includes("identity:ambiguous") && !e.corrected && !e.confirmed) out.push({ kind: "ambiguous_identity", eventIds: [e.id], text: "We could not tell which of your applications to this employer this message is about. Check where it belongs." });
   // Messages of one application that state two different recruiting YEARS ("Summer 2026" and "Summer 2027"): either two applications were merged or one process spans cycles. Never silent.
   const years = new Set<number>();
-  for (const e of events) if (!e.outbound) for (const y of cycleOf(e.role).years) years.add(y);
+  // a role that names a year RANGE ("2026-2027 AI Program", "2026-27 Fellowship") is one programme year, not two cycles
+  const YEAR_RANGE = /\b20\d\d\s*[-–/]\s*(?:20)?\d\d\b/;
+  for (const e of events) if (!e.outbound && !YEAR_RANGE.test(e.role ?? "")) for (const y of cycleOf(e.role).years) years.add(y);
   if (years.size > 1) out.push({ kind: "mixed_cycles", eventIds: [events[events.length - 1].id], text: `This application's messages mention more than one recruiting cycle (${[...years].sort().join(" and ")}). Check whether they are one application or two.` });
   return out;
 }

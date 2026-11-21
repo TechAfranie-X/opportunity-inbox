@@ -121,3 +121,10 @@ test("a model-only 'applied' that is not a receipt waits as possible; receipts, 
   assert.equal(r.kept.length, 3);
   assert.ok(r.demoted[0].signals.includes("near-miss:weak"));
 });
+
+import { detectContradictions } from "../lifecycle/contradictions.ts";
+test("a role naming a year range is one programme year, not mixed cycles", () => {
+  const two = (a: string, b: string) => detectContradictions([ev("applied", 1, { role: a }), ev("status_update", 5, { role: b })]).some((c) => c.kind === "mixed_cycles");
+  assert.equal(two("2026-2027 AI Program", "2026-2027 AI Program"), false);
+  assert.equal(two("Software Intern Summer 2026", "Software Intern Summer 2027"), true);
+});

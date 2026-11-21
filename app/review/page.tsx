@@ -39,7 +39,9 @@ export default async function ReviewPage() {
       ? "We think this might be about a job or internship."
       : item.why === "Might be a rejection"
         ? `We think this might be a rejection. We read it as ${EVENT_NOUN[item.event.type]}.`
-        : `We think this is ${EVENT_NOUN[item.event.type]}.`,
+        : item.event.type === "offer" && ((k) => k === "mentorship" || k === "scholarship")(workspace.opportunities.find((o) => o.key === item.opportunityKey)?.kind)
+          ? "We think you were accepted into this program."
+          : `We think this is ${EVENT_NOUN[item.event.type]}.`,
     entity: item.possible ? (item.event.company ? "likely" : "unknown") : (workspace.opportunities.find((o) => o.key === item.opportunityKey) ? entityState(workspace.opportunities.find((o) => o.key === item.opportunityKey)!) : "unknown"),
     reasons: item.reasons,
     source: `${item.event.senderName || item.event.senderDomain}: ${item.event.subject}`,
