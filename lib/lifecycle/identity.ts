@@ -29,6 +29,14 @@ const STAGE_BEARING = new Set<EventType>(["applied", "recruiter_outreach", "asse
 
 /** The employer name rests only on the sender (or on very weak evidence). */
 const weakEmployer = (e: EffectiveEvent) => !!e.company && !e.corrected && !e.confirmed && (e.signals.includes("employer:sender-only") || (e.fieldConfidence?.company ?? 1) < 0.45);
+/** "Corvid" is an alias of "Corvid Systems": the shorter name's words are a leading part of the longer one's, and the longer adds at most two words. Equal names are the strict case, not this one. */
+export function employerAlias(a: string | null | undefined, b: string | null | undefined): boolean {
+  const toks = (x: string) => x.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9]+/).filter(Boolean);
+  const x = toks(a ?? ""), y = toks(b ?? "");
+  if (x.length === 0 || y.length === 0 || x.length === y.length) return false;
+  const [short, long] = x.length < y.length ? [x, y] : [y, x];
+  return long.length - short.length <= 2 && short.every((t, i) => t === long[i]) && short.join("").length >= 4;
+}
 const specific = (role: string | null | undefined) => !!role && !isRoleFragment(role) && roleCore(role).length > 0;
 export const isSpecificRole = specific;
 /** Two role names that can never be the same application whatever they are called: a different recruiting cycle or programme type. Never overruled by a role-equivalence judgment. */
@@ -42,6 +50,11 @@ export type IdentityContext = {
   distinctThreadReceipts?: boolean;
   /** Phase 2: an employer's confirmation of an ending (a rejection or withdrawal) joins an application that has already ended, when its specific role matches, instead of starting a new one. Off by default. */
   confirmEndings?: boolean;
+  /** Phase 2: when the employer named on a message has NO candidate application (nothing under that exact name fits), the application may be filed under a different form of the same employer
+   *  ("Corvid" / "Corvid Systems") or under an agency or vendor that wrote on its behalf. Only a UNIQUE application with the same specific role, recent, qualifies; two candidates link nobody.
+   *  It NEVER links on its own: names alone cannot tell "Corvid" / "Corvid Systems" (one employer) from "Marambaia" / "Marambaia Seguros" (two divisions), so the message stays apart and a
+   *  Review question names the one candidate; the person's answer becomes an authoritative link. Measured: linking automatically cost 12 wrong merges for 2 recovered links. */
+  employerFallbacks?: boolean;
 };
 export function groupCycle(g: Group): Cycle {
   const years = new Set<number>(), seasons = new Set<string>();
@@ -179,6 +192,7 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
   for (let e of sorted) {
     let target: Group | undefined = parent.has(e.id) || [...parent.values()].includes(e.id) ? componentGroup.get(find(e.id)) : undefined;
     let ambiguous: string | null = null;
+    let possibleLink: Group | null = null;
     if (!target && !e.separate) {
       const sameEmployer = (g: Group) => !e.company || !g.company || companyKey(g.company) === companyKey(e.company);
       // A name that is only WHO SENT the mail (a webmail or platform brand taken from the sender, never written in the message) is not evidence of a different employer. Within one Gmail
@@ -222,6 +236,14 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
           // application (two receipts in one thread, or a repeat delivery within hours, still join).
           if (target && e.type === "applied" && !specific(e.role) && target.events.some((x) => x.type === "applied" && x.gmailThreadId !== e.gmailThreadId && (ctx?.distinctThreadReceipts || Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) >= DAY / 2)) && !target.threads.has(e.gmailThreadId)) target = undefined;
         }
+        // (Phase 2) The employer fallback: nothing under this message's own employer name fits, so look for the ONE recent application with the same specific role whose employer is an alias of
+        // this one, or is only an agency/vendor sender (either side). Anything but exactly one such application, and the message stays on its own.
+        if (!target && !ambiguous && ctx?.employerFallbacks && specific(e.role) && pool.length === 0) {
+          const fits = groups.filter((g) => !pool.includes(g) && !!g.company && lastAt(g) >= e.occurredAt.getTime() - 60 * DAY && specific(groupRole(g)) && roleRelationV2(groupRole(g)!, e.role) === "match"
+            && (employerAlias(g.company, e.company) || weakEmployer(e) || g.events.every((x) => !x.company || weakEmployer(x)))
+            && relation(g, e, ctx) === "match" && allowed(g, e, "match", false, ctx));
+          if (fits.length === 1) possibleLink = fits[0];
+        }
         // An event whose employer is unknown, from an employer's own domain that exactly ONE existing opportunity has written from, belongs with it unless
         // role, cycle, program or the end of that opportunity say otherwise (the same weighing as any other link). Platforms, freemail and several candidates never link this way.
         if (!target && !ambiguous && !e.company && e.senderDomain && classifySender(e.senderDomain) === "employer") {
@@ -231,6 +253,7 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
       }
     }
     if (ambiguous) e = { ...e, signals: [...e.signals, "identity:ambiguous"], reviewReasons: [...(e.reviewReasons ?? []), `identity: could belong to more than one application (${ambiguous})`] };
+    if (possibleLink && !target) e = { ...e, signals: [...e.signals, "identity:ambiguous", `identity:possible-link:${possibleLink.events[0].id}`], reviewReasons: [...(e.reviewReasons ?? []), `identity: this may be the same application as "${groupRole(possibleLink) ?? "the role"}" at ${possibleLink.company}, filed under a different employer name; please confirm or keep them apart`] };
     if (!target) { target = { company: e.company, events: [], threads: new Set() }; groups.push(target); }
     target.events.push(e);
     target.threads.add(e.gmailThreadId);
