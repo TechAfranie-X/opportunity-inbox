@@ -30,6 +30,9 @@ type Fixture = { now: string; scenarios: { id: string; note?: string; messages: 
 const file = process.argv[2];
 const verbose = process.argv.includes("--verbose");
 const useModel = process.argv.includes("--semantic");
+// --replay: cached readings ONLY. Never calls the model, never writes the cache, and a scenario missing from the cache is an error. This is the mode the regression gate uses
+// (scripts/eval-gate.ts), so a decision-logic change is measured on identical model output in under a second.
+const replay = process.argv.includes("--replay");
 const jsonOut = process.argv.includes("--json") ? process.argv[process.argv.indexOf("--json") + 1] : null;
 const modelId = process.argv.includes("--model") ? process.argv[process.argv.indexOf("--model") + 1] : "mlx-community/Qwen3-4B-Instruct-2507-4bit";
 const reader = useModel ? createModelReader({ transport: localTransport(), model: modelId, batch: 4, idPrefix: "local", guide: SEMANTIC_GUIDE_V3_COMPACT }) : null;
@@ -54,14 +57,15 @@ for (const sc of fx.scenarios) {
   if (reader) {
     const s = Date.now();
     const inputs = semanticInputs(emails);
+    if (replay && !cache[sc.id]) throw new Error(`replay: scenario ${sc.id} has no cached readings (${cachePath ?? "no --cache given"})`);
     const readings = (cache[sc.id] ? new Map(cache[sc.id]) : await reader.readings!(inputs)) as Awaited<ReturnType<NonNullable<typeof reader.readings>>>;
     // --fill-missing: a model call that failed (timeout, malformed batch) leaves no reading; ask again for exactly those messages. The code under test is unchanged, so this repairs
     // the measurement's infrastructure, not the result.
-    if (cache[sc.id] && process.argv.includes("--fill-missing")) {
+    if (!replay && cache[sc.id] && process.argv.includes("--fill-missing")) {
       const missing = inputs.filter((i) => !readings.has(i.key));
       if (missing.length > 0) { const more = await reader.readings!(missing); for (const [k, v] of more) readings.set(k, v); cache[sc.id] = [...readings.entries()] as [string, unknown][]; if (cachePath) writeFileSync(cachePath, JSON.stringify(cache)); }
     }
-    if (cachePath && !cache[sc.id]) { cache[sc.id] = [...readings.entries()] as [string, unknown][]; writeFileSync(cachePath, JSON.stringify(cache)); }
+    if (!replay && cachePath && !cache[sc.id]) { cache[sc.id] = [...readings.entries()] as [string, unknown][]; writeFileSync(cachePath, JSON.stringify(cache)); }
     const gaps = inputs.filter((i) => !readings.has(i.key)).length;
     if (gaps > 0) console.error(`[model] ${sc.id}: ${gaps} message(s) have no reading`);
     modelMs += Date.now() - s;
