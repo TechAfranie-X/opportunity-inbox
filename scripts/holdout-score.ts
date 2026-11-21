@@ -6,7 +6,7 @@
  * Promotion rule (printed): needs independent labels for >= 100 messages, B no worse than A on false offers AND false terminal outcomes, and B better overall by a margin.
  */
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { getGmailRefreshToken } from "../lib/gmail/credentials.ts";
 import { refreshGmailAccessToken } from "../lib/gmail/oauth.ts";
@@ -16,7 +16,7 @@ import { endingWording, ownApplicationStatement, ownEnding, withdrawalAcknowledg
 import { messageClass } from "../lib/reliability/message-class.ts";
 const sub = process.argv[2]; const dir = `${homedir()}/.opportunity-inbox-validation/holdout-v1`;
 const draw = JSON.parse(readFileSync(`${dir}/draw.json`, "utf8")) as { items: { id: string; stratum: string }[] };
-const rd = JSON.parse(readFileSync(`${dir}/readings.json`, "utf8")) as { drawHash: string; A: Record<string, R>; B: Record<string, R> };
+const rd = JSON.parse(readFileSync(`${homedir()}/.opportunity-inbox-sealed/holdout-readings.json`, "utf8")) as { drawHash: string; A: Record<string, R>; B: Record<string, R> };
 type R = { status: string; recruiting: boolean; type: string | null; certainty: string };
 if (rd.drawHash !== createHash("sha256").update(readFileSync(`${dir}/draw.json`, "utf8")).digest("hex")) { console.error("REFUSED: readings were made for a different draw"); process.exit(2); }
 const labelsFile = process.argv.includes("--labels") ? process.argv[process.argv.indexOf("--labels") + 1] : null;
@@ -61,6 +61,8 @@ for (const it of draw.items) {
   if (ok(l, pa) !== ok(l, pb)) errs.push(`${ok(l, pb) ? "B-fixes" : "B-breaks"} ${it.id.slice(0, 8)} stratum=${it.stratum} ref=${l.kind} A=${pa.rec ? pa.type : "no"} B=${pb.rec ? pb.type : "no"}`);
 }
 const independent = !!labelsFile;
+const marker = `${dir}/.assessed`;
+if (independent) { if (existsSync(marker)) console.log(`NOTE: the initial independent assessment was already made (${readFileSync(marker, "utf8").trim()}); this holdout is now DEVELOPMENT data and must not support further claims.`); else writeFileSync(marker, new Date().toISOString()); }
 console.log(`${independent ? "INDEPENDENT labels" : "PROVISIONAL references (person corrections and deterministic facts; NOT independent)"}: ${stat.A.n} of ${draw.items.length} messages scored`);
 for (const k of ["A", "B"] as const) { const s = stat[k]; console.log(`  reader ${k}: correct ${s.ok}/${s.n}  FALSE OFFERS ${s.falseOffer}  FALSE TERMINAL ${s.falseTerminal}  missed offers ${s.missedOffer}  missed terminal ${s.missedTerminal}`); }
 for (const [k, v] of strat) console.log(`   ${k.padEnd(24)} n=${String(v.n).padStart(3)}  A ${v.A}  B ${v.B}`);

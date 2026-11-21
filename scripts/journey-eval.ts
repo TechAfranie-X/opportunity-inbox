@@ -46,14 +46,14 @@ for (const t of truth.journeys) {
     if (!j) continue;
     if (token && (j.decision !== "resolved" || blind)) { const seedEv = ws.opportunities.flatMap((o) => o.events).find((e) => e.gmailMessageId.startsWith(s.slice(0, 8))); if (seedEv) { gmailUsed++; const extra = await retrieveRelated(token, { gmailThreadId: seedEv.gmailThreadId, company: seedEv.company }, known); gmailFound += extra.length; if (extra.length) j = reconstructJourney(s, { opportunities: opps, possible: ws.possible, actions: ws.actions, ctx: identityContext(), extraEvents: extra }) ?? j; } }
     const home = opps.find((o) => o.events.some((e) => e.gmailMessageId.startsWith(s.slice(0, 8))));
-    const score = (sc: Score, tl: string[], st: Journey["state"] | null, decided: boolean) => {
-      sc.n++; const hit = tl.filter((x) => tset.has(x)).length, rec = tset.size ? hit / tset.size : 0, pre = tl.length ? hit / tl.length : 0;
+    const score = (sc: Score, tl: string[], st: Journey["state"] | null, decided: boolean, supporting: Set<string> = new Set()) => {
+      sc.n++; const core = tl.filter((x) => !supporting.has(x)); const hit = tl.filter((x) => tset.has(x)).length, rec = tset.size ? hit / tset.size : 0, pre = core.length ? core.filter((x) => tset.has(x)).length / core.length : 0; // supporting history counts toward completeness, never against precision
       sc.recall += rec; sc.precision += pre; if (decided && rec >= 0.6 && pre >= 0.8) sc.identity++; if (stateOk(t, st)) sc.life++; if (decided) sc.resolved++; else sc.ambiguous++;
       return { rec, pre };
     };
     const bTl = home ? home.events.filter((e) => !e.outbound).map((e) => e.gmailMessageId.slice(0, 8)) : [];
     const b = score(base, bTl, home ? { status: home.status, stage: home.stage, outcome: home.outcome ?? null, closedBy: home.closedBy ?? null } : null, !!home);
-    const i = score(inv, j.timeline.map((x) => x.id8), j.state, j.decision === "resolved");
+    const i = score(inv, j.timeline.map((x) => x.id8), j.state, j.decision === "resolved", new Set(j.timeline.filter((x) => x.supporting).map((x) => x.id8)));
     if (j.misplaced) misplaced++;
     if (blind && j.decision === "resolved" && i.rec < 0.6) wrongPlace++;
     if (j.state?.status === "active") { if (!j.nextAction) noAction++; else if (j.nextAction.evidence.length > 0) grounded++; else ungrounded++; }

@@ -17,6 +17,8 @@ import { localTransport } from "../lib/semantic/local.ts";
 const sub = process.argv[2]; const dir = `${homedir()}/.opportunity-inbox-validation/holdout-v1`;
 const raw = readFileSync(`${dir}/draw.json`, "utf8");
 if (createHash("sha256").update(raw).digest("hex") !== readFileSync("docs/holdout-draw.sha256", "utf8").split(/\s+/)[0]) { console.error("REFUSED: the draw differs from the recorded hash"); process.exit(2); }
+import { mkdirSync } from "node:fs";
+const sealed = `${homedir()}/.opportunity-inbox-sealed`; mkdirSync(sealed, { recursive: true }); // predictions live here, apart from the evaluator package
 const draw = JSON.parse(raw) as { items: { id: string; stratum: string }[] };
 const emails: Awaited<ReturnType<typeof fetchEmailsById>>["emails"] = [];
 for (let i = 0; i < draw.items.length; i += 20) { const token = await refreshGmailAccessToken((await getGmailRefreshToken(sub))!); emails.push(...(await fetchEmailsById(token, draw.items.slice(i, i + 20).map((x) => x.id))).emails); }
@@ -25,6 +27,6 @@ const slim = (m: Map<string, { output: { status: string; recruiting: boolean; ty
 const t0 = Date.now();
 const A = await mk(SEMANTIC_GUIDE_V3_COMPACT).readings!(semanticInputs(emails, [], { parts: false }));
 const B = await mk(SEMANTIC_GUIDE_V4).readings!(semanticInputs(emails, [], { parts: true }));
-writeFileSync(`${dir}/readings.json`, JSON.stringify({ drawHash: createHash("sha256").update(raw).digest("hex"), ranAt: new Date().toISOString(), fetched: emails.length, A: slim(A), B: slim(B) }));
+writeFileSync(`${sealed}/holdout-readings.json`, JSON.stringify({ drawHash: createHash("sha256").update(raw).digest("hex"), ranAt: new Date().toISOString(), fetched: emails.length, A: slim(A), B: slim(B) }));
 console.log(`holdout readings stored: fetched ${emails.length}/${draw.items.length}, A answered ${A.size}, B answered ${B.size}, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 process.exit(0);
