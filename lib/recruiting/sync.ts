@@ -134,6 +134,8 @@ export async function syncRecruitingMail(userGoogleSub: string, opts: { /** Test
       deferable: isContinuityCandidate,
       // Shadow evidence ledger: off unless EVIDENCE_LEDGER=shadow. It records claims and the shadow engine's verdict beside the product's pipeline and changes no decision.
       ledger: process.env.EVIDENCE_LEDGER === "shadow",
+      // The Phase 2 decision engine for NEW mail (DECISION_ENGINE=off to roll back to the previous chain). It only changes what a model reading may do; stored events are untouched.
+      ...(process.env.DECISION_ENGINE === "off" ? {} : { decisionEngine: "phase2" as const }),
       // The second reader is OFF unless SEMANTIC_READER names an adapter. The only adapter is the development cache (never production):
       // no model is hosted, called or paid for. See lib/semantic/port.ts for the contract any real adapter must honour.
       ...semanticConfig(userGoogleSub),

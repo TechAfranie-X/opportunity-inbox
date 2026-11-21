@@ -4,6 +4,7 @@ import { contactKeysOf, reconcilePredictions } from "../discovery/continuity.ts"
 import { isNearMiss } from "../reliability/flags.ts";
 import { buildChunkLedgers, type LedgerEntry } from "../ledger/chunk.ts";
 import { applyAssist } from "../semantic/assist.ts";
+import { markUncorroboratedRejections, shadowAssist } from "../decision/shadow.ts";
 import { applyConsensus } from "../semantic/consensus.ts";
 import { reconcileReadings } from "../semantic/employer.ts";
 import type { VerifiedReading } from "../semantic/reading.ts";
@@ -88,6 +89,8 @@ export type EngineParams = {
   identity?: (events: ExtractedEvent[], emails: Map<string, RecruitingEmail>, readings: Map<string, VerifiedReading>) => ExtractedEvent[];
   /** Record the evidence ledger and the shadow engine's verdict for each message read (EVIDENCE_LEDGER=shadow). Off by default; it never changes a decision and a failure here loses only the record. */
   ledger?: boolean;
+  /** "phase2": the evidence-weighing decision engine decides what the model's reading changes (lib/decision), and a rule-found rejection without an ending sentence is only proposed. Absent: the previous chain, unchanged. */
+  decisionEngine?: "phase2";
   /** Name tokens of the account holder, removed from what the second reader sees. */
   selfNames?: string[];
   predict: (emails: RecruitingEmail[]) => Prediction[];
@@ -172,6 +175,7 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
     const threadIds = [...new Set(inboundEvents.map((e) => e.gmailThreadId))];
     const outbound = threadIds.length ? (await outboundOf(threadIds)).filter(allowed) : [];
     let events = tagEvents(p.extract([...inbound, ...outbound], context), via);
+    if (p.decisionEngine === "phase2") events = markUncorroboratedRejections(events, inbound);
     const ruleEvents = events; // what the rule reader said, before any second reader touched it (the ledger records both sides)
     let chunkOpinions = new Map<string, import("../recruiting/reader/types.ts").VerifiedOutput>();
     let semanticFailed = false;
@@ -186,7 +190,7 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
         } else opinions = await p.semantic.opine(inputs);
         chunkOpinions = opinions;
         for (const [k, v] of opinions) opinionLog.set(k, v); // kept for this run so the deferred pass can use them without a second call
-        events = (p.semanticMode === "assist" ? applyAssist : applyConsensus)(events, inbound, opinions);
+        events = (p.decisionEngine === "phase2" && p.semanticMode === "assist" ? shadowAssist : p.semanticMode === "assist" ? applyAssist : applyConsensus)(events, inbound, opinions);
         if (readingLog.size > 0) events = reconcileReadings(events, readingLog);
       } catch {
         // A second opinion that fails is no opinion: the first reader's result stands and nothing is lost.
@@ -218,7 +222,7 @@ export async function runSync(source: MailSource, store: SyncStore, p: EnginePar
     const held = [...deferred.values()];
     const keys = contactKeysOf(held);
     let events = tagEvents(p.extract(held, { contacts: keys.length > 0 && store.contactAnchors ? await store.contactAnchors(keys) : new Map() }), via);
-    if (p.semantic && opinionLog.size > 0) events = (p.semanticMode === "assist" ? applyAssist : applyConsensus)(events, held, new Map(held.flatMap((h) => (opinionLog.has(h.id) ? [[h.id, opinionLog.get(h.id)!] as const] : []))));
+    if (p.semantic && opinionLog.size > 0) events = (p.decisionEngine === "phase2" && p.semanticMode === "assist" ? shadowAssist : p.semanticMode === "assist" ? applyAssist : applyConsensus)(events, held, new Map(held.flatMap((h) => (opinionLog.has(h.id) ? [[h.id, opinionLog.get(h.id)!] as const] : []))));
     if (p.semantic && readingLog.size > 0) events = reconcileReadings(events, new Map(held.flatMap((h) => (readingLog.has(h.id) ? [[h.id, readingLog.get(h.id)!] as const] : []))));
     if (p.identity) events = p.identity(events, new Map(held.map((m) => [m.id, m] as const)), readingLog);
     await store.saveEvents(events);

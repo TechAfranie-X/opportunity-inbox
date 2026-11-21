@@ -30,6 +30,18 @@ const MARGIN = 1.5; // a model's type replaces a rule's low-information type onl
 
 export type ShadowTrace = Map<string, Verdict>;
 
+/**
+ * A rule-found REJECTION settles an application only when the message contains a sentence that ends it. The rule reader types a receipt ("your application has been received") as a rejection now
+ * and then; without an ending sentence the ending is only proposed (the application stays active and visible). Pure; needs no model.
+ */
+export function markUncorroboratedRejections(events: ExtractedEvent[], emails: RecruitingEmail[]): ExtractedEvent[] {
+  const byId = new Map(emails.map((m) => [m.id, m] as const));
+  return events.map((e) => {
+    const m = byId.get(e.gmailMessageId);
+    return m && !e.outbound && !isNearMiss(e) && e.type === "rejection" && !e.signals.includes("terminal:proposed") && !endingWording(m) ? { ...e, signals: [...e.signals, "terminal:proposed"] } : e;
+  });
+}
+
 export function shadowAssist(events: ExtractedEvent[], emails: RecruitingEmail[], opinions: Map<string, VerifiedOutput>, trace?: ShadowTrace): ExtractedEvent[] {
   if (opinions.size === 0) return events;
   const byId = new Map(emails.map((m) => [m.id, m] as const));
@@ -51,9 +63,7 @@ export function shadowAssist(events: ExtractedEvent[], emails: RecruitingEmail[]
     let e = e0;
     const m = byId.get(e.gmailMessageId);
     if (!m || e.outbound) return e;
-    // A rule-found REJECTION settles an application only when the message contains a sentence that ends it. The rule reader types a receipt ("your application has been received") as a rejection
-    // now and then; without an ending sentence the ending is only proposed (the application stays active and visible).
-    if (!isNearMiss(e) && e.type === "rejection" && !e.signals.includes("terminal:proposed") && !endingWording(m)) e = { ...e, signals: [...e.signals, "terminal:proposed"] };
+    e = markUncorroboratedRejections([e], emails)[0];
     const op = opinions.get(e.gmailMessageId);
     const v = verdictFor(m, e, op);
     if (!usable(op)) return e;

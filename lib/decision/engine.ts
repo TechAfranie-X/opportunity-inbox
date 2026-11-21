@@ -86,7 +86,10 @@ export function decide(l: MessageLedger): Verdict {
   }
   const reasons: string[] = [];
   let state: VerdictState;
-  const contested = opposition >= C.contestFloor && opposition >= C.contestShare * Math.max(support, 0.0001);
+  // An OFFER is the most consequential thing a message can claim: when the text itself says it is a welcome, programme or promotional notice rather than about the reader's own process, the offer
+  // is contested however much else supports it.
+  const offerNotMine = !!best && best.value === "offer" && l.claims.some((c) => c.kind === "fact" && c.value === "not_own_process") && !l.claims.some((c) => c.kind === "fact" && c.value === "own_process_wording");
+  const contested = offerNotMine || (opposition >= C.contestFloor && opposition >= C.contestShare * Math.max(support, 0.0001));
   if (person) { state = "settled"; reasons.push(person.value === "yes" ? "person-confirmed" : "person-excluded"); }
   else if (belief < C.possibleAbove) { state = "noise"; reasons.push("below-possible"); }
   else if (contested) { state = "contested"; for (const id of recAgainst) reasons.push(`opposed:${id.split(".").pop()}`); }

@@ -129,3 +129,12 @@ test("a rule-found rejection with no ending sentence (a receipt typed as a rejec
   const out2 = shadowAssist([{ ...ruleEvent, gmailMessageId: "m14", gmailThreadId: "t-m14", subject: "Update" }], [real], new Map([["m14", reading("m14", {})]]));
   assert.ok(!out2[0].signals.includes("terminal:proposed"), "a real ending sentence settles it");
 });
+
+test("an offer that the text says is a welcome or programme notice is contested, however much else supports it", () => {
+  const m = mail("m15", "Welcome to Lumen Works Academy!", "Welcome to Lumen Works Academy! Congratulations, you're in. Set up your profile to get tips. Unsubscribe | Manage preferences.");
+  const v = decide(buildLedger(m, null, reading("m15", { type: "offer", stage: "offer" }), OPTS));
+  assert.equal(v.state, "contested");
+  assert.notEqual(v.placement, "pipeline");
+  const real = decide(buildLedger(mail("m16", "Your offer", "We are pleased to offer you the position. Your offer letter and next steps are attached for your application."), null, reading("m16", { type: "offer", stage: "offer" }), OPTS));
+  assert.notEqual(real.state, "contested", "a real offer about the reader's own process is not");
+});
