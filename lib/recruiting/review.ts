@@ -134,7 +134,7 @@ export function buildReviewQueue(opportunities: Opportunity[], policy: Policy = 
   }
   // the investigator: a doubt the evidence already held resolves is not put to the person (it is listed under "Resolved automatically" with its reason)
   const resolved = options.investigate ? investigate(opportunities) : new Map<string, Resolution>();
-  if (resolved.size > 0) for (let i = items.length - 1; i >= 0; i--) if (items[i].kind === "doubt" && resolved.has(items[i].event.id)) items.splice(i, 1);
+  if (resolved.size > 0) for (let i = items.length - 1; i >= 0; i--) if ((items[i].kind === "doubt" || items[i].kind === "ambiguous" || items[i].kind === "suggestion") && resolved.has(items[i].event.id)) items.splice(i, 1);
   items.sort((a, b) => b.impact - a.impact || b.event.occurredAt.getTime() - a.event.occurredAt.getTime());
   const maybe = possible
     // Mail that the message-class facts already explain (an event, survey, platform notice, community message, security code, logistics, programme acceptance) is RESOLVED by evidence, not asked about

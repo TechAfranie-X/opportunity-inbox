@@ -1,4 +1,6 @@
+import { identityContext } from "../recruiting/product-config.ts";
 import { companyKey } from "../recruiting/company.ts";
+import { reconstructJourney } from "./journey.ts";
 import type { EffectiveEvent, Opportunity } from "../recruiting/types.ts";
 
 /**
@@ -64,6 +66,26 @@ function membershipByThread({ o, e }: Ctx): Resolution | null {
   return { eventId: e.id, gmailMessageId: e.gmailMessageId, resolver: "membership-by-thread", decision: "belongs to this application", explanation: "A rule-read application message of the same Gmail thread is already part of this journey.", evidence: [{ kind: "same-thread-application-message", ref: id8(anchor) }] };
 }
 
+/**
+ * "Could this belong to another application?": the one-email investigation (lib/investigate/journey.ts) compares the candidate applications on role, cycle, requisition, programme, thread and
+ * chronology. The doubt is resolved only when the application the message sits in leads on HARD independent evidence (the same Gmail thread, the same requisition, or the role the message itself
+ * names) and no other surviving candidate has any, with a clear margin over the best alternative. Soft similarity (same employer, nearby dates, a shared host) never resolves it.
+ */
+function identityByJourney({ o, e }: Ctx, all: Opportunity[]): Resolution | null {
+  const isFlag = e.signals.includes("identity:ambiguous") || e.signals.some((x) => x.startsWith("identity:suggest:"));
+  if (!isFlag) return null;
+  const j = reconstructJourney(e.gmailMessageId.slice(0, 12), { opportunities: all, ctx: identityContext() });
+  if (!j || j.decision !== "resolved") return null;
+  const home = j.candidates.find((c) => c.key === o.key);
+  if (!home || home.vetoes.length > 0) return null;
+  const rivals = j.candidates.filter((c) => c.key !== o.key && c.vetoes.length === 0);
+  // a self-contained application: the message's own subject names the employer, and no other application at that employer survives the comparison
+  if (home.hard.length === 0 && home.reasons.includes("no other message in this application") && rivals.length === 0 && subjectNames(e)) return { eventId: e.id, gmailMessageId: e.gmailMessageId, resolver: "identity-by-journey", decision: `belongs to ${o.company}${o.role ? ` · ${o.role}` : ""}`, explanation: "The subject names the employer and no other application at that employer survives the comparison (different role, cycle, or already ended).", evidence: [{ kind: "subject-names-employer", ref: id8(e) }] };
+  if (home.hard.length === 0) return null;
+  if (rivals.some((c) => c.hard.length > 0 || home.evidence - c.evidence < 2)) return null;
+  return { eventId: e.id, gmailMessageId: e.gmailMessageId, resolver: "identity-by-journey", decision: `belongs to ${o.company}${o.role ? ` · ${o.role}` : ""}`, explanation: `Compared with ${j.candidates.length - 1} other candidate application${j.candidates.length === 2 ? "" : "s"}: ${home.hard.join(", ")}; no other surviving candidate has independent evidence.`, evidence: home.hard.map((h) => ({ kind: h.replace(/ /g, "-"), ref: id8(e) })) };
+}
+
 const RESOLVERS = [typeByFacts, staleGoodbye, employerByCorroboration, membershipByThread];
 
 /** Resolve what the evidence already held can resolve. A person's correction or confirmation is never overridden, and an event with competing flags is resolved only if EVERY stored reason is covered. */
@@ -72,8 +94,8 @@ export function investigate(opportunities: Opportunity[]): Map<string, Resolutio
   for (const o of opportunities) for (const e of o.events) {
     if (e.outbound || e.corrected || e.confirmed) continue;
     const reasons = e.reviewReasons ?? [];
-    if (reasons.length === 0) continue;
-    const found = RESOLVERS.map((r) => r({ o, e })).filter((x): x is Resolution => !!x);
+    if (reasons.length === 0 && !e.signals.some((x) => x.startsWith("identity:suggest:") || x === "identity:ambiguous")) continue; // (an identity suggestion carries no stored reason text)
+    const found = [...RESOLVERS.map((r) => r({ o, e })), identityByJourney({ o, e }, opportunities)].filter((x): x is Resolution => !!x);
     if (found.length === 0) continue;
     // every reason must be explained by some resolver, else the doubt stays open
     const covered = reasons.every((r) => found.some((f) => explains(f.resolver, r)));
@@ -86,4 +108,5 @@ const explains = (resolver: string, reason: string): boolean =>
   (resolver === "type-by-facts" && (/^type: /i.test(reason) || (/^conflict: /i.test(reason) && !/second reader/i.test(reason)))) ||
   (resolver === "stale-goodbye" && /^conflict: /i.test(reason) && !/second reader/i.test(reason)) ||
   (resolver === "employer-by-corroboration" && /^company: /i.test(reason)) ||
-  (resolver === "membership-by-thread" && /^membership: /i.test(reason));
+  (resolver === "membership-by-thread" && /^membership: /i.test(reason)) ||
+  (resolver === "identity-by-journey" && /^identity: |could not tell which of your applications|may belong to another/i.test(reason));
