@@ -40,6 +40,8 @@ export type IdentityContext = {
   weakEmployerThreads?: boolean;
   /** Phase 2: a role-less receipt in a DIFFERENT Gmail thread is another application whatever the gap in time (one receipt per application; a repeat delivery shares its thread). Off by default. */
   distinctThreadReceipts?: boolean;
+  /** Phase 2: an employer's confirmation of an ending (a rejection or withdrawal) joins an application that has already ended, when its specific role matches, instead of starting a new one. Off by default. */
+  confirmEndings?: boolean;
 };
 export function groupCycle(g: Group): Cycle {
   const years = new Set<number>(), seasons = new Set<string>();
@@ -93,13 +95,15 @@ export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, cor
   return ok ? "match" : "conflict";
 }
 
-function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean): boolean {
+function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean, ctx?: IdentityContext): boolean {
   if (rel === "conflict") return false;
   // a new application after a rejection is a new opportunity; but progress (an assessment, an interview, an offer) in the SAME thread for a compatible role is
   // far more often the same process continuing than a new one, so it joins and the contradiction is surfaced for a person (lib/lifecycle/contradictions.ts)
   // a message that takes the employer's own ending back ("please disregard our previous message") continues that process whatever type it was read as
   const retraction = e.signals.includes("retraction (fact)");
-  if (endedByEmployerOrUser(g) && !NEUTRAL.has(e.type) && !retraction && !(viaThread && REOPENS.has(e.type))) return false;
+  // (Phase 2) the employer confirming an ending that is already recorded (a rejection after the student's withdrawal, a second notice of the same rejection) is the same application, not a new one
+  const confirmsEnding = !!ctx?.confirmEndings && rel === "match" && (e.type === "rejection" || e.type === "withdrawn") && (viaThread || e.occurredAt.getTime() - lastAt(g) <= 30 * DAY);
+  if (endedByEmployerOrUser(g) && !NEUTRAL.has(e.type) && !retraction && !confirmsEnding && !(viaThread && REOPENS.has(e.type))) return false;
   const gap = e.occurredAt.getTime() - lastAt(g);
   if (rel === "generic") return gap <= (viaThread ? GENERIC_WINDOW_WITH_THREAD : GENERIC_WINDOW);
   if (viaThread) return true;
@@ -182,7 +186,7 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
       const threadEmployerOk = (g: Group) => sameEmployer(g) || (!!ctx?.weakEmployerThreads && (weakEmployer(e) || g.events.every((x) => !x.company || weakEmployer(x))));
       // 1. the Gmail thread: evidence, weighed like any other. A thread can hold several opportunities (automated mail reuses one subject), so every group that
       //    has mail in this thread is a candidate and the same checks apply to each; a specific role match beats a generic one, then recency.
-      const inThread = groups.filter((g) => g.threads.has(e.gmailThreadId) && threadEmployerOk(g)).map((g) => ({ g, rel: relation(g, e, ctx, true) })).filter(({ g, rel }) => allowed(g, e, rel, true));
+      const inThread = groups.filter((g) => g.threads.has(e.gmailThreadId) && threadEmployerOk(g)).map((g) => ({ g, rel: relation(g, e, ctx, true) })).filter(({ g, rel }) => allowed(g, e, rel, true, ctx));
       const threadMatches = inThread.filter((s) => s.rel === "match");
       const threadGenerics = inThread.filter((s) => s.rel === "generic");
       // ABSTAIN here too: a role-less message in a thread that already holds two applications for DIFFERENT roles cannot be told from either by the thread alone.
@@ -200,7 +204,7 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
         const pool = e.company
           ? groups.filter((g) => g.company && companyKey(g.company) === companyKey(e.company!))
           : e.senderDomain ? groups.filter((g) => !g.company && g.events.some((x) => x.senderDomain === e.senderDomain)) : [];
-        const scored = pool.map((g) => ({ g, rel: relation(g, e, ctx) })).filter(({ g, rel }) => allowed(g, e, rel, false));
+        const scored = pool.map((g) => ({ g, rel: relation(g, e, ctx) })).filter(({ g, rel }) => allowed(g, e, rel, false, ctx));
         const matches = scored.filter((s) => s.rel === "match");
         const generics = scored.filter((s) => s.rel === "generic");
         const pick = matches.length ? matches : generics;
@@ -222,7 +226,7 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
         // role, cycle, program or the end of that opportunity say otherwise (the same weighing as any other link). Platforms, freemail and several candidates never link this way.
         if (!target && !ambiguous && !e.company && e.senderDomain && classifySender(e.senderDomain) === "employer") {
           const same = groups.filter((g) => g.events.some((x) => x.senderDomain === e.senderDomain));
-          if (same.length === 1 && allowed(same[0], e, relation(same[0], e, ctx), false)) target = same[0];
+          if (same.length === 1 && allowed(same[0], e, relation(same[0], e, ctx), false, ctx)) target = same[0];
         }
       }
     }
