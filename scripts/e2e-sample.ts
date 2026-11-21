@@ -7,6 +7,7 @@
  */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const base = process.env.DATABASE_URL;
 if (!base) throw new Error("DATABASE_URL is required (it is only used to reach the server; the scratch database is separate)");
@@ -26,6 +27,9 @@ psql("postgres", `CREATE DATABASE ${SCRATCH}`);
 try {
   execFileSync("npx", ["drizzle-kit", "migrate"], { env: { ...process.env, DATABASE_URL: url.toString() }, stdio: "ignore" });
   process.env.DATABASE_URL = url.toString();
+  // Development instrumentation (scripts/dev/corrected-row-audit.sql): installed ONLY in this scratch database, so every write to a corrected row during the journey is recorded.
+  execFileSync("docker", ["exec", "-i", CONTAINER, "psql", "-U", decodeURIComponent(admin.username), "-d", SCRATCH, "-v", "ON_ERROR_STOP=1", "-q"], { input: readFileSync("scripts/dev/corrected-row-audit.sql"), stdio: ["pipe", "ignore", "pipe"] });
+
   process.env.SAMPLE_LOGIN = "1";
   process.env.EVIDENCE_LEDGER = "shadow"; // the shadow evidence ledger is off in production by default; this journey exercises it (claims only, per account, deleted with the data)
   // The journey must not depend on whatever the developer enabled in .env.local: a local model would read the whole synthetic mailbox. An explicit value still wins.
@@ -154,6 +158,23 @@ try {
   assert.equal(rowHash(), correctedRowBefore, "a re-read never rewrites the stored reading of a row the person corrected");
   step("a reader upgrade revisits old decisions and keeps corrections and confirmations");
 
+  // 5c. role inheritance fills empty roles across the stored events of a thread; it must NEVER touch a row the person corrected or confirmed (found in the corrected-row audit:
+  // inheritStoredRoles used to update every row of the account, so a confirmed, role-less row silently gained an inherited role and a "role-inherited" signal)
+  {
+    const mk = (id: string, role: string | null) => ({ gmailMessageId: id, gmailThreadId: "t-inherit-check", occurredAt: new Date("2026-02-01T12:00:00Z"), outbound: false, senderName: "Careers", senderDomain: "inherit-check.example", subject: "Your application", type: "status_update" as const, company: "Inherit Check Co", role, eventDate: null, eventDateHasTime: false, dateKind: null, confidence: 0.7, fieldConfidence: { type: 0.7, company: 0.7, role: role ? 0.7 : 0 }, reviewReasons: [], signals: [] });
+    await store.saveExtractedEvents(SAMPLE_SUB, [mk("inherit-a", "Analyst Intern"), mk("inherit-b", null), mk("inherit-c", null)]);
+    const idOf = (m: string) => sql(`select id from recruiting_events where gmail_message_id = '${m}'`);
+    await store.confirmEvent(SAMPLE_SUB, idOf("inherit-b"));
+    const digest = (m: string) => sql(`select md5(row(type, company, role, event_date, signals::text, confidence, field_confidence::text, correction::text)::text) from recruiting_events where gmail_message_id = '${m}'`);
+    const confirmedBefore = digest("inherit-b");
+    const changed = await store.inheritStoredRoles(SAMPLE_SUB);
+    assert.equal(digest("inherit-b"), confirmedBefore, "role inheritance never rewrites a confirmed row");
+    assert.equal(sql(`select role from recruiting_events where gmail_message_id = 'inherit-b'`), "", "and the confirmed row did not gain a role");
+    assert.equal(sql(`select role from recruiting_events where gmail_message_id = 'inherit-c'`), "Analyst Intern", "while an unreviewed role-less row in the same thread still inherits");
+    assert.ok(changed >= 1);
+    step("role inheritance leaves confirmed and corrected rows alone");
+  }
+
   // 6. confirm and ignore
   const next = buildReviewQueue(after.opportunities)[0];
   if (next) {
@@ -189,6 +210,14 @@ try {
   const poisoned = { ...mine[0], ledger: { ...mine[0].ledger, claims: [{ ...mine[0].ledger.claims[0], kind: "employer" as const, value: "We have decided not to move forward\nwith your application", id: "x" }] } };
   await assert.rejects(saveEvidenceLedgers(SAMPLE_SUB, [poisoned]), /invalid ledger/, "content-shaped data is refused");
   step("evidence ledger: recorded, claims only, versioned, isolated per account, content refused");
+
+  // 8c. the audit trigger saw no write to a corrected row during the whole journey except the person's own actions; and it does catch a deliberate rewrite
+  const audited = q("select coalesce(string_agg(distinct columns_changed::text, ';'), '') from corrected_row_audit");
+  assert.ok(!/role|signals|field_confidence|type|company/.test(audited), `an automated path rewrote a corrected row: ${audited}`);
+  const victimRow = q("select id from recruiting_events where correction is not null limit 1");
+  q(`update recruiting_events set role = 'audit-probe' where id = '${victimRow}'`);
+  assert.equal(q(`select count(*) from corrected_row_audit where event_id = '${victimRow}' and columns_changed @> ARRAY['role']`), "1", "a deliberate rewrite of a corrected row is recorded");
+  step("audit trigger (scratch only): no automated write to a corrected row; a deliberate one is recorded");
 
   // 9. delete everything
   await store.deleteRecruitingData(SAMPLE_SUB);

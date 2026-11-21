@@ -482,12 +482,15 @@ export async function inheritStoredRoles(userGoogleSub: string): Promise<number>
   const db = getDb();
   const rows = await db.select().from(recruitingEvents).where(eq(recruitingEvents.userGoogleSub, userGoogleSub));
   const events = rows.map(rowToExtracted);
+  // A row the person corrected, confirmed or ignored is never written here: a confirmation vouches for the reading it was made on, and an inherited role would change what they
+  // vouched for (the corrected-row audit found 15 rows that had silently gained a role and a "role-inherited" signal this way). Such rows still serve as SOURCES of a role.
+  const vouched = new Set(rows.filter((r) => r.correction != null).map((r) => r.id));
   const before = new Map(events.map((e) => [e.id, e.role]));
   inheritRoles(events);
   let changed = 0;
   for (const e of events) {
-    if (e.role === before.get(e.id)) continue;
-    await db.update(recruitingEvents).set({ role: e.role, fieldConfidence: e.fieldConfidence ?? null, signals: e.signals }).where(and(eq(recruitingEvents.id, e.id), eq(recruitingEvents.userGoogleSub, userGoogleSub)));
+    if (e.role === before.get(e.id) || vouched.has(e.id)) continue;
+    await db.update(recruitingEvents).set({ role: e.role, fieldConfidence: e.fieldConfidence ?? null, signals: e.signals }).where(and(eq(recruitingEvents.id, e.id), eq(recruitingEvents.userGoogleSub, userGoogleSub), isNull(recruitingEvents.correction)));
     changed += 1;
   }
   return changed;
