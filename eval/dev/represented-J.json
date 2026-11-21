@@ -1,0 +1,81 @@
+{
+ "j1m9": null,
+ "j1m10": null,
+ "j2m4": null,
+ "j2m5": null,
+ "j2m6": null,
+ "j2m8": null,
+ "j2m9": null,
+ "j2m12": null,
+ "j4m2": null,
+ "j4m6": null,
+ "j4m7": null,
+ "j4m8": null,
+ "j4m9": null,
+ "j4m10": null,
+ "j4m12": null,
+ "j5m2": null,
+ "j5m3": null,
+ "j5m5": null,
+ "j5m7": null,
+ "j5m9": null,
+ "j5m10": null,
+ "j7m1": null,
+ "j7m3": {
+  "employer": "Passerelle",
+  "grounding": {
+   "hash": "0ce4ec71e9965701",
+   "offset": 37
+  }
+ },
+ "j7m4": null,
+ "j7m8": null,
+ "j7m10": null,
+ "j7m12": null,
+ "j9m3": null,
+ "j9m4": null,
+ "j9m5": null,
+ "j9m7": null,
+ "j9m8": null,
+ "j9m10": null,
+ "j10m8": null,
+ "j10m12": null,
+ "j13m2": null,
+ "j13m3": null,
+ "j13m5": null,
+ "j13m9": null,
+ "j13m10": {
+  "employer": "Casa Verde",
+  "grounding": {
+   "hash": "d7272b3ac9396df4",
+   "offset": 27
+  }
+ },
+ "j14m1": {
+  "employer": "Brightfield Analytics",
+  "grounding": {
+   "hash": "4a43273be8e62b62",
+   "offset": 36
+  }
+ },
+ "j14m3": null,
+ "j14m4": null,
+ "j14m8": null,
+ "j14m9": null,
+ "j15m1": null,
+ "j15m3": null,
+ "j15m5": null,
+ "j15m6": {
+  "employer": "TechBridge",
+  "grounding": {
+   "hash": "423c5f4d6ec1af34",
+   "offset": 32
+  }
+ },
+ "j15m7": null,
+ "j15m9": null,
+ "j15m10": null,
+ "j16m6": null,
+ "j16m7": null,
+ "j16m10": null
+}

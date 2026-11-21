@@ -28,7 +28,7 @@ const CONSEQUENTIAL = new Set<EventType>(["rejection", "withdrawn", "offer", "in
 const STAGE_BEARING = new Set<EventType>(["applied", "recruiter_outreach", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer", "rejection", "withdrawn"]);
 
 /** The employer name rests only on the sender (or on very weak evidence). */
-const weakEmployer = (e: EffectiveEvent) => !!e.company && !e.corrected && !e.confirmed && (e.signals.includes("employer:sender-only") || (e.fieldConfidence?.company ?? 1) < 0.45);
+export const weakEmployer = (e: EffectiveEvent) => !!e.company && !e.corrected && !e.confirmed && (e.signals.includes("employer:sender-only") || (e.fieldConfidence?.company ?? 1) < 0.45);
 /** "Corvid" is an alias of "Corvid Systems": the shorter name's words are a leading part of the longer one's, and the longer adds at most two words. Equal names are the strict case, not this one. */
 export function employerAlias(a: string | null | undefined, b: string | null | undefined): boolean {
   const toks = (x: string) => x.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9]+/).filter(Boolean);
@@ -50,11 +50,10 @@ export type IdentityContext = {
   distinctThreadReceipts?: boolean;
   /** Phase 2: an employer's confirmation of an ending (a rejection or withdrawal) joins an application that has already ended, when its specific role matches, instead of starting a new one. Off by default. */
   confirmEndings?: boolean;
-  /** Phase 2: when the employer named on a message has NO candidate application (nothing under that exact name fits), the application may be filed under a different form of the same employer
-   *  ("Corvid" / "Corvid Systems") or under an agency or vendor that wrote on its behalf. Only a UNIQUE application with the same specific role, recent, qualifies; two candidates link nobody.
-   *  It NEVER links on its own: names alone cannot tell "Corvid" / "Corvid Systems" (one employer) from "Marambaia" / "Marambaia Seguros" (two divisions), so the message stays apart and a
-   *  Review question names the one candidate; the person's answer becomes an authoritative link. Measured: linking automatically cost 12 wrong merges for 2 recovered links. */
-  employerFallbacks?: boolean;
+  /** Phase 2: evidence-scored attribution (see `attribute`). When a message's own employer name has no application at all, it is attributed to ONE existing application only when several independent
+   *  kinds of evidence agree (employer, a specific role, a requisition number, a team, the Gmail thread, sender continuity) and nothing vetoes it. Otherwise it stays separate; a weaker best
+   *  candidate is recorded as a low-priority suggestion with the reasons. No link is ever made from an employer-name resemblance alone. */
+  attribution?: boolean;
 };
 export function groupCycle(g: Group): Cycle {
   const years = new Set<number>(), seasons = new Set<string>();
@@ -171,6 +170,46 @@ function breakTieByEvidence<T extends { g: Group }>(candidates: T[], e: Effectiv
 }
 const breakTie = <T extends { g: Group }>(candidates: T[], e: EffectiveEvent): T | null => breakTieByEvidence(candidates, e) ?? breakTieByLifecycle(candidates, e);
 
+const reqOf = (e: EffectiveEvent): string | null => e.signals.find((x) => x.startsWith("req:"))?.slice(4) ?? null;
+const strongRole = (r: string | null | undefined) => specific(r) && roleCore(r).length >= 2;
+export type Attribution = { link: Group | null; suggest: Group | null; score: number; reasons: string[] };
+/**
+ * Evidence-scored attribution of a message to one of several candidate applications (Phase 2). Each candidate is scored on independent kinds of evidence; a hard conflict (a different cycle,
+ * programme, team, specific role or requisition) removes it. It LINKS only when the best candidate has at least two independent kinds of evidence, a score of 3.5, and a lead of 1.5 over the
+ * runner-up; a weaker best candidate becomes a suggestion; employer-name resemblance alone is worth 1 and can never reach the bar.
+ */
+export function attribute(groups: Group[], e: EffectiveEvent, ctx?: IdentityContext): Attribution {
+  const scored: { g: Group; score: number; kinds: Set<string>; reasons: string[] }[] = [];
+  const er = reqOf(e);
+  for (const g of groups) {
+    if (!g.company || lastAt(g) < e.occurredAt.getTime() - 90 * DAY) continue;
+    if (relation(g, e, ctx) === "conflict" || !allowed(g, e, "match", false, ctx)) continue;
+    const reqs = new Set(g.events.map(reqOf).filter((x): x is string => !!x));
+    if (er && reqs.size > 0 && !reqs.has(er)) continue; // a different requisition is a different application
+    let score = 0; const kinds = new Set<string>(), reasons: string[] = [];
+    const add = (kind: string, pts: number, why: string) => { score += pts; kinds.add(kind); reasons.push(why); };
+    if (er && reqs.has(er)) add("requisition", 3, "same requisition");
+    if (e.company && companyKey(g.company) === companyKey(e.company)) add("employer", 2, "same employer");
+    else if (e.company && employerAlias(g.company, e.company)) add("employer", 1, "employer name is a form of the same name");
+    else if (!weakEmployer(e) && e.company && !g.events.every((x) => !x.company || weakEmployer(x))) continue; // two confident, different employers
+    const gr = groupRole(g);
+    if (strongRole(e.role) && strongRole(gr) && roleRelationV2(gr!, e.role) === "match") add("role", 2, "same specific role");
+    else if (specific(e.role) && specific(gr) && roleRelationV2(gr!, e.role) === "match") add("role-weak", 0.5, "similar generic role");
+    const eu = unitOf(e), gu = unitsOf(g);
+    if (eu && [...gu].some((u) => unitsMatch(u, eu))) add("team", 1, "same team");
+    if (g.threads.has(e.gmailThreadId)) add("thread", 2, "same Gmail thread");
+    if (e.senderName && g.events.some((x) => !x.outbound && x.senderName === e.senderName && x.senderDomain === e.senderDomain && Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) <= 45 * DAY)) add("sender", 1, "same sender");
+    if (e.occurredAt.getTime() - lastAt(g) <= 30 * DAY) score += 0.5;
+    scored.push({ g, score, kinds, reasons });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored[0], second = scored[1];
+  if (!best) return { link: null, suggest: null, score: 0, reasons: [] };
+  const independent = [...best.kinds].filter((k) => k !== "role-weak").length;
+  const link = best.score >= 3.5 && independent >= 2 && best.score - (second?.score ?? 0) >= 1.5;
+  return { link: link ? best.g : null, suggest: !link && best.score >= 2 ? best.g : null, score: best.score, reasons: best.reasons };
+}
+
 /** Signals that mark a role the reader COPIED from another message (the thread's first one, or an earlier message from the same sender) instead of reading it from this one. */
 const BORROWED_ROLE = ["role-inherited", "reply-in-recruiting-thread", "known-contact-continuity", "outbound-in-recruiting-thread"];
 export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): Group[] {
@@ -236,13 +275,11 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
           // application (two receipts in one thread, or a repeat delivery within hours, still join).
           if (target && e.type === "applied" && !specific(e.role) && target.events.some((x) => x.type === "applied" && x.gmailThreadId !== e.gmailThreadId && (ctx?.distinctThreadReceipts || Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) >= DAY / 2)) && !target.threads.has(e.gmailThreadId)) target = undefined;
         }
-        // (Phase 2) The employer fallback: nothing under this message's own employer name fits, so look for the ONE recent application with the same specific role whose employer is an alias of
-        // this one, or is only an agency/vendor sender (either side). Anything but exactly one such application, and the message stays on its own.
-        if (!target && !ambiguous && ctx?.employerFallbacks && specific(e.role) && pool.length === 0) {
-          const fits = groups.filter((g) => !pool.includes(g) && !!g.company && lastAt(g) >= e.occurredAt.getTime() - 60 * DAY && specific(groupRole(g)) && roleRelationV2(groupRole(g)!, e.role) === "match"
-            && (employerAlias(g.company, e.company) || weakEmployer(e) || g.events.every((x) => !x.company || weakEmployer(x)))
-            && relation(g, e, ctx) === "match" && allowed(g, e, "match", false, ctx));
-          if (fits.length === 1) possibleLink = fits[0];
+        // (Phase 2) Evidence-scored attribution, only when this message's own employer name has no application at all (so it can never pull a message away from an exact-employer candidate).
+        if (!target && !ambiguous && ctx?.attribution && pool.length === 0) {
+          const att = attribute(groups, e, ctx);
+          if (att.link) { target = att.link; e = { ...e, signals: [...e.signals, `identity:attributed:${att.reasons.join("+").replace(/ /g, "-")}`] }; }
+          else if (att.suggest) possibleLink = att.suggest;
         }
         // An event whose employer is unknown, from an employer's own domain that exactly ONE existing opportunity has written from, belongs with it unless
         // role, cycle, program or the end of that opportunity say otherwise (the same weighing as any other link). Platforms, freemail and several candidates never link this way.
@@ -253,7 +290,8 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
       }
     }
     if (ambiguous) e = { ...e, signals: [...e.signals, "identity:ambiguous"], reviewReasons: [...(e.reviewReasons ?? []), `identity: could belong to more than one application (${ambiguous})`] };
-    if (possibleLink && !target) e = { ...e, signals: [...e.signals, "identity:ambiguous", `identity:possible-link:${possibleLink.events[0].id}`], reviewReasons: [...(e.reviewReasons ?? []), `identity: this may be the same application as "${groupRole(possibleLink) ?? "the role"}" at ${possibleLink.company}, filed under a different employer name; please confirm or keep them apart`] };
+    // a weaker best candidate is only a SUGGESTION (low priority; whether it is worth asking about is decided by the review tiering, not here)
+    if (possibleLink && !target) e = { ...e, signals: [...e.signals, `identity:suggest:${possibleLink.events[0].id}`] };
     if (!target) { target = { company: e.company, events: [], threads: new Set() }; groups.push(target); }
     target.events.push(e);
     target.threads.add(e.gmailThreadId);

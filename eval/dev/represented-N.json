@@ -1,0 +1,104 @@
+{
+ "n1m9": {
+  "employer": "Verdant Quay",
+  "grounding": {
+   "hash": "53da16fe434f9d03",
+   "offset": 11
+  }
+ },
+ "n1m10": {
+  "employer": "Verdant Quay",
+  "grounding": {
+   "hash": "d9775ff736b3c4e6",
+   "offset": 25
+  }
+ },
+ "n4m11": {
+  "employer": "Lumeris",
+  "grounding": {
+   "hash": "4c2f41bcefbf9782",
+   "offset": 47
+  }
+ },
+ "n5m5": null,
+ "n5m6": null,
+ "n5m8": null,
+ "n5m12": null,
+ "n7m1": {
+  "employer": "Brightmoor Health",
+  "grounding": {
+   "hash": "791229990d9f7908",
+   "offset": 0
+  }
+ },
+ "n9m1": null,
+ "n9m2": null,
+ "n9m13": null,
+ "n10m2": null,
+ "n10m3": null,
+ "n10m4": null,
+ "n10m5": null,
+ "n10m6": {
+  "employer": "Analyst Program",
+  "grounding": {
+   "hash": "d562bc3c2c2a42f5",
+   "offset": 87
+  }
+ },
+ "n10m7": null,
+ "n10m9": null,
+ "n10m10": null,
+ "n10m13": null,
+ "n11m1": null,
+ "n11m2": null,
+ "n11m5": null,
+ "n11m6": null,
+ "n11m7": null,
+ "n11m8": null,
+ "n11m10": null,
+ "n11m12": {
+  "employer": "Lodestar Studios",
+  "grounding": {
+   "hash": "69783915282881ed",
+   "offset": 31
+  }
+ },
+ "n11m13": null,
+ "n13m1": null,
+ "n13m3": null,
+ "n13m4": null,
+ "n13m5": null,
+ "n13m6": null,
+ "n13m7": null,
+ "n13m8": null,
+ "n13m11": null,
+ "n13m12": null,
+ "n13m13": null,
+ "n13m14": null,
+ "n14m1": null,
+ "n14m3": null,
+ "n14m4": null,
+ "n14m5": null,
+ "n14m7": null,
+ "n14m8": null,
+ "n14m9": null,
+ "n14m13": null,
+ "n15m3": null,
+ "n15m4": null,
+ "n15m5": null,
+ "n15m6": null,
+ "n15m7": null,
+ "n15m8": null,
+ "n15m9": null,
+ "n15m11": null,
+ "n16m2": null,
+ "n16m3": null,
+ "n16m5": null,
+ "n16m6": null,
+ "n16m7": null,
+ "n16m8": null,
+ "n16m9": null,
+ "n16m10": null,
+ "n16m11": null,
+ "n16m13": null
+}

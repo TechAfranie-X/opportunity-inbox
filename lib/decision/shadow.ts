@@ -3,6 +3,7 @@ import { NEAR_MISS_WEAK, isNearMiss, isWeakNearMiss } from "../reliability/flags
 import { applyTextFacts, studentAcceptance } from "../reliability/facts.ts";
 import { buildLedger } from "../ledger/build.ts";
 import type { VerifiedOutput } from "../recruiting/reader/types.ts";
+import { requisitionOf } from "../identity/represented-employer.ts";
 import { outboundEvent } from "../recruiting/extract.ts";
 import { PRODUCT_READER_VERSION } from "../recruiting/product-version.ts";
 import type { ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
@@ -93,5 +94,11 @@ export function shadowAssist(events: ExtractedEvent[], emails: RecruitingEmail[]
     const anchor = anchors.get(m.threadId);
     return m.outbound && anchor && !haveAfter.has(m.id) ? [studentAcceptance(m, outboundEvent(m, anchor))] : [];
   });
-  return added.length > 0 || replies.length > 0 ? [...all, ...replies].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime()) : out;
+  const result = added.length > 0 || replies.length > 0 ? [...all, ...replies].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime()) : out;
+  // a requisition / job reference number the message states is identity evidence (a deterministic fact; only the id is kept, never text)
+  return result.map((e) => {
+    const m = byId.get(e.gmailMessageId);
+    const id = m && !e.outbound ? requisitionOf(`${m.subject}\n${m.bodyText.slice(0, 3000)}`) : null;
+    return id && !e.signals.some((x) => x.startsWith("req:")) ? { ...e, signals: [...e.signals, `req:${id}`] } : e;
+  });
 }

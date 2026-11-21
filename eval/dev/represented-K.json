@@ -1,0 +1,227 @@
+{
+ "k1m4": {
+  "employer": "Brightwell Health Analytics",
+  "grounding": {
+   "hash": "6f62d52bf4b56509",
+   "offset": 11
+  }
+ },
+ "k1m8": {
+  "employer": "Brightwell Capital",
+  "grounding": {
+   "hash": "09bf89254701f507",
+   "offset": 39
+  }
+ },
+ "k1m9": null,
+ "k1m12": null,
+ "k2m5": {
+  "employer": "Corvane Digital",
+  "grounding": {
+   "hash": "a19c2aba35fa26d2",
+   "offset": 27
+  }
+ },
+ "k2m7": null,
+ "k2m8": null,
+ "k3m2": null,
+ "k3m6": {
+  "employer": "Lumenfield Studio",
+  "grounding": {
+   "hash": "cd45141a8ffeb24b",
+   "offset": 14
+  }
+ },
+ "k3m8": {
+  "employer": "Lumenfield Studio",
+  "grounding": {
+   "hash": "0d42baf3bd99cd64",
+   "offset": 16
+  }
+ },
+ "k3m10": {
+  "employer": "Lumenfield Labs",
+  "grounding": {
+   "hash": "82d79165d79bf766",
+   "offset": 59
+  }
+ },
+ "k3m11": null,
+ "k4m3": {
+  "employer": "Kestrelwerk Digital",
+  "grounding": {
+   "hash": "f58f45365dfe4b0f",
+   "offset": 14
+  }
+ },
+ "k4m8": null,
+ "k5m1": null,
+ "k5m4": null,
+ "k5m5": null,
+ "k5m6": null,
+ "k5m8": null,
+ "k5m9": null,
+ "k5m10": null,
+ "k5m11": null,
+ "k6m1": {
+  "employer": "Orfeo Conseil",
+  "grounding": {
+   "hash": "627e9b8c156d5500",
+   "offset": 70
+  }
+ },
+ "k6m4": null,
+ "k6m10": null,
+ "k6m11": null,
+ "k7m2": {
+  "employer": "Pinecrest Studios",
+  "grounding": {
+   "hash": "f452f3edd32814e8",
+   "offset": 20
+  }
+ },
+ "k7m3": null,
+ "k7m5": null,
+ "k7m6": null,
+ "k7m7": null,
+ "k7m10": null,
+ "k7m12": null,
+ "k8m1": {
+  "employer": "Software Engineer Intern",
+  "grounding": {
+   "hash": "5f22683e2ecbe90c",
+   "offset": 21
+  }
+ },
+ "k8m2": null,
+ "k8m3": null,
+ "k8m5": {
+  "employer": "SWE team",
+  "grounding": {
+   "hash": "ffad9ae1d1a46a97",
+   "offset": 25
+  }
+ },
+ "k8m6": null,
+ "k8m7": null,
+ "k8m9": null,
+ "k9m1": {
+  "employer": "Marambaia Seguros",
+  "grounding": {
+   "hash": "713eef6bb6524468",
+   "offset": 31
+  }
+ },
+ "k9m2": {
+  "employer": "Marambaia Saúde",
+  "grounding": {
+   "hash": "33c1478e2e929648",
+   "offset": 31
+  }
+ },
+ "k9m3": null,
+ "k9m4": null,
+ "k9m6": null,
+ "k9m7": null,
+ "k9m8": {
+  "employer": "Marambaia Saúde",
+  "grounding": {
+   "hash": "1075c1bbc2223306",
+   "offset": 8
+  }
+ },
+ "k9m10": null,
+ "k9m11": {
+  "employer": "Marambaia Seguros",
+  "grounding": {
+   "hash": "582cc45282bd4631",
+   "offset": 20
+  }
+ },
+ "k10m2": {
+  "employer": "Quillon Markets",
+  "grounding": {
+   "hash": "e3e8858cacaf51d4",
+   "offset": 32
+  }
+ },
+ "k10m4": null,
+ "k10m5": null,
+ "k10m6": null,
+ "k10m8": null,
+ "k10m10": null,
+ "k11m4": {
+  "employer": "Ferrovia Aurelia",
+  "grounding": {
+   "hash": "ab1d2910f242b46c",
+   "offset": 46
+  }
+ },
+ "k11m6": null,
+ "k11m7": null,
+ "k11m8": null,
+ "k11m10": null,
+ "k12m1": null,
+ "k12m2": null,
+ "k12m3": {
+  "employer": "Stonebridge Water Resources",
+  "grounding": {
+   "hash": "fe459db8be062371",
+   "offset": 23
+  }
+ },
+ "k12m5": {
+  "employer": "Stonebridge Water Resources",
+  "grounding": {
+   "hash": "ff312a8f5c255fe8",
+   "offset": 18
+  }
+ },
+ "k13m4": {
+  "employer": "Mirabel Health",
+  "grounding": {
+   "hash": "cab53d3cbb1efe08",
+   "offset": 11
+  }
+ },
+ "k13m10": null,
+ "k14m1": null,
+ "k14m2": null,
+ "k14m3": null,
+ "k14m4": null,
+ "k14m6": null,
+ "k14m8": null,
+ "k14m9": null,
+ "k14m10": null,
+ "k15m1": {
+  "employer": "Kingsley & Vance",
+  "grounding": {
+   "hash": "f2435da6904658e7",
+   "offset": 32
+  }
+ },
+ "k15m2": {
+  "employer": "Kingsley & Vance Advisory",
+  "grounding": {
+   "hash": "5681ddc7e71eba79",
+   "offset": 70
+  }
+ },
+ "k15m4": {
+  "employer": "Spring Insight Program",
+  "grounding": {
+   "hash": "573633dbe83dc210",
+   "offset": 18
+  }
+ },
+ "k15m7": null,
+ "k15m9": null,
+ "k15m10": null,
+ "k15m12": null,
+ "k16m1": null,
+ "k16m2": null,
+ "k16m5": null,
+ "k16m7": null,
+ "k16m8": null,
+ "k16m10": null
+}

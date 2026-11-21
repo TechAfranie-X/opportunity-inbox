@@ -219,6 +219,45 @@ try {
   assert.equal(q(`select count(*) from corrected_row_audit where event_id = '${victimRow}' and columns_changed @> ARRAY['role']`), "1", "a deliberate rewrite of a corrected row is recorded");
   step("audit trigger (scratch only): no automated write to a corrected row; a deliberate one is recorded");
 
+  // 8d. the corrected-row repair (lib/recruiting/repair-inherited-roles.ts): refuses without the owner's token, is all-or-nothing, backs up first, never touches the person's correction, and rolls back exactly
+  {
+    const repair = await import("../lib/recruiting/repair-inherited-roles.ts");
+    const mk = (id: string) => ({ gmailMessageId: id, gmailThreadId: `t-${id}`, occurredAt: new Date("2026-02-01T12:00:00Z"), outbound: false, senderName: "Careers", senderDomain: "repair-check.example", subject: "Your application", type: "status_update" as const, company: "Repair Check Co", role: null, eventDate: null, eventDateHasTime: false, dateKind: null, confidence: 0.7, fieldConfidence: { type: 0.7, company: 0.7, role: 0 }, reviewReasons: [], signals: ["x"] });
+    await store.saveExtractedEvents(SAMPLE_SUB, [mk("rep-1"), mk("rep-2"), mk("rep-3")]);
+    for (const m of ["rep-1", "rep-2", "rep-3"]) {
+      await store.confirmEvent(SAMPLE_SUB, q(`select id from recruiting_events where gmail_message_id = '${m}'`));
+      // the damage inheritStoredRoles used to do to a confirmed row
+      q(`update recruiting_events set role = 'Inherited Role', field_confidence = '{"type":0.7,"company":0.7,"role":0.4}'::jsonb, signals = '["x","role-inherited"]'::jsonb where gmail_message_id = '${m}'`);
+    }
+    const rowDigest = (m: string) => q(`select md5(row(role, field_confidence::text, signals::text, correction::text)::text) from recruiting_events where gmail_message_id = '${m}'`);
+    const corrDigest = (m: string) => q(`select md5(correction::text) from recruiting_events where gmail_message_id = '${m}'`);
+    const damaged = ["rep-1", "rep-2", "rep-3"].map(rowDigest), corrections = ["rep-1", "rep-2", "rep-3"].map(corrDigest);
+    const plan = await repair.buildPlan([]);
+    assert.equal(plan.rows.length, 3, "the plan selects exactly the damaged corrected rows");
+    await assert.rejects(repair.applyPlan(plan, "not-the-token"), /refused/, "no approval, no change");
+    assert.deepEqual(["rep-1", "rep-2", "rep-3"].map(rowDigest), damaged, "a refused apply changes nothing");
+    // all-or-nothing: one row changes after the plan was made, so the whole repair aborts
+    q(`update recruiting_events set role = 'Someone Edited This' where gmail_message_id = 'rep-3'`);
+    await assert.rejects(repair.applyPlan(plan, repair.planFingerprint(plan)), /changed since the plan/);
+    assert.equal(q(`select role from recruiting_events where gmail_message_id = 'rep-1'`), "Inherited Role", "an abort leaves the other rows untouched too");
+    assert.equal(q(`select count(*) from information_schema.tables where table_name = 'corrected_row_repair_backup'`) === "1" ? q(`select count(*) from corrected_row_repair_backup`) : "0", "0", "an abort leaves no backup rows either (one transaction)");
+    q(`update recruiting_events set role = 'Inherited Role' where gmail_message_id = 'rep-3'`);
+    assert.deepEqual(["rep-1", "rep-2", "rep-3"].map(rowDigest), damaged);
+    const done = await repair.applyPlan(plan, repair.planFingerprint(plan));
+    assert.equal(done.repaired, 3);
+    for (const m of ["rep-1", "rep-2", "rep-3"]) {
+      assert.equal(q(`select role from recruiting_events where gmail_message_id = '${m}'`), "", `${m} role cleared`);
+      assert.equal(q(`select signals::text from recruiting_events where gmail_message_id = '${m}'`), '["x"]', `${m} marker removed, other signals kept`);
+    }
+    assert.deepEqual(["rep-1", "rep-2", "rep-3"].map(corrDigest), corrections, "the person's corrections are byte-identical after the repair");
+    assert.equal(q("select count(*) from corrected_row_repair_backup"), "3", "the previous values were backed up first");
+    const back = await repair.rollbackPlan(plan, repair.planFingerprint(plan));
+    assert.equal(back.restored, 3);
+    assert.deepEqual(["rep-1", "rep-2", "rep-3"].map(rowDigest), damaged, "rollback restores the exact previous state");
+    step("corrected-row repair: refuses without approval, all-or-nothing, backed up, corrections untouched, exact rollback");
+    q("delete from recruiting_events where gmail_message_id like 'rep-%'");
+  }
+
   // 9. delete everything
   await store.deleteRecruitingData(SAMPLE_SUB);
   assert.equal((await loadEvidenceLedgers(SAMPLE_SUB)).length, 0, "delete my data removes the ledger");

@@ -1,0 +1,90 @@
+{
+ "l3m5": null,
+ "l3m10": null,
+ "l5m4": null,
+ "l5m5": null,
+ "l5m7": null,
+ "l5m8": null,
+ "l5m9": null,
+ "l5m10": null,
+ "l5m12": null,
+ "l5m14": null,
+ "l6m3": {
+  "employer": "Grid Analytics team",
+  "grounding": {
+   "hash": "d6405af7c2029a63",
+   "offset": 30
+  }
+ },
+ "l6m5": null,
+ "l6m7": null,
+ "l6m14": null,
+ "l8m1": {
+  "employer": "Ferrous Robotics",
+  "grounding": {
+   "hash": "30a45b1e056f3b46",
+   "offset": 39
+  }
+ },
+ "l8m10": null,
+ "l8m13": null,
+ "l10m4": {
+  "employer": "Backend team",
+  "grounding": {
+   "hash": "f7fd48f10904f200",
+   "offset": 30
+  }
+ },
+ "l10m5": {
+  "employer": "Mobile team",
+  "grounding": {
+   "hash": "8575e74c8e328c10",
+   "offset": 30
+  }
+ },
+ "l10m7": null,
+ "l10m8": null,
+ "l10m12": null,
+ "l10m13": null,
+ "l11m1": {
+  "employer": "Finch & Rowe Advisory",
+  "grounding": {
+   "hash": "0764bcf66d3fd377",
+   "offset": 92
+  }
+ },
+ "l11m2": {
+  "employer": "Finch & Rowe Advisory",
+  "grounding": {
+   "hash": "5020588faa9d271e",
+   "offset": 52
+  }
+ },
+ "l11m4": null,
+ "l11m5": {
+  "employer": "Risk Advisory team",
+  "grounding": {
+   "hash": "b2634df80bec4498",
+   "offset": 21
+  }
+ },
+ "l11m8": null,
+ "l11m9": null,
+ "l11m11": {
+  "employer": "the Strategy team",
+  "grounding": {
+   "hash": "79e85d89ec2d02b5",
+   "offset": 31
+  }
+ },
+ "l11m12": null,
+ "l12m11": null,
+ "l13m3": null,
+ "l13m4": null,
+ "l13m6": null,
+ "l13m7": null,
+ "l13m9": null,
+ "l13m11": null,
+ "l13m13": null,
+ "l13m14": null
+}

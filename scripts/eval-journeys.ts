@@ -21,6 +21,7 @@ import { applyAssist, isSemanticExcluded } from "../lib/semantic/assist.ts";
 import { shadowAssist, type ShadowTrace } from "../lib/decision/shadow.ts";
 import { candidateRolePairs, judgeRolePairs, rolePairKey, rolesFromJson, rolesToJson, type RoleVerdicts } from "../lib/identity/role-equivalence.ts";
 import { isSpecificRole, rolesHardConflict, type IdentityContext } from "../lib/lifecycle/identity.ts";
+import { applyRepresented, extractRepresented, isDelegated, representedFromJson, representedToJson, type RepresentedMap } from "../lib/identity/represented-employer.ts";
 import { DEFAULT_POLICY } from "../lib/recruiting/policy.ts";
 import { SEMANTIC_GUIDE_V3_COMPACT } from "../lib/semantic/guide-v3.ts";
 import { createModelReader } from "../lib/semantic/hosted.ts";
@@ -45,6 +46,8 @@ if (engine !== "current" && engine !== "shadow" && engine !== "phase2") throw ne
 const roleCachePath = process.argv.includes("--role-cache") ? process.argv[process.argv.indexOf("--role-cache") + 1] : null;
 const collectOnly = process.argv.includes("--collect-only");
 const roleVerdicts: RoleVerdicts = roleCachePath && existsSync(roleCachePath) ? rolesFromJson(JSON.parse(readFileSync(roleCachePath, "utf8"))) : new Map();
+const repCachePath = process.argv.includes("--represented-cache") ? process.argv[process.argv.indexOf("--represented-cache") + 1] : null;
+const represented: RepresentedMap = repCachePath && existsSync(repCachePath) ? representedFromJson(JSON.parse(readFileSync(repCachePath, "utf8"))) : new Map();
 let rolePairsSeen = 0;
 const trace: ShadowTrace = new Map();
 const perMessage: { scenario: string; id: string; expectInPipeline: boolean; expectType: string | null; gotType: string | null; state: string | null; placement: string | null; terminal: string | null; belief: number | null; verdict: unknown; ambiguous: boolean; opp: string | null; possibleLink: string | null }[] = [];
@@ -86,6 +89,17 @@ for (const sc of fx.scenarios) {
     modelMs += Date.now() - s;
     const opinions = new Map([...readings].map(([k, v]) => [k, v.output] as const));
     read = reconcileReadings(engine === "current" ? applyAssist(read, emails, opinions) : shadowAssist(read, emails, opinions, trace), readings);
+    if (engine === "phase2") {
+      // delegated mail: ask the model which employer the message is about (message text in memory only), verify the quote, and keep the answer as a claim; cached for replay
+      const need = new Set(read.filter((e) => isDelegated(e)).map((e) => e.gmailMessageId));
+      const todo = inputs.filter((i) => need.has(i.key) && !represented.has(i.key));
+      if (todo.length > 0) {
+        if (replay) throw new Error(`replay: ${todo.length} delegated message(s) in ${sc.id} have no cached represented-employer answer (${repCachePath ?? "no --represented-cache given"})`);
+        for (const [k, v] of await extractRepresented(todo, localTransport(), modelId, represented)) represented.set(k, v);
+        if (repCachePath) writeFileSync(repCachePath, JSON.stringify(representedToJson(represented), null, 1));
+      }
+      if (process.env.EXP_REP !== "0") read = applyRepresented(read, represented);
+    }
   }
   const effective: EffectiveEvent[] = read.map((e) => ({ ...e, signals: disc.get(e.gmailMessageId) === "sweep" ? [...e.signals, "via:sweep"] : e.signals, id: e.gmailMessageId, corrected: false }));
   const all = refineEvents(effective).events;
@@ -102,7 +116,7 @@ for (const sc of fx.scenarios) {
       for (const [k, v] of judged) roleVerdicts.set(k, v);
       if (roleCachePath) writeFileSync(roleCachePath, JSON.stringify(rolesToJson(roleVerdicts), null, 1));
     }
-    identityCtx = { roleVerdicts, weakEmployerThreads: true, distinctThreadReceipts: true, confirmEndings: true, employerFallbacks: true };
+    identityCtx = { roleVerdicts, weakEmployerThreads: true, distinctThreadReceipts: true, confirmEndings: true, attribution: process.env.EXP_ATTR !== "0" };
     if (collectOnly) continue;
   }
   const opps: Opportunity[] = buildOpportunities(events, new Map(), DEFAULT_POLICY, identityCtx);
@@ -110,7 +124,7 @@ for (const sc of fx.scenarios) {
   const queue = buildReviewQueue(opps, undefined, possible, floating);
 
   const byMsg = new Map<string, { opp: Opportunity; type: string; ambiguous: boolean; possibleLink: string | null }>();
-  for (const o of opps) for (const e of o.events) byMsg.set(e.gmailMessageId, { opp: o, type: e.type, ambiguous: e.signals.includes("identity:ambiguous"), possibleLink: e.signals.find((x) => x.startsWith("identity:possible-link:"))?.slice(23) ?? null });
+  for (const o of opps) for (const e of o.events) byMsg.set(e.gmailMessageId, { opp: o, type: e.type, ambiguous: e.signals.includes("identity:ambiguous"), possibleLink: e.signals.find((x) => x.startsWith("identity:suggest:"))?.slice(17) ?? null });
   const msgs = sc.messages.filter((m) => !m.outbound);
   const msgById = new Map(sc.messages.map((m) => [m.id, m]));
 

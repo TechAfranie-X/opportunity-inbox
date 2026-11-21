@@ -83,7 +83,7 @@ export function compare(base: Metrics, now: Metrics, label: string, tol: { point
 
 function runFixture(root: string, name: string, engine: string): Counts {
   const out = join(mkdtempSafe(), `${name}.json`);
-  execFileSync(process.execPath, ["--no-warnings", "--import", "./scripts/loader/register.mjs", "scripts/eval-journeys.ts", join(root, `eval/dev/journeys-${name}.json`), "--semantic", "--replay", "--cache", join(root, `eval/dev/cache-${name}.json`), "--engine", engine, ...(engine === "phase2" ? ["--role-cache", join(root, `eval/dev/roles-${name}.json`)] : []), "--json", out], { cwd: root, stdio: ["ignore", "ignore", "pipe"] });
+  execFileSync(process.execPath, ["--no-warnings", "--import", "./scripts/loader/register.mjs", "scripts/eval-journeys.ts", join(root, `eval/dev/journeys-${name}.json`), "--semantic", "--replay", "--cache", join(root, `eval/dev/cache-${name}.json`), "--engine", engine, ...(engine === "phase2" ? ["--role-cache", join(root, `eval/dev/roles-${name}.json`), "--represented-cache", join(root, `eval/dev/represented-${name}.json`)] : []), "--json", out], { cwd: root, stdio: ["ignore", "ignore", "pipe"] });
   return (JSON.parse(readFileSync(out, "utf8")) as { counts: Counts }).counts;
 }
 let tmp: string | null = null;
