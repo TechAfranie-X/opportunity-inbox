@@ -65,3 +65,22 @@ A miss on any threshold is reported as a miss, not re-run.
 Other hybrid numbers: pair precision 90.2, pair recall 95.9, stage type 94.5, next action 58.3 (as shipped) / 65.6 (evidence only), contradictions flagged 2/6, journeys not found 4. Model time 2826 s (the local 4B model).
 Most thresholds were MISSED on this unfamiliar fixture. The audit-remediation work does not generalise to N as hoped; the weaknesses (false merges between employers/requisitions, lifecycle status/outcome, provenance) are not closed. The model also lowered status and outcome versus rules-only (66.7 vs 76.2, 44.4 vs 61.9), which is itself a finding.
 Baseline 5230fa9, rules only, same fixture: recall 59.6, wrong merges 21, split 2, merging 4, status 71.4, outcome 57.1, stage 57.1, source evidence 80.0. So the 21 wrong merges predate this mission; rules-only status/outcome/stage/evidence improved by +4.8/+4.8/+9.6/+5.7 points. The baseline hybrid run is in progress.
+
+### Fixture N baseline hybrid (5230fa9, run once) and the comparison: A REGRESSION IN HYBRID MODE
+| Measure (hybrid) | 5230fa9 baseline | Current | Change |
+|---|---|---|---|
+| Recruiting recall | 93.4 (10 missed) | 84.8 (23 missed) | -8.6 |
+| Recruiting precision | 100.0 | 100.0 | 0 |
+| Wrong merges | 25 | 25 | 0 |
+| Missed links | 15 | 10 | better |
+| Journeys split | 4 | 2 | better |
+| Journeys not found | 3 | 4 | -1 |
+| Lifecycle status | 89.2 | 66.7 | -22.5 |
+| Lifecycle outcome | 59.5 | 44.4 | -15.1 |
+| Stage | 70.3 | 63.9 | -6.4 |
+| Next action (as shipped / evidence only) | 70.3 / 75.8 | 58.3 / 65.6 | worse |
+| Contradictions flagged | 5/6 | 2/6 | worse |
+| Source evidence | 70.0 | 84.6 | better |
+| Review (items, justified, important justified) | 33, 39.4, 75.0 | 38, 50.0, 62.5 | mixed |
+The pre-registered rule "no regression of more than 2 points on precision/recall, status, outcome" is VIOLATED in hybrid mode (recall, status, outcome). In rules-only mode the current code is better than the baseline (status +4.8, outcome +4.8, stage +9.6, evidence +5.7).
+Probable cause (NOT verified; the fixture's failures were deliberately not inspected): the model-alone-never-ends-a-candidacy change (c45c215: `closureFact` corroboration, `notAProcess` veto) removes model-found events and terminal outcomes that the baseline kept, which lowers recall and the status/outcome scores and hides contradictions. It fixed the real Salesforce case but is too blunt on unfamiliar mail. Because fixture N is sealed, any repair must be designed from the real-account and earlier-fixture evidence, validated on a NEW fixture, and needs a reader-version bump plus a full re-read of both accounts (hours).
