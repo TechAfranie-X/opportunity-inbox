@@ -124,5 +124,124 @@
  },
  "m16m9": null,
  "m16m12": null,
- "m16m13": null
+ "m16m13": null,
+ "m2m3": {
+  "employer": "Kaffa Logistics",
+  "grounding": {
+   "hash": "78ad7c1eac2fc3d7",
+   "offset": 40
+  }
+ },
+ "m2m5": {
+  "employer": "Kaffa Logistics",
+  "grounding": {
+   "hash": "477b2b3040ca767a",
+   "offset": 20
+  }
+ },
+ "m3m1": {
+  "employer": "Orchard Health",
+  "grounding": {
+   "hash": "b3b8aeec37de636f",
+   "offset": 20
+  }
+ },
+ "m3m4": {
+  "employer": "Orchard Health",
+  "grounding": {
+   "hash": "1a53f01c1277811c",
+   "offset": 26
+  }
+ },
+ "m3m5": {
+  "employer": "Orchard Health",
+  "grounding": {
+   "hash": "cbf35943001b400d",
+   "offset": 34
+  }
+ },
+ "m3m6": {
+  "employer": "Orchard Health",
+  "grounding": {
+   "hash": "305abcd1c2d92648",
+   "offset": 88
+  }
+ },
+ "m4m3": {
+  "employer": "Ardent Consulting",
+  "grounding": {
+   "hash": "b1f064cc8d33fa8d",
+   "offset": 39
+  }
+ },
+ "m4m4": {
+  "employer": "Ardent Consulting",
+  "grounding": {
+   "hash": "ed6b909519376866",
+   "offset": 28
+  }
+ },
+ "m10m1": {
+  "employer": "Cedarline Logistics",
+  "grounding": {
+   "hash": "ea47b86f053c212f",
+   "offset": 22
+  }
+ },
+ "m10m4": {
+  "employer": "Cedarline Logistics",
+  "grounding": {
+   "hash": "72ba1d0bfd7691f1",
+   "offset": 31
+  }
+ },
+ "m12m7": {
+  "employer": "Sablier Games",
+  "grounding": {
+   "hash": "87585adaaed8a2c7",
+   "offset": 30
+  }
+ },
+ "m14m1": {
+  "employer": "Maison Verdier",
+  "grounding": {
+   "hash": "3435e87d2b943ebc",
+   "offset": 21
+  }
+ },
+ "m14m3": {
+  "employer": "la Maison Verdier",
+  "grounding": {
+   "hash": "19a894f89b4ebb9c",
+   "offset": 48
+  }
+ },
+ "m14m4": {
+  "employer": "la Maison Verdier",
+  "grounding": {
+   "hash": "0f676d03a8fe95f7",
+   "offset": 10
+  }
+ },
+ "m14m5": {
+  "employer": "la Maison Verdier",
+  "grounding": {
+   "hash": "e76c675aebe7dbb9",
+   "offset": 42
+  }
+ },
+ "m14m12": {
+  "employer": "Club Théâtre",
+  "grounding": {
+   "hash": "1f4ab1dcaf555d04",
+   "offset": 26
+  }
+ },
+ "m16m14": {
+  "employer": "Tenmark Trading",
+  "grounding": {
+   "hash": "84000f70db8883b5",
+   "offset": 8
+  }
+ }
 }

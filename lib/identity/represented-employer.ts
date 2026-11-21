@@ -57,9 +57,15 @@ export function requisitionOf(text: string): string | null {
   return /^(?:19|20)\d{2}$/.test(id) || !/\d/.test(id) ? null : id;
 }
 
-/** A message whose employer is not simply its sender: no employer found, a name that only names the sender, or a sender that is a platform, vendor, scheduler, board or webmail. */
+/** The sender's own domain carries the employer's name: "careers@tilden-robotics.example" for "Tilden Robotics". A third party (a vendor, an ATS, an agency, a webmail recruiter) does not. */
+export const senderIsEmployer = (company: string, senderDomain: string): boolean => {
+  const first = company.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9]+/).find((t) => t.length >= 4);
+  return !!first && senderDomain.toLowerCase().replace(/[^a-z0-9]+/g, "").includes(first);
+};
+
+/** A message whose employer is not simply its sender: no employer found, a name that only names the sender, a known vendor/platform/webmail sender, or a sender whose domain does not carry the employer's name. */
 export const isDelegated = (e: Pick<ExtractedEvent, "company" | "signals" | "senderDomain" | "fieldConfidence" | "outbound">): boolean =>
-  !e.outbound && (!e.company || e.signals.includes("employer:sender-only") || (e.fieldConfidence?.company ?? 1) < 0.45 || classifySender(e.senderDomain) !== "employer");
+  !e.outbound && (!e.company || e.signals.includes("employer:sender-only") || (e.fieldConfidence?.company ?? 1) < 0.45 || classifySender(e.senderDomain) !== "employer" || !senderIsEmployer(e.company, e.senderDomain));
 
 /** Set the employer of a delegated event to the one the message itself names (verified). Moderate confidence, no review flag: it is a reading of the message, and attribution is decided elsewhere. */
 export function applyRepresented(events: ExtractedEvent[], represented: RepresentedMap): ExtractedEvent[] {

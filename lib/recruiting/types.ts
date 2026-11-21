@@ -121,6 +121,8 @@ export type Opportunity = {
   closedBy?: "rejected" | "withdrawn" | "expired" | "not_recruiting" | null;
   /** The ending rests on one uncorroborated automated reading (decision engine, shadow): shown as "likely ended, please confirm" once the product uses it. */
   closureProposed?: boolean;
+  /** One uncorroborated reading says this application ended; it is NOT settled and the application stays active and visible. */
+  proposedEnding?: { outcome: "rejected" | "withdrawn"; eventId: string };
   /** A person's "Looks right" on a reading that a later, independent reading of the same message disagrees with (lib/recruiting/confirmation-conflicts.ts). Never overrides the confirmation. */
   confirmationConflicts?: Array<{ eventId: string; text: string }>;
   /** Keys the previous scheme gave to the applications this one continues, so old overrides, dismissals and links still resolve. */

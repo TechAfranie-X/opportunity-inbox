@@ -111,7 +111,7 @@ export function buildOpportunities(
   legacy.forEach((l, i) => { legacy[i] = l.filter((k) => !currentKeys.has(k) || k === keys[i]); });
   const opportunities = groups.map((group, i): Opportunity => {
     const key = keys[i];
-    const { stage, outcome, status: derived, closedBy, closureProposed } = reduceLifecycle(group.events, policy);
+    const { stage, outcome, status: derived, closedBy, closureProposed, proposedEnding } = reduceLifecycle(group.events, policy);
     const override = overrides.get(key) ?? legacy[i].map((k) => overrides.get(k)).find(Boolean);
     const closedByUser = override?.status === "closed";
     const reopened = override?.status === "active";
@@ -125,6 +125,7 @@ export function buildOpportunities(
       status,
       closedBy: status === "closed" ? (closedBy ?? "rejected") : null,
       ...(closureProposed && status === "closed" && !closedByUser ? { closureProposed: true } : {}),
+      ...(proposedEnding && status === "active" ? { proposedEnding } : {}),
       legacyKeys: legacy[i],
       firstActivityAt: group.events[0].occurredAt,
       lastActivityAt: group.events[group.events.length - 1].occurredAt,

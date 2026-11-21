@@ -18,6 +18,8 @@ export type Lifecycle = {
   stage: Stage; outcome: Outcome; status: "active" | "closed"; closedBy: ClosedBy | null;
   /** The ending rests on ONE automated reading nobody corroborated or confirmed (the decision engine's `terminal:proposed`). It still closes the application; the flag lets a person be asked. Absent for every ending a person or independent evidence settled. */
   closureProposed?: boolean;
+  /** A single uncorroborated reading says the application ended. It does NOT settle anything: the application stays active and visible, with the proposed outcome and the event that proposes it. */
+  proposedEnding?: { outcome: "rejected" | "withdrawn"; eventId: string };
 };
 
 const STAGE_RANK: Record<Exclude<Stage, "closed">, number> = { applied: 0, recruiter: 1, assessment: 2, interview: 3, offer: 4 };
@@ -42,6 +44,7 @@ export function reduceLifecycle(events: EffectiveEvent[], policy: Policy = DEFAU
   let outcome: Outcome = null;
   let ended: "rejected" | "withdrawn" | null = null;
   let endedProposed = false;
+  let proposed: { outcome: "rejected" | "withdrawn"; eventId: string } | null = null;
   let expired = false;
   let candidacy = false;
 
@@ -56,7 +59,9 @@ export function reduceLifecycle(events: EffectiveEvent[], policy: Policy = DEFAU
     if (e.signals.includes("retraction (fact)") && ended && !e.outbound) { ended = null; endedProposed = false; outcome = null; expired = false; continue; } // the employer took the ending back
     const s = STAGE_OF[e.type];
     if (!s) continue;
-    if (s === "closed") { ended = e.type === "rejection" ? "rejected" : "withdrawn"; endedProposed = !e.corrected && e.confirmed !== true && e.signals.includes("terminal:proposed"); outcome = ended; expired = false; continue; }
+    if (s === "closed" && !e.corrected && e.confirmed !== true && e.signals.includes("terminal:proposed") && !ended) { proposed = { outcome: e.type === "rejection" ? "rejected" : "withdrawn", eventId: e.id }; continue; } // proposed, not settled
+    if (s === "closed") { ended = e.type === "rejection" ? "rejected" : "withdrawn"; endedProposed = !e.corrected && e.confirmed !== true && e.signals.includes("terminal:proposed"); outcome = ended; expired = false; proposed = null; continue; }
+    if (proposed) proposed = null; // later progress contradicts the proposal: it is dropped
     if (ended) { ended = null; endedProposed = false; stage = s; outcome = e.type === "offer" ? "offer" : null; continue; } // reopened
     if (expired) expired = false; // progress after an expiry: a new request, a new step
     if (STAGE_RANK[s] >= STAGE_RANK[stage]) stage = s;
@@ -86,5 +91,5 @@ export function reduceLifecycle(events: EffectiveEvent[], policy: Policy = DEFAU
   if (expired) return { stage, outcome: "expired", status: "closed", closedBy: "expired" };
   // results and receipts for an assessment are not, by themselves, evidence of an application; an employer's update or nudge is (the review queue decides the rest)
   if (!candidacy && !events.some((e) => e.type !== "assessment_completed" && e.type !== "status_update" && e.type !== "follow_up" && e.type !== "user_reply") && events.every((e) => e.type === "assessment_completed")) return { stage, outcome: null, status: "closed", closedBy: "not_recruiting" };
-  return { stage, outcome, status: "active", closedBy: null };
+  return { stage, outcome, status: "active", closedBy: null, ...(proposed ? { proposedEnding: proposed } : {}) };
 }

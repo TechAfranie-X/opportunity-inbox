@@ -223,5 +223,105 @@
  "k16m5": null,
  "k16m7": null,
  "k16m8": null,
- "k16m10": null
+ "k16m10": null,
+ "k1m6": {
+  "employer": "Brightwell Health",
+  "grounding": {
+   "hash": "c439aa6cdd4aaa43",
+   "offset": 43
+  }
+ },
+ "k3m1": {
+  "employer": "Lumenfield Studio",
+  "grounding": {
+   "hash": "d52f20ae8e9e565f",
+   "offset": 29
+  }
+ },
+ "k3m4": {
+  "employer": "Lumenfield",
+  "grounding": {
+   "hash": "bbe9c9a3460e7e0a",
+   "offset": 20
+  }
+ },
+ "k3m5": {
+  "employer": "Lumenfield Labs",
+  "grounding": {
+   "hash": "241fc5628c38c972",
+   "offset": 7
+  }
+ },
+ "k4m5": null,
+ "k4m10": {
+  "employer": "Kestrelwerk",
+  "grounding": {
+   "hash": "304fa729592bd331",
+   "offset": 10
+  }
+ },
+ "k6m3": {
+  "employer": "Orfeo Conseil",
+  "grounding": {
+   "hash": "c9baed284965db9b",
+   "offset": 97
+  }
+ },
+ "k6m6": {
+  "employer": "Orfeo Conseil",
+  "grounding": {
+   "hash": "f08eea0470deadf9",
+   "offset": 23
+  }
+ },
+ "k6m8": {
+  "employer": "Orfeo Conseil",
+  "grounding": {
+   "hash": "ed4998ba73fcff8e",
+   "offset": 25
+  }
+ },
+ "k8m10": null,
+ "k12m7": {
+  "employer": "Stonebridge Energy",
+  "grounding": {
+   "hash": "90726559d8eac226",
+   "offset": 15
+  }
+ },
+ "k12m8": {
+  "employer": "Stonebridge Water Resources",
+  "grounding": {
+   "hash": "17f81a3cff49edc2",
+   "offset": 28
+  }
+ },
+ "k12m11": {
+  "employer": "Stonebridge Energy",
+  "grounding": {
+   "hash": "71b57713bc89c858",
+   "offset": 15
+  }
+ },
+ "k13m6": {
+  "employer": "Mirabel Health",
+  "grounding": {
+   "hash": "9f2d1c027296c126",
+   "offset": 14
+  }
+ },
+ "k16m4": {
+  "employer": "Northgate Aerospace",
+  "grounding": {
+   "hash": "2e698538592d1756",
+   "offset": 11
+  }
+ },
+ "k16m11": {
+  "employer": "Northgate Aerospace",
+  "grounding": {
+   "hash": "0b50a0a99854d80f",
+   "offset": 17
+  }
+ }
 }

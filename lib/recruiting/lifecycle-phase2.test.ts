@@ -9,17 +9,20 @@ import type { EffectiveEvent } from "./types.ts";
 const base = { gmailThreadId: "t1", outbound: false, senderName: "Careers", senderDomain: "careers.example", subject: "Update", company: "Alcon Test Co", role: "Analyst Intern", eventDate: null, eventDateHasTime: false, dateKind: null, confidence: 0.9, fieldConfidence: { type: 0.9, company: 0.9, role: 0.9 }, reviewReasons: [], signals: [], corrected: false } as const;
 const ev = (id: string, type: EffectiveEvent["type"], day: number, extra: Partial<EffectiveEvent> = {}): EffectiveEvent => ({ ...base, id, gmailMessageId: id, type, occurredAt: new Date(Date.UTC(2026, 5, day, 12)), ...extra });
 
-test("an ending that rests on one uncorroborated reading closes the application and says so; a verified or confirmed ending does not", () => {
+test("an ending that rests on one uncorroborated reading is PROPOSED, not settled: the application stays active and visible", () => {
   const proposed = reduceLifecycle([ev("a", "applied", 1), ev("b", "rejection", 9, { signals: ["terminal:proposed"] })]);
-  assert.deepEqual([proposed.status, proposed.closedBy, proposed.closureProposed], ["closed", "rejected", true]);
-  assert.equal(reduceLifecycle([ev("a", "applied", 1), ev("b", "rejection", 9, { signals: ["terminal:verified"] })]).closureProposed, undefined);
-  assert.equal(reduceLifecycle([ev("a", "applied", 1), ev("b", "rejection", 9, { signals: ["terminal:proposed"], confirmed: true })]).closureProposed, undefined, "a person confirmed it");
-  const reopened = reduceLifecycle([ev("a", "applied", 1), ev("b", "rejection", 9, { signals: ["terminal:proposed"] }), ev("c", "interview_invite", 12)]);
-  assert.equal(reopened.status, "active", "later progress reopens it, as before");
-  assert.equal(reopened.closureProposed, undefined);
+  assert.deepEqual([proposed.status, proposed.closedBy, proposed.outcome, proposed.proposedEnding], ["active", null, null, { outcome: "rejected", eventId: "b" }]);
+  const verified = reduceLifecycle([ev("a", "applied", 1), ev("b", "rejection", 9, { signals: ["terminal:verified"] })]);
+  assert.deepEqual([verified.status, verified.closedBy, verified.proposedEnding], ["closed", "rejected", undefined], "a verified ending settles");
+  assert.deepEqual([reduceLifecycle([ev("a", "applied", 1), ev("b", "rejection", 9)]).status], ["closed"], "an ending production produced settles exactly as before");
+  const confirmed = reduceLifecycle([ev("a", "applied", 1), ev("b", "rejection", 9, { signals: ["terminal:proposed"], confirmed: true })]);
+  assert.deepEqual([confirmed.status, confirmed.proposedEnding], ["closed", undefined], "a person's confirmation settles it");
+  const later = reduceLifecycle([ev("a", "applied", 1), ev("b", "rejection", 9, { signals: ["terminal:proposed"] }), ev("c", "interview_invite", 12)]);
+  assert.deepEqual([later.status, later.proposedEnding], ["active", undefined], "later progress drops the proposal");
   const o = buildOpportunities([ev("a", "applied", 1), ev("b", "rejection", 9, { signals: ["terminal:proposed"] })]);
-  assert.equal(o[0].closureProposed, true);
-  assert.equal(buildOpportunities([ev("a", "applied", 1), ev("b", "rejection", 9)])[0].closureProposed, undefined, "production events never carry the signal, so nothing changes for them");
+  assert.equal(o[0].status, "active");
+  assert.deepEqual(o[0].proposedEnding, { outcome: "rejected", eventId: "b" });
+  assert.equal(o[0].closureProposed, undefined);
 });
 
 test("a plain confirmation that a later reading disagrees with becomes a Review question and is never overridden", () => {

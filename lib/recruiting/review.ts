@@ -1,6 +1,7 @@
 import { eventNeedsReview } from "./opportunity.ts";
 import { isWeakNearMiss } from "../reliability/flags.ts";
 import { DEFAULT_POLICY, type Policy } from "./policy.ts";
+import { prioritize } from "./review-priority.ts";
 import type { EffectiveEvent, Opportunity } from "./types.ts";
 
 /**
@@ -24,7 +25,15 @@ export type ReviewItem = {
   tier: "important" | "routine";
   /** Plain-language reason it ranks where it does. */
   why: string;
+  /** What kind of question this is (used by the prioritisation, lib/recruiting/review-priority.ts). */
+  kind?: "doubt" | "contradiction" | "ambiguous" | "proposed-ending" | "suggestion" | "confirmation-conflict" | "possible";
+  /** An optional suggestion, not a question the person needs to answer: shown collapsed and never counted. */
+  suggestion?: boolean;
+  /** How many similar questions about the same application were folded into this one. */
+  similar?: number;
 };
+
+export type ReviewOptions = { prioritize?: boolean };
 
 const DAY_MS = 86_400_000;
 const IMPORTANT_AT = 45;
@@ -73,7 +82,7 @@ export function plainReason(reason: string): string {
 }
 
 /** Events to check, active opportunities first, then newest first. Corrected or ignored events never appear: a person's word settles it. */
-export function buildReviewQueue(opportunities: Opportunity[], policy: Policy = DEFAULT_POLICY, possible: EffectiveEvent[] = [], now: Date = new Date()): ReviewItem[] {
+export function buildReviewQueue(opportunities: Opportunity[], policy: Policy = DEFAULT_POLICY, possible: EffectiveEvent[] = [], now: Date = new Date(), options: ReviewOptions = {}): ReviewItem[] {
   const items: ReviewItem[] = [];
   for (const o of opportunities) {
     for (const event of o.events) {
@@ -82,7 +91,7 @@ export function buildReviewQueue(opportunities: Opportunity[], policy: Policy = 
       if (event.outbound || !(unnamed || eventNeedsReview(event, policy))) continue;
       const reasons = event.reviewReasons?.length ? [...new Set(event.reviewReasons.map(plainReason))] : [!event.company ? "We could not tell which company this is from." : FALLBACK];
       const { impact, why } = reviewImpact({ event, active: o.status === "active", possible: false, reasons }, now);
-      items.push({ event, opportunityKey: o.key, company: o.company, role: o.role, reasons, impact, why, tier: impact >= IMPORTANT_AT ? "important" : "routine" });
+      items.push({ event, opportunityKey: o.key, company: o.company, role: o.role, reasons, impact, why, tier: impact >= IMPORTANT_AT ? "important" : "routine", kind: "doubt" });
     }
   }
   // Competing evidence inside one opportunity (a rejection followed by an interview, an offer followed by an ending) is always worth a look while it is live.
@@ -92,7 +101,7 @@ export function buildReviewQueue(opportunities: Opportunity[], policy: Policy = 
       if (!event || event.corrected || event.confirmed || items.some((i) => i.event === event && i.reasons.includes(c.text))) continue;
       const { impact, why } = reviewImpact({ event, active: o.status === "active", possible: false, reasons: [c.text] }, now);
       const live = Math.max(impact, IMPORTANT_AT);
-      items.push({ event, opportunityKey: o.key, company: o.company, role: o.role, reasons: [c.text], impact: live, why: o.status === "active" ? "The record disagrees with itself" : why, tier: "important" });
+      items.push({ event, opportunityKey: o.key, company: o.company, role: o.role, reasons: [c.text], impact: live, why: o.status === "active" ? "The record disagrees with itself" : why, tier: "important" , kind: c.kind === "ambiguous_identity" ? "ambiguous" : "contradiction" });
     }
   }
   // A person's confirmation that a later reading of the same message disagrees with: they stay authoritative, and they are asked.
@@ -100,8 +109,21 @@ export function buildReviewQueue(opportunities: Opportunity[], policy: Policy = 
     for (const c of o.confirmationConflicts ?? []) {
       const event = o.events.find((e) => e.id === c.eventId);
       if (!event || items.some((i) => i.event === event && i.reasons.includes(c.text))) continue;
-      items.push({ event, opportunityKey: o.key, company: o.company, role: o.role, reasons: [c.text], impact: Math.max(IMPORTANT_AT, 60), why: "Your confirmation and a later reading disagree", tier: "important" });
+      items.push({ event, opportunityKey: o.key, company: o.company, role: o.role, reasons: [c.text], impact: Math.max(IMPORTANT_AT, 60), why: "Your confirmation and a later reading disagree", tier: "important", kind: "confirmation-conflict" });
     }
+  }
+  // An ending that rests on one uncorroborated reading is proposed, not settled (the application stays active): the question is only whether it is worth asking.
+  for (const o of opportunities) {
+    const p = o.proposedEnding; const event = p && o.events.find((e) => e.id === p.eventId);
+    if (!p || !event || event.corrected || event.confirmed) continue;
+    const text = p.outcome === "rejected" ? "One message looks like a rejection, but nothing else confirms it. Is this application over?" : "One message looks like a withdrawal, but nothing else confirms it. Is this application over?";
+    items.push({ event, opportunityKey: o.key, company: o.company, role: o.role, reasons: [text], impact: 40, why: "An ending nobody has confirmed", tier: "routine", kind: "proposed-ending" });
+  }
+  // An optional identity suggestion: this message may belong to another application (evidence short of the bar for linking).
+  for (const o of opportunities) for (const event of o.events) {
+    const sug = event.signals.find((x) => x.startsWith("identity:suggest:"));
+    if (!sug || event.corrected || event.confirmed || event.outbound) continue;
+    items.push({ event, opportunityKey: o.key, company: o.company, role: o.role, reasons: ["This message may belong to another of your applications, but the evidence is not strong enough to join them. Keep them apart, or link them?"], impact: 10, why: "An optional suggestion", tier: "routine", kind: "suggestion" });
   }
   items.sort((a, b) => b.impact - a.impact || b.event.occurredAt.getTime() - a.event.occurredAt.getTime());
   const maybe = possible
@@ -111,7 +133,8 @@ export function buildReviewQueue(opportunities: Opportunity[], policy: Policy = 
       const reasons = [...new Set((event.reviewReasons ?? []).map(plainReason))];
       const weak = isWeakNearMiss(event);
       const { impact, why } = reviewImpact({ event, active: false, possible: true, reasons }, now);
-      return { event, opportunityKey: "", company: event.company ?? "Unknown sender", role: null, reasons, possible: true, ...(weak ? { weak: true } : {}), impact: weak ? 0 : impact, why, tier: !weak && impact >= IMPORTANT_AT ? "important" : "routine" };
+      return { event, opportunityKey: "", company: event.company ?? "Unknown sender", role: null, reasons, possible: true, kind: "possible" as const, ...(weak ? { weak: true } : {}), impact: weak ? 0 : impact, why, tier: !weak && impact >= IMPORTANT_AT ? "important" : "routine" };
     });
-  return [...items, ...maybe].sort((a, b) => Number(Boolean(a.weak)) - Number(Boolean(b.weak)) || b.impact - a.impact || b.event.occurredAt.getTime() - a.event.occurredAt.getTime());
+  const queue = [...items, ...maybe].sort((a, b) => Number(Boolean(a.weak)) - Number(Boolean(b.weak)) || b.impact - a.impact || b.event.occurredAt.getTime() - a.event.occurredAt.getTime());
+  return options.prioritize ? prioritize(queue, opportunities, now) : queue;
 }

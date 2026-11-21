@@ -28,9 +28,9 @@ import { createModelReader } from "../lib/semantic/hosted.ts";
 import { semanticInputs } from "../lib/semantic/inputs.ts";
 import { localTransport } from "../lib/semantic/local.ts";
 
-type Msg = { id: string; threadId?: string; from: string; subject: string; body: string; receivedAt: string; outbound?: boolean; discovery?: "keyword" | "sweep"; expect: { inPipeline: boolean; type: string | null; opportunityKey: string | null } };
+type Msg = { id: string; threadId?: string; from: string; subject: string; body: string; receivedAt: string; outbound?: boolean; discovery?: "keyword" | "sweep"; expect: { ask?: boolean; inPipeline: boolean; type: string | null; opportunityKey: string | null } };
 type Journey = { key: string; finalStage: string; finalStatus: "active" | "closed"; outcome: string | null; nextAction: string; contradiction: string | null };
-type Fixture = { now: string; scenarios: { id: string; note?: string; messages: Msg[]; journeys?: Journey[] }[] };
+type Fixture = { now: string; reviewLabels?: boolean; scenarios: { id: string; note?: string; messages: Msg[]; journeys?: Journey[] }[] };
 
 const file = process.argv[2];
 const verbose = process.argv.includes("--verbose");
@@ -48,6 +48,7 @@ const collectOnly = process.argv.includes("--collect-only");
 const roleVerdicts: RoleVerdicts = roleCachePath && existsSync(roleCachePath) ? rolesFromJson(JSON.parse(readFileSync(roleCachePath, "utf8"))) : new Map();
 const repCachePath = process.argv.includes("--represented-cache") ? process.argv[process.argv.indexOf("--represented-cache") + 1] : null;
 const represented: RepresentedMap = repCachePath && existsSync(repCachePath) ? representedFromJson(JSON.parse(readFileSync(repCachePath, "utf8"))) : new Map();
+const reviewList: { kind: string; tier: string; suggestion: boolean; justified: boolean; type: string }[] = [];
 let rolePairsSeen = 0;
 const trace: ShadowTrace = new Map();
 const perMessage: { scenario: string; id: string; expectInPipeline: boolean; expectType: string | null; gotType: string | null; state: string | null; placement: string | null; terminal: string | null; belief: number | null; verdict: unknown; ambiguous: boolean; opp: string | null; possibleLink: string | null }[] = [];
@@ -62,7 +63,7 @@ const fx = JSON.parse(readFileSync(file, "utf8")) as Fixture;
 const now = new Date(fx.now);
 const floating = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes()));
 
-const c = { tp: 0, fp: 0, fn: 0, tn: 0, typeOk: 0, typeN: 0, pairTp: 0, pairFp: 0, pairFn: 0, journeys: 0, split: 0, merged: 0, noHome: 0, statusOk: 0, outcomeOk: 0, stageOk: 0, stageN: 0, actOk: 0, actNormOk: 0, actNormN: 0, evidenceOk: 0, evidenceN: 0, contra: 0, contraFlagged: 0, contraFlaggedByField: 0, reviewItems: 0, reviewJustified: 0, reviewPossible: 0, reviewPossibleGenuine: 0, attention: 0, attentionJustified: 0, falseOppAfterNeg: 0 };
+const c = { endTruth: 0, endVerified: 0, endProposed: 0, endMissed: 0, settledWrong: 0, proposedWrong: 0, suggestions: 0, tp: 0, fp: 0, fn: 0, tn: 0, typeOk: 0, typeN: 0, pairTp: 0, pairFp: 0, pairFn: 0, journeys: 0, split: 0, merged: 0, noHome: 0, statusOk: 0, outcomeOk: 0, stageOk: 0, stageN: 0, actOk: 0, actNormOk: 0, actNormN: 0, evidenceOk: 0, evidenceN: 0, contra: 0, contraFlagged: 0, contraFlaggedByField: 0, reviewItems: 0, reviewJustified: 0, reviewPossible: 0, reviewPossibleGenuine: 0, attention: 0, attentionJustified: 0, falseOppAfterNeg: 0 };
 const lines: string[] = [];
 const bad = (s: string) => lines.push(s);
 let modelMs = 0;
@@ -121,7 +122,7 @@ for (const sc of fx.scenarios) {
   }
   const opps: Opportunity[] = buildOpportunities(events, new Map(), DEFAULT_POLICY, identityCtx);
   const actions = buildActions(opps, floating);
-  const queue = buildReviewQueue(opps, undefined, possible, floating);
+  const queue = buildReviewQueue(opps, undefined, possible, floating, { prioritize: engine === "phase2" });
 
   const byMsg = new Map<string, { opp: Opportunity; type: string; ambiguous: boolean; possibleLink: string | null }>();
   for (const o of opps) for (const e of o.events) byMsg.set(e.gmailMessageId, { opp: o, type: e.type, ambiguous: e.signals.includes("identity:ambiguous"), possibleLink: e.signals.find((x) => x.startsWith("identity:suggest:"))?.slice(17) ?? null });
@@ -169,6 +170,11 @@ for (const sc of fx.scenarios) {
     const statusOk = j.outcome === "accepted" || home.status === j.finalStatus;
     const outcomeNorm = (home.outcome ?? null) as string | null;
     const outcomeOk = outcomeNorm === (j.outcome ?? null) || (j.outcome === "accepted" && outcomeNorm === "offer" && false);
+    // outcome representation: a SETTLED ending (status closed) versus a PROPOSED one (active, with the proposal visible); counted against the journey's truth, separately from the legacy status metric
+    const truthEnded = j.finalStatus === "closed" && (j.outcome === "rejected" || j.outcome === "withdrawn");
+    const settled = home.status === "closed" && (home.closedBy === "rejected" || home.closedBy === "withdrawn"), proposedEnd = !!home.proposedEnding;
+    if (truthEnded) { c.endTruth++; if (settled) c.endVerified++; else if (proposedEnd) c.endProposed++; else c.endMissed++; }
+    else { if (settled) { c.settledWrong++; bad(`${sc.id}/${j.key} SETTLED ENDING for a journey that did not end`); } else if (proposedEnd) { c.proposedWrong++; bad(`${sc.id}/${j.key} PROPOSED ENDING for a journey that did not end`); } }
     if (statusOk) c.statusOk++; else bad(`${sc.id}/${j.key} STATUS ${home.status} != ${j.finalStatus}`);
     if (outcomeOk) c.outcomeOk++; else bad(`${sc.id}/${j.key} OUTCOME ${outcomeNorm} != ${j.outcome}`);
     if (j.finalStage !== "closed" || j.outcome === "rejected" || j.outcome === "withdrawn") {
@@ -206,7 +212,10 @@ for (const sc of fx.scenarios) {
     c.reviewItems++;
     let justified = false;
     if (q.possible) { c.reviewPossible++; justified = !!m?.expect.inPipeline; if (justified) c.reviewPossibleGenuine++; }
-    else if (m) justified = !m.expect.inPipeline || m.expect.type !== q.event.type || (!!m.expect.opportunityKey && contraKeys.has(m.expect.opportunityKey));
+    else if (m) justified = fx.reviewLabels ? m.expect.ask === true : (!m.expect.inPipeline || m.expect.type !== q.event.type || (!!m.expect.opportunityKey && contraKeys.has(m.expect.opportunityKey)));
+    if (q.possible && fx.reviewLabels) justified = m?.expect.ask === true;
+    if (q.suggestion) c.suggestions++;
+    reviewList.push({ kind: q.kind ?? "doubt", tier: q.tier, suggestion: !!q.suggestion, justified, type: q.event.type });
     if (justified) c.reviewJustified++; else if (verbose) bad(`${sc.id}/${q.event.gmailMessageId} REVIEW unnecessary (${q.possible ? "possible" : q.event.type}, co=${q.event.company}/${q.event.fieldConfidence?.company}, type=${q.event.fieldConfidence?.type}) :: ${m?.subject} :: ${q.reasons.join(" | ").slice(0, 120)}`);
     if (q.tier === "important") { c.attention++; if (justified) c.attentionJustified++; }
   }
@@ -227,5 +236,5 @@ const out = [
 ];
 console.log(out.join("\n"));
 if (verbose) for (const l of lines) console.log(" -", l);
-if (jsonOut) writeFileSync(jsonOut, JSON.stringify({ engine, counts: c, summary: out, failures: lines, perMessage }, null, 1));
+if (jsonOut) writeFileSync(jsonOut, JSON.stringify({ engine, counts: c, summary: out, failures: lines, perMessage, reviewList }, null, 1));
 void eventNeedsReview;
