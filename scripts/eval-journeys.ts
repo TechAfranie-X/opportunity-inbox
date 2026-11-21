@@ -18,6 +18,7 @@ import { isNearMiss } from "../lib/reliability/flags.ts";
 import { readMail } from "../lib/reliability/assess.ts";
 import { reconcileReadings } from "../lib/semantic/employer.ts";
 import { applyAssist, isSemanticExcluded } from "../lib/semantic/assist.ts";
+import { shadowAssist, type ShadowTrace } from "../lib/decision/shadow.ts";
 import { SEMANTIC_GUIDE_V3_COMPACT } from "../lib/semantic/guide-v3.ts";
 import { createModelReader } from "../lib/semantic/hosted.ts";
 import { semanticInputs } from "../lib/semantic/inputs.ts";
@@ -33,6 +34,11 @@ const useModel = process.argv.includes("--semantic");
 // --replay: cached readings ONLY. Never calls the model, never writes the cache, and a scenario missing from the cache is an error. This is the mode the regression gate uses
 // (scripts/eval-gate.ts), so a decision-logic change is measured on identical model output in under a second.
 const replay = process.argv.includes("--replay");
+// --engine current|shadow: `current` is the product's decision chain (applyAssist); `shadow` is the evidence-ledger decision engine (lib/decision), run on the SAME readings.
+const engine = process.argv.includes("--engine") ? process.argv[process.argv.indexOf("--engine") + 1] : "current";
+if (engine !== "current" && engine !== "shadow") throw new Error(`unknown --engine ${engine}`);
+const trace: ShadowTrace = new Map();
+const perMessage: { scenario: string; id: string; expectInPipeline: boolean; expectType: string | null; gotType: string | null; state: string | null; placement: string | null; terminal: string | null }[] = [];
 const jsonOut = process.argv.includes("--json") ? process.argv[process.argv.indexOf("--json") + 1] : null;
 const modelId = process.argv.includes("--model") ? process.argv[process.argv.indexOf("--model") + 1] : "mlx-community/Qwen3-4B-Instruct-2507-4bit";
 const reader = useModel ? createModelReader({ transport: localTransport(), model: modelId, batch: 4, idPrefix: "local", guide: SEMANTIC_GUIDE_V3_COMPACT }) : null;
@@ -69,7 +75,8 @@ for (const sc of fx.scenarios) {
     const gaps = inputs.filter((i) => !readings.has(i.key)).length;
     if (gaps > 0) console.error(`[model] ${sc.id}: ${gaps} message(s) have no reading`);
     modelMs += Date.now() - s;
-    read = reconcileReadings(applyAssist(read, emails, new Map([...readings].map(([k, v]) => [k, v.output] as const))), readings);
+    const opinions = new Map([...readings].map(([k, v]) => [k, v.output] as const));
+    read = reconcileReadings(engine === "shadow" ? shadowAssist(read, emails, opinions, trace) : applyAssist(read, emails, opinions), readings);
   }
   const effective: EffectiveEvent[] = read.map((e) => ({ ...e, signals: disc.get(e.gmailMessageId) === "sweep" ? [...e.signals, "via:sweep"] : e.signals, id: e.gmailMessageId, corrected: false }));
   const all = refineEvents(effective).events;
@@ -87,6 +94,8 @@ for (const sc of fx.scenarios) {
   // 1. recruiting P/R and stage type
   for (const m of msgs) {
     const got = byMsg.get(m.id);
+    const tv = trace.get(m.id);
+    perMessage.push({ scenario: sc.id, id: m.id, expectInPipeline: m.expect.inPipeline, expectType: m.expect.type, gotType: got?.type ?? null, state: tv?.state ?? null, placement: tv?.placement ?? null, terminal: tv?.terminal ?? null });
     if (m.expect.inPipeline && got) { c.tp++; if (m.expect.type) { c.typeN++; if (got.type === m.expect.type) c.typeOk++; else bad(`${sc.id}/${m.id} TYPE ${got.type} != ${m.expect.type} :: ${m.subject}`); } }
     else if (m.expect.inPipeline) { c.fn++; bad(`${sc.id}/${m.id} MISSED (${m.expect.type}) :: ${m.subject}`); }
     else if (got) { c.fp++; bad(`${sc.id}/${m.id} FALSE POSITIVE as ${got.type} :: ${m.subject}`); }
@@ -169,7 +178,7 @@ for (const sc of fx.scenarios) {
 const pct = (a: number, b: number) => (b ? `${((a / b) * 100).toFixed(1)}%` : "n/a");
 const total = c.tp + c.fp + c.fn + c.tn;
 const out = [
-  `fixture ${file.split("/").pop()}  mode ${useModel ? "hybrid (rules + local model)" : "rules only"}  messages ${total}  journeys ${c.journeys}`,
+  `fixture ${file.split("/").pop()}  engine ${engine}  mode ${useModel ? "hybrid (rules + local model)" : "rules only"}  messages ${total}  journeys ${c.journeys}`,
   `recruiting:  precision ${pct(c.tp, c.tp + c.fp)} (${c.fp} false)  recall ${pct(c.tp, c.tp + c.fn)} (${c.fn} missed)  stage type ${pct(c.typeOk, c.typeN)}`,
   `grouping:    pair precision ${pct(c.pairTp, c.pairTp + c.pairFp)} recall ${pct(c.pairTp, c.pairTp + c.pairFn)}  wrong merges ${c.pairFp}  missed links ${c.pairFn}  | journeys split ${c.split}  opportunities merging journeys ${c.merged}  journeys not found ${c.noHome}`,
   `lifecycle:   status ${pct(c.statusOk, c.journeys - c.noHome)}  outcome ${pct(c.outcomeOk, c.journeys - c.noHome)}  stage ${pct(c.stageOk, c.stageN)}`,
@@ -180,5 +189,5 @@ const out = [
 ];
 console.log(out.join("\n"));
 if (verbose) for (const l of lines) console.log(" -", l);
-if (jsonOut) writeFileSync(jsonOut, JSON.stringify({ counts: c, summary: out, failures: lines }, null, 1));
+if (jsonOut) writeFileSync(jsonOut, JSON.stringify({ engine, counts: c, summary: out, failures: lines, perMessage }, null, 1));
 void eventNeedsReview;

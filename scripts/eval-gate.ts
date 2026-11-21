@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-export const FIXTURES = ["J", "K", "L", "M", "N"] as const;
+export const FIXTURES = ["J", "K", "L", "M", "N", "X"] as const;
 type Counts = Record<string, number>;
 export type Metrics = Record<string, number>;
 export type Baseline = {

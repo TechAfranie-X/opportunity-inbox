@@ -1,0 +1,238 @@
+{
+ "now": "2026-03-01T12:00:00Z",
+ "scenarios": [
+  {
+   "id": "x1",
+   "note": "confidently wrong model readings on mass mail beside a real application that ends",
+   "messages": [
+    {
+     "id": "x1a",
+     "from": "Lumen Works Insiders <hello@insiders.lumenworks.example>",
+     "subject": "You're invited: Lumen Works Insiders community",
+     "body": "Join the Lumen Works Insiders community for free career tips and events. Unsubscribe | Manage preferences | View in browser. You're receiving this because you subscribed. Sponsored.",
+     "receivedAt": "2026-02-03T14:00:00Z",
+     "discovery": "sweep",
+     "expect": {
+      "inPipeline": false,
+      "type": null,
+      "opportunityKey": null
+     }
+    },
+    {
+     "id": "x1b",
+     "from": "Brightwell Community <welcome@community.brightwell.example>",
+     "subject": "Welcome to Brightwell Community!",
+     "body": "Welcome aboard! Set up your profile to get tips, member perks and event invitations. Unsubscribe | Manage preferences | Privacy policy.",
+     "receivedAt": "2026-02-04T14:00:00Z",
+     "discovery": "sweep",
+     "expect": {
+      "inPipeline": false,
+      "type": null,
+      "opportunityKey": null
+     }
+    },
+    {
+     "id": "x1c",
+     "from": "JobsNow Alerts <alerts@jobsnow.example>",
+     "subject": "7 new jobs for you this week",
+     "body": "Jobs matching your profile: Analyst at Northwind, Engineer at Halden, Designer at Quill. Unsubscribe | Manage preferences | View in browser. You're receiving this email because you set up a job alert. Sponsored",
+     "receivedAt": "2026-02-05T14:00:00Z",
+     "discovery": "sweep",
+     "expect": {
+      "inPipeline": false,
+      "type": null,
+      "opportunityKey": null
+     }
+    },
+    {
+     "id": "x1d",
+     "from": "LaunchPad Product <news@launchpad.example>",
+     "subject": "Product updates: what's new this month",
+     "body": "See what's new in LaunchPad: faster dashboards, new integrations and a referral programme. Unsubscribe | Manage preferences | View in browser.",
+     "receivedAt": "2026-02-06T14:00:00Z",
+     "discovery": "sweep",
+     "expect": {
+      "inPipeline": false,
+      "type": null,
+      "opportunityKey": null
+     }
+    },
+    {
+     "id": "x1e",
+     "from": "Spring Career Fair <events@careerfair.example>",
+     "subject": "Register now: Spring Career Fair webinar",
+     "body": "Reserve your seat for the Spring Career Fair webinar series. Meet employers and learn about internships. Register now. Unsubscribe | Manage preferences.",
+     "receivedAt": "2026-02-07T14:00:00Z",
+     "discovery": "sweep",
+     "expect": {
+      "inPipeline": false,
+      "type": null,
+      "opportunityKey": null
+     }
+    },
+    {
+     "id": "x1f",
+     "from": "Brightwell Careers <careers@brightwell.example>",
+     "subject": "Application received: Data Analyst",
+     "body": "Thank you for applying to the Data Analyst role at Brightwell. We have received your application and will be in touch.",
+     "receivedAt": "2026-02-08T14:00:00Z",
+     "discovery": "keyword",
+     "expect": {
+      "inPipeline": true,
+      "type": "applied",
+      "opportunityKey": "brightwell~analyst"
+     }
+    },
+    {
+     "id": "x1g",
+     "from": "Brightwell Careers <careers@brightwell.example>",
+     "subject": "An update on your candidacy",
+     "body": "Hello Sam, thank you for taking the time to apply. We are not progressing your candidacy for the Data Analyst role this time. We wish you well.",
+     "receivedAt": "2026-02-20T14:00:00Z",
+     "discovery": "keyword",
+     "expect": {
+      "inPipeline": true,
+      "type": "rejection",
+      "opportunityKey": "brightwell~analyst"
+     }
+    }
+   ],
+   "journeys": [
+    {
+     "key": "brightwell~analyst",
+     "finalStage": "closed",
+     "finalStatus": "closed",
+     "outcome": "rejected",
+     "nextAction": "none",
+     "contradiction": null
+    }
+   ]
+  },
+  {
+   "id": "x2",
+   "note": "real mail found only by the model",
+   "messages": [
+    {
+     "id": "x2a",
+     "from": "Halden Talent <jobs@halden.example>",
+     "subject": "Application received: Platform Engineer",
+     "body": "Thank you for applying to the Platform Engineer role at Halden. We have received your application.",
+     "receivedAt": "2026-02-03T14:00:00Z",
+     "discovery": "keyword",
+     "expect": {
+      "inPipeline": true,
+      "type": "applied",
+      "opportunityKey": "halden~platform"
+     }
+    },
+    {
+     "id": "x2b",
+     "from": "Halden Talent <jobs@halden.example>",
+     "subject": "Next steps",
+     "body": "Hello Sam, we enjoyed your profile and would love to find a time next week to talk through the Platform Engineer role. Which of these slots suits you: Tuesday 10:00 or Wednesday 15:00?",
+     "receivedAt": "2026-02-10T14:00:00Z",
+     "discovery": "sweep",
+     "expect": {
+      "inPipeline": true,
+      "type": "interview_invite",
+      "opportunityKey": "halden~platform"
+     }
+    },
+    {
+     "id": "x2c",
+     "from": "Quill People <people@quill.example>",
+     "subject": "Application received: Designer",
+     "body": "Thank you for applying to the Designer role at Quill. We have received your application.",
+     "receivedAt": "2026-02-03T14:00:00Z",
+     "discovery": "keyword",
+     "expect": {
+      "inPipeline": true,
+      "type": "applied",
+      "opportunityKey": "quill~designer"
+     }
+    },
+    {
+     "id": "x2d",
+     "from": "Quill People <people@quill.example>",
+     "subject": "About your application",
+     "body": "Hi Sam, great news: we would like to offer you the Designer position. Details of the offer and the start date are attached; please reply by Friday.",
+     "receivedAt": "2026-02-12T14:00:00Z",
+     "discovery": "sweep",
+     "expect": {
+      "inPipeline": true,
+      "type": "offer",
+      "opportunityKey": "quill~designer"
+     }
+    }
+   ],
+   "journeys": [
+    {
+     "key": "halden~platform",
+     "finalStage": "interview",
+     "finalStatus": "active",
+     "outcome": null,
+     "nextAction": "schedule_interview",
+     "contradiction": null
+    },
+    {
+     "key": "quill~designer",
+     "finalStage": "offer",
+     "finalStatus": "active",
+     "outcome": "offer",
+     "nextAction": "offer_decision",
+     "contradiction": null
+    }
+   ]
+  },
+  {
+   "id": "x3",
+   "note": "a mistaken model no and a low-certainty reading beside rule-found applications",
+   "messages": [
+    {
+     "id": "x3a",
+     "from": "Northwind Careers <careers@northwind.example>",
+     "subject": "Application received: Operations Analyst",
+     "body": "Thank you for applying to the Operations Analyst role at Northwind. We have received your application and will be in touch.",
+     "receivedAt": "2026-02-04T14:00:00Z",
+     "discovery": "keyword",
+     "expect": {
+      "inPipeline": true,
+      "type": "applied",
+      "opportunityKey": "northwind~operations"
+     }
+    },
+    {
+     "id": "x3b",
+     "from": "Quill People <people@quill.example>",
+     "subject": "Thank you for applying: Researcher",
+     "body": "Thank you for applying to the Researcher role at Quill. We have received your application.",
+     "receivedAt": "2026-02-05T14:00:00Z",
+     "discovery": "keyword",
+     "expect": {
+      "inPipeline": true,
+      "type": "applied",
+      "opportunityKey": "quill~researcher"
+     }
+    }
+   ],
+   "journeys": [
+    {
+     "key": "northwind~operations",
+     "finalStage": "applied",
+     "finalStatus": "active",
+     "outcome": null,
+     "nextAction": "none",
+     "contradiction": null
+    },
+    {
+     "key": "quill~researcher",
+     "finalStage": "applied",
+     "finalStatus": "active",
+     "outcome": null,
+     "nextAction": "none",
+     "contradiction": null
+    }
+   ]
+  }
+ ]
+}

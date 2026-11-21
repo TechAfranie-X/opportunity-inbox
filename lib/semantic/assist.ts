@@ -28,7 +28,7 @@ export const SEMANTIC_EXCLUDED = "semantic:excluded";
 export const isSemanticExcluded = (e: { signals: string[] }) => e.signals.includes(SEMANTIC_EXCLUDED);
 
 const UNREADABLE = /could not read/;
-const asEventType = (t: string | null): EventType => (t === "withdrawn" ? "withdrawn" : ((t ?? "status_update") as EventType));
+export const asEventType = (t: string | null): EventType => (t === "withdrawn" ? "withdrawn" : ((t ?? "status_update") as EventType));
 
 const CONFIRMED_TIME = /\b(?:confirmed|you(?:['’]re| are) (?:booked|scheduled|set|all set)|(?:is|are) (?:scheduled|booked|set) for|scheduled for|see you (?:on|at|then|there)|looking forward to (?:speaking|meeting|seeing))\b/i;
 const CHOOSING = /\b(?:which (?:one |time |slot )?(?:works|do you prefer|suits)|choose|pick|select|let me know (?:which|what|when)|reply with|availab(?:le|ility)|options?|or\b[^.\n]{0,30}\b(?:at|on)\b)\b/i;
@@ -45,7 +45,7 @@ export function interviewKind(m: Pick<RecruitingEmail, "subject" | "bodyText" | 
   return modelType;
 }
 
-function semanticEvent(m: RecruitingEmail, op: VerifiedOutput): ExtractedEvent {
+export function semanticEvent(m: RecruitingEmail, op: VerifiedOutput): ExtractedEvent {
   const base = candidateEvent(m, "strong", "", []);
   const person = base.company ? looksLikePerson(base.company) : false; // a signature name is not an employer
   return applyTextFacts(m, employerProvenance(m, {
@@ -65,6 +65,10 @@ const NOT_PROCESS = /\bwelcome to [A-Z][\w &-]{1,30}[!.]?(?:\s|$)|\b(?:onboardin
  * A VETO, not a requirement (requiring corroboration crushed recall on every fixture): a model-found event whose SUBJECT is a membership invitation, a welcome/account notice or an
  * event promotion, with nothing in the message naming the reader's own process, is a question for a person, never an application.
  */
+/** The message speaks about the reader's own application, interview, assessment, offer or candidacy. A deterministic fact of the text (used by the evidence ledger). */
+export function ownProcessWording(m: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
+  return OWN_PROCESS.test(`${m.subject}\n${m.bodyText.slice(0, 1500)}`);
+}
 export function notAProcess(m: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
   return NOT_PROCESS.test(m.subject) && !OWN_PROCESS.test(`${m.subject}\n${m.bodyText.slice(0, 1500)}`);
 }
@@ -78,8 +82,8 @@ export function endingCorroborated(m: Pick<RecruitingEmail, "subject" | "bodyTex
 }
 const LOW_INFORMATION = new Set<string>(["status_update", "applied", "follow_up"]);
 /** What a RECEIPT may be retyped to: only an ending or an offer. A receipt's own wording ("Thank you for applying") is strong, and a confirmation page that mentions an assessment link is still a receipt. */
-const ENDINGS = new Set<string>(["rejection", "withdrawn", "offer"]);
-const DECISIVE = new Set<string>(["rejection", "offer", "withdrawn", "interview_invite", "interview_scheduled", "assessment"]);
+export const ENDINGS = new Set<string>(["rejection", "withdrawn", "offer"]);
+export const DECISIVE = new Set<string>(["rejection", "offer", "withdrawn", "interview_invite", "interview_scheduled", "assessment"]);
 export function applyAssist(events: ExtractedEvent[], emails: RecruitingEmail[], opinions: Map<string, VerifiedOutput>): ExtractedEvent[] {
   if (opinions.size === 0) return events;
   const byId = new Map(emails.map((m) => [m.id, m] as const));
