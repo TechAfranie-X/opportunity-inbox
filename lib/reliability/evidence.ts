@@ -18,6 +18,8 @@ const QUOTE_START = [
   /^\s*On .{3,160}wrote:\s*$/m,
   /^\s*-{2,}\s*(?:original message|forwarded message)\s*-{2,}/im,
   /^\s*(?:From|De|Von|Da):\s.+\n\s*(?:Sent|Date|Envoy[ée]|Gesendet|Enviado):/im,
+  /^\s*-{2,}\s*(?:Original|Forwarded) message\s*-{2,}/im,
+  /^\s*Begin forwarded message:/im,
   /^\s*Le .{3,160}a [ée]crit\s*:/m,
   /^\s*Am .{3,160}schrieb .{0,80}:/m,
   /^\s*El .{3,160}escribi[óo]:/m,
@@ -74,17 +76,30 @@ const ENDING_CUE = new RegExp([
 ].join("|"), "i");
 const FIRST_PERSON = /\b(?:I|I'm|I’m|I've|I’ve|I'd|my|myself)\b/;
 const EMPLOYER_VOICE = /\b(?:we|our|us|your|you)\b/i;
-export function endingWording(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
-  const text = unquoted(`${email.subject}\n${email.bodyText}`);
+const CONDITIONAL_BEFORE = /\b(?:if|should|in the event|unless|in case|whether|when)\b/i;
+const CONDITIONAL_AFTER = /\b(?:if|unless|until|in case)\b/i;
+const NO_LONGER_REVIEWING = /\b(?:(?:decided|decision|chosen|elected|opted) (?:to |not to )?not (?:to )?(?:move|proceed|continue|advance|go) forward|(?:decided|decision|chosen|elected|opted) not to (?:move|proceed|continue|advance|go) forward|(?:we are|we(?:'|’)re|are) no longer (?:reviewing|accepting|considering) (?:any )?(?:applicants|applications|candidates)|(?:this|the) (?:position|role) (?:has been|is now|was) (?:filled|closed)|(?:positions?|roles?) (?:have|has) been filled)\b/i;
+/** The sentence of THIS message (not quoted history) that ends the reader's application, or null. */
+export function endingSentence(email: Pick<RecruitingEmail, "subject" | "bodyText">): string | null {
+  // soft-wrapped lines (a single newline inside a sentence) are one sentence; blank lines and sentence ends separate
+  const text = unquoted(`${email.subject}\n\n${email.bodyText}`).replace(/\r/g, "").replace(/(?<![.!?:\n])\n(?![\n\-*•])/g, " ");
   // judged sentence by sentence: a footer that says "unsubscribe" must not hide an ending sentence elsewhere in the message
   for (const sentence of text.split(/(?<=[.!?])\s+|\n+/)) {
     if (sentence.length > 400 || CLOSURE_NOT_ABOUT_YOU.test(sentence)) continue;
     // the reader's own narration ("Unfortunately, I was ill and could not reply") is not an employer ending a process: an employer speaks as we/our to you/your
     if (FIRST_PERSON.test(sentence) && !EMPLOYER_VOICE.test(sentence)) continue;
-    const cue = ENDING_CUE.exec(sentence);
-    if (cue && !OFFER_OR_NEXT.test(sentence.slice(0, cue.index))) return true;
+    const cue = ENDING_CUE.exec(sentence) ?? NO_LONGER_REVIEWING.exec(sentence);
+    // a CONDITION is not an ending: "If you are not selected, keep an eye on our jobs page", "You will not be able to proceed if the questionnaire is not completed"
+    if (cue && (CONDITIONAL_BEFORE.test(sentence.slice(0, cue.index)) || CONDITIONAL_AFTER.test(sentence.slice(cue.index + cue[0].length)))) continue;
+    if (cue && !OFFER_OR_NEXT.test(sentence.slice(0, cue.index))) return sentence;
   }
-  return CLOSURE.test(text) && closureFact(email);
+  return null;
+}
+export function endingWording(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
+  if (endingSentence(email)) return true;
+  // the strict closure test, on the message without its conditional sentences ("If you are not selected, keep an eye on our jobs page")
+  const unconditional = unquoted(`${email.subject}\n${email.bodyText}`).split(/(?<=[.!?])\s+/).filter((x) => !/^\s*(?:if|should|in the event|unless|in case)\b/i.test(x)).join(" ");
+  return CLOSURE.test(unconditional) && closureFact({ subject: "", bodyText: unconditional });
 }
 
 /**
@@ -173,4 +188,23 @@ function calendarCancellation(email: Pick<RecruitingEmail, "subject" | "received
   if (event.outbound || !CANCEL_SUBJECT.test(email.subject ?? "")) return event;
   const cancelled = event.eventDate ? `cancelled:${event.eventDate.toISOString().slice(0, 10)}` : "cancelled:";
   return { ...event, type: "status_update", eventDate: null, eventDateHasTime: false, dateKind: null, signals: [...event.signals, "cancellation (fact)", cancelled] };
+}
+
+
+/**
+ * The employer ends THIS candidate's application in plain voice, about their own application: an ending sentence (see endingSentence) that is not hypothetical, in employer voice, in a message that
+ * speaks of the reader's own application, interview or candidacy (in the sentence or the opening of the message). Strong enough to settle an application; wording families, not a template.
+ */
+const OWN_REF = /\b(?:your (?:\w+ ){0,2}(?:application|candidacy|candidature|interest|interview|resume|profile)|you (?:applied|have applied|interviewed|took the time to apply)|(?:apply|applying|applied) (?:for|to)|for (?:the|our) [\w ,&()/-]{3,60}(?:position|role|internship|program|fellowship)|interviewing with)/i;
+export function ownEnding(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
+  const sentence = endingSentence(email);
+  if (!sentence || FIRST_PERSON.test(sentence) || !EMPLOYER_VOICE.test(sentence)) return false; // a sentence with no we / you is about someone else ("WEB101 applicants are not eligible")
+  const lead = unquoted(`${email.subject}\n${email.bodyText}`).slice(0, 900);
+  return OWN_REF.test(sentence) || OWN_REF.test(lead);
+}
+
+/** The employer ACKNOWLEDGES that the candidate withdrew or cannot take part ("we understand why you are unable to join us", "we have received your withdrawal"). */
+const WITHDRAWAL_ACK = /\b(?:(?:understand|sorry to hear)(?: why| that)? you(?:'re|’re| are| will be|'ll be|’ll be| cannot| can(?:no|')t| won't be| won’t be)? ?(?:not able to|unable to|able to not|cannot|can't|won't be able to) (?:join|attend|participate|accept|continue|take part)|(?:accept|acknowledge|received|confirm)\w*[^.!?]{0,30}your (?:withdrawal|decision to withdraw|request to withdraw)|(?:we have|we've|we’ve|i have|i’ve|i've) withdrawn your (?:application|candidacy)|withdrawal of your (?:application|candidacy)|your (?:application|candidacy) (?:has|have) been withdrawn)\b/i;
+export function withdrawalAcknowledged(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
+  return WITHDRAWAL_ACK.test(unquoted(`${email.subject}\n${email.bodyText}`));
 }

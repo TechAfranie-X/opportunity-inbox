@@ -50,8 +50,10 @@ export const representedFromJson = (o: Record<string, Represented | null>): Repr
 
 /** Requisition / job reference numbers: a generic format ("Req ID: 4471-B", "Job #R-2041", "Reference: JD-88213"), at least one digit, never a date or a bare year. Deterministic, no model. */
 const REQ = /\b(?:req(?:uisition)?|job|position|reference|ref)\.?\s*(?:id|no\.?|number|#|code)?\s*[:#]?\s*([A-Z]{0,4}-?\d[A-Z0-9-]{2,14})\b/i;
+/** A lone parenthesised 5-9 digit number after a role ("Internship - Digital (62240)") is the posting's number. */
+const REQ_PAREN = /\((\d{5,9})\)/;
 export function requisitionOf(text: string): string | null {
-  const m = REQ.exec(text);
+  const m = REQ.exec(text) ?? REQ_PAREN.exec(text);
   if (!m) return null;
   const id = m[1].toLowerCase();
   return /^(?:19|20)\d{2}$/.test(id) || !/\d/.test(id) ? null : id;

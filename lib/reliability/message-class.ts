@@ -1,4 +1,4 @@
-import { ownApplicationStatement, unquoted } from "./evidence.ts";
+import { marketingFact, ownApplicationStatement, unquoted } from "./evidence.ts";
 import { explicitOffer } from "./facts.ts";
 import type { RecruitingEmail } from "../recruiting/types.ts";
 
@@ -11,11 +11,13 @@ import type { RecruitingEmail } from "../recruiting/types.ts";
  *   community           a community, workspace or visit registration
  *   program-acceptance  acceptance INTO a programme (a cohort, academy, bootcamp, accelerator, career journey) that is not a job offer: no employment wording, no explicit offer
  */
-export type MessageClass = "event" | "survey" | "notice" | "community" | "program-acceptance";
-const EVENT = /\b(?:webinar|info(?:rmation)? session|session (?:confirmation|reminder)|you(?:'|’)re registered|registration (?:confirm|reminder)|rsvp\b|wait\s?list|irl event|office hours|virtual (?:event|session|series)|career fair|open evening|meet-?up|tech talk|tech stories|launch your career|ama\b|showcase|(?:event|session) (?:reminder|confirmation|is happening)|your .{0,40}\bevent\b)/i;
+export type MessageClass = "event" | "survey" | "notice" | "community" | "admin" | "logistics" | "marketing" | "program-acceptance";
+const EVENT = /\b(?:webinar|info(?:rmation)? session|session (?:confirmation|reminder)|you(?:'|’)re registered|registration (?:confirm|reminder)|rsvp\b|wait\s?list|irl event|office hours|(?:this|our) event\b|joining us at|capacity restrictions|(?:your|first|next|upcoming) (?:section|class|lesson|lecture)|section (?:leader|reminder)|course (?:starts|begins|reminder)|study group|deep work session|virtual (?:event|session|series)|career fair|open evening|meet-?up|tech talk|tech stories|launch your career|ama\b|showcase|(?:event|session) (?:reminder|confirmation|is happening)|your .{0,40}\bevent\b)/i;
 const SURVEY = /\b(?:survey|your feedback matters|rate your experience|tell us about your experience)\b/i;
 const NOTICE = /\b(?:the following contact .{0,60} has reached out|viewed your profile|jobs? (?:matching|for you)|new (?:job )?matches|recommended jobs|job alert|new roles? at)\b/i;
 const COMMUNITY = /\b(?:officially connected with|joined the .{0,40} community|welcome to the .{0,40} community|has invited you to (?:work|join)|(?:visit|tour) (?:has been|is) scheduled|thanks for registering for your .{0,30} visit)\b/i;
+const ADMIN = /\b(?:security code|verification code|access code|one[- ]time (?:pass)?code|verify your (?:email|e-mail|account|identity)|password (?:reset|change)|sign-?in (?:link|code)|log-?in (?:link|code)|candidate verification|confirm your (?:email|e-mail)(?: address)?|(?:communication|email|e-mail|notification) preferences|manage your preferences)\b/i;
+const LOGISTICS = /\b(?:background (?:check|investigation|verification)|travel (?:itinerary|booking|arrangements?|confirmation)|reimbursement|expense (?:report|form)|immigration|visa (?:sponsorship|support)|headshot|direct deposit|onboarding (?:documents|checklist|tasks?))\b/i;
 const ACCEPTED_INTO = /\b(?:congratulations|you(?:'|’)re in\b|you(?:'|’)ve been (?:accepted|selected)|acceptance to|welcome to the)\b/i;
 const PROGRAMME = /\b(?:program(?:me)?|academy|cohort|fellowship|bootcamp|accelerator|career journey|institute)\b/i;
 const EMPLOYMENT = /\b(?:internship|externship|intern\b|job|position|employment|role\b|compensation|stipend|salary|start date|offer letter|offer of|paid)\b/i;
@@ -27,9 +29,12 @@ export function messageClass(m: Pick<RecruitingEmail, "subject" | "bodyText">): 
   const lead = unquoted(`${m.subject}\n${m.bodyText.slice(0, 1600)}`);
   if (OWN_STEP.test(lead)) return null;
   if (ACCEPTED_INTO.test(lead) && PROGRAMME.test(lead) && !EMPLOYMENT.test(lead) && explicitOffer(m as RecruitingEmail) === null) return "program-acceptance";
+  if (ADMIN.test(m.subject) || ADMIN.test(m.bodyText.slice(0, 200))) return "admin";
+  if (LOGISTICS.test(m.subject) && explicitOffer(m as RecruitingEmail) === null) return "logistics";
   if (SURVEY.test(m.subject) || SURVEY.test(m.bodyText.slice(0, 400))) return "survey";
   if (NOTICE.test(lead)) return "notice";
   if (COMMUNITY.test(lead)) return "community";
   if (EVENT.test(m.subject) || EVENT.test(lead.slice(0, 500))) return "event";
+  if (marketingFact(m)) return "marketing";
   return null;
 }

@@ -40,3 +40,49 @@ test("an employer's interview invitation or assessment request is never classed 
   assert.equal(messageClass(m("Invitation to Interview with Acme", "Thank you for your interest in Acme. We would like to invite you to our Externship Interviews. This virtual session is 45 minutes.")), null);
   assert.equal(messageClass(m("Next step", "Please complete the online assessment within 7 days. This virtual event series is optional.")), null);
 });
+
+import { ownEnding, withdrawalAcknowledged } from "./evidence.ts";
+test("an employer's plain ending about the reader's own application is recognised, hypotheticals and quoted history are not", () => {
+  assert.equal(ownEnding({ subject: "Thanks for your interest", bodyText: "We appreciate the time you took to apply for the position: Software Engineer Intern. We are no longer reviewing applicants for this particular position." }), true);
+  assert.equal(ownEnding({ subject: "Information regarding your job application", bodyText: "Unfortunately, we have to inform you that this time we have decided to move on with other candidates." }), true);
+  assert.equal(ownEnding({ subject: "Next steps", bodyText: "Your application is active. If we are not moving forward with your candidacy we will tell you." }), false);
+  assert.equal(ownEnding({ subject: "Re: Update", bodyText: "Great, see you Monday.\n\nFrom: Recruiter <r@x.com>\nDate: Monday\nTo: you\nSubject: Update\n\nUnfortunately we will not be moving forward with your application." }), false, "history quoted from an earlier message is not this message");
+  assert.equal(ownEnding({ subject: "Re: Program", bodyText: "Because of these circumstances, with deep regret I must let you know that I will be unable to participate." }), false, "the reader's own narration");
+});
+test("the employer acknowledging a candidate's withdrawal is its own fact", () => {
+  assert.equal(withdrawalAcknowledged({ subject: "Re: Program", bodyText: "Thank you for the update. We completely understand why you are unable to join us for the internship this summer." }), true);
+  assert.equal(withdrawalAcknowledged({ subject: "Offer", bodyText: "We are excited that you are able to join us." }), false);
+});
+
+test("security codes, preference emails, section reminders and travel logistics are classed; an offer that mentions a background check is not", () => {
+  assert.equal(messageClass(m("Security code for your application to Acme")), "admin");
+  assert.equal(messageClass(m("Confirm your communication preferences")), "admin");
+  assert.equal(messageClass(m("Friendly reminder before our first section")), "event");
+  assert.equal(messageClass(m("Your Egencia travel itinerary and reimbursement forms")), "logistics");
+  assert.equal(messageClass(m("Offer of employment", "We are pleased to offer you the position. This offer is subject to a background check.")), null);
+});
+
+test("an ending sentence about other applicants, a process description, or an event capacity notice does not settle an application", () => {
+  assert.equal(ownEnding({ subject: "8 days left to finish your application", bodyText: "Submit by August 21 and you're entered to win. WEB101 applicants are not eligible, as prework is waived for that course." }), false);
+  assert.equal(withdrawalAcknowledged({ subject: "Re: Update on Harvey", bodyText: "Based on where things stand today we anticipate filling all intern roles by the end of this week. I understand this isn't the update you were hoping for." }), false);
+  assert.equal(messageClass(m("Innovate with Deutsche Bank Update", "Thank you for your interest in joining us at Innovate with Deutsche Bank. Due to capacity restrictions we are not able to invite you to participate in this event.")), "event");
+});
+
+test("an invitation to withdraw 'if you need to' is not an acknowledged withdrawal; a completed one is", () => {
+  assert.equal(withdrawalAcknowledged({ subject: "Update", bodyText: "If you need to withdraw your application at any point due to timing, please just let me know." }), false);
+  assert.equal(withdrawalAcknowledged({ subject: "Update", bodyText: "We have received your withdrawal of your application. Your application has been withdrawn." }), true);
+});
+
+test("an ending sentence wrapped over two lines is still one sentence", () => {
+  assert.equal(ownEnding({ subject: "Thank you for interviewing with Acme", bodyText: "After careful review we have decided to move\nforward with other candidates at this time.\n" }), true);
+});
+
+test("'we have made the decision to not move forward' ends an application; a bulk promotion is classed marketing", () => {
+  assert.equal(ownEnding({ subject: "Thanks for your interest in Acme", bodyText: "Thank you for your application to Acme! After reviewing your skills and experience, we have made the decision to not move forward for your application for the Intern position at this time." }), true);
+});
+
+test("a condition is not an ending: 'if you are not selected' and 'you will not be able to proceed if…'", () => {
+  assert.equal(endingWording({ subject: "Thank you for applying", bodyText: "We have received your application. If you are not selected for this position, keep an eye on our jobs page." }), false);
+  assert.equal(ownEnding({ subject: "Next steps", bodyText: "Thank you for completing your application. You will not be able to proceed to the next phase if the questionnaire is not completed." }), false);
+  assert.equal(ownEnding({ subject: "Update", bodyText: "Thank you for your application. Unfortunately, we are not able to move forward with your candidacy." }), true);
+});

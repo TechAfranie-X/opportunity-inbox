@@ -1,5 +1,4 @@
 import { NEAR_MISS, NEAR_MISS_WEAK } from "../reliability/flags.ts";
-import { receiptLike } from "../lifecycle/identity.ts";
 import { companyKey } from "./company.ts";
 import type { EffectiveEvent, Opportunity } from "./types.ts";
 
@@ -22,7 +21,7 @@ export function applyEntryPolicy(events: EffectiveEvent[], build: (events: Effec
     const inbound = o.events.filter((e) => !e.outbound);
     // (a) built only from uncorroborated model readings, or (b) one message that names no employer at all: neither is evidence of an application the person made (all six such cases checked against the real mailbox were junk)
     // (c) every message is an event, survey, platform notice or community message (the message-class signals): attending or answering, not applying
-    const classOnly = inbound.length > 0 && inbound.every((e) => !e.corrected && !e.confirmed && e.signals.some((x) => /^class:(?:event|survey|notice|community)$/.test(x)));
+    const classOnly = inbound.length > 0 && inbound.every((e) => !e.corrected && !e.confirmed && e.signals.some((x) => /^class:(?:event|survey|notice|community|admin|logistics|marketing)$/.test(x)));
     const noEmployer = o.company === "Unknown company" && inbound.length === 1 && !inbound[0].corrected && !inbound[0].confirmed;
     if (inbound.length === 0 || !(inbound.every(modelOnly) || noEmployer || classOnly)) continue;
     for (const e of o.events) drop.add(e.id);
@@ -50,8 +49,29 @@ export function proposeMissedEndings(events: EffectiveEvent[]): EffectiveEvent[]
   // an application ANCHOR at the same employer: a real (not model-only, not a message class) application, assessment, interview or offer event earlier in time
   const anchors = events.filter((a) => !a.outbound && a.company && PROCESS.has(a.type) && !a.signals.includes("semantic:event") && !a.signals.some((s) => s.startsWith("class:")));
   const anchored = (e: EffectiveEvent) => !!e.company && anchors.some((a) => a.company && companyKey(a.company) === companyKey(e.company!) && a.occurredAt.getTime() <= e.occurredAt.getTime());
-  return events.map((e) => (e.signals.includes("ending:wording") && (e.type === "status_update" || e.type === "follow_up") && !e.corrected && !e.confirmed && !e.outbound && !e.signals.some((s) => s.startsWith("decision:")) && anchored(e)
-    ? { ...e, type: "rejection" as const, signals: [...e.signals, "terminal:proposed", "ending:proposed-from-update"] } : e));
+  const open = (e: EffectiveEvent) => !e.corrected && !e.confirmed && !e.outbound && !e.signals.some((s) => s.startsWith("decision:"));
+  const quiet = (e: EffectiveEvent) => e.type === "status_update" || e.type === "follow_up";
+  // a deterministic ending sentence is credible evidence of its type whatever the reader's own confidence was
+  const sure = (e: EffectiveEvent): EffectiveEvent => ({ ...e, confidence: Math.max(e.confidence ?? 0, 0.9), fieldConfidence: { ...(e.fieldConfidence ?? {}), type: Math.max(e.fieldConfidence?.type ?? 0, 0.9) } as EffectiveEvent["fieldConfidence"] });
+  return events.map((e) => {
+    if (!open(e)) return e;
+    // a rule-typed rejection on a message that is a plain receipt (own application stated, no ending sentence) is an application receipt
+    if (e.type === "rejection" && e.signals.includes("own:receipt") && !e.signals.includes("ending:wording")) return sure({ ...e, type: "applied" as const, signals: [...e.signals.filter((s) => s !== "terminal:proposed"), "type:receipt-not-rejection"] });
+    // the employer acknowledges the candidate's withdrawal: the application ended by the candidate's own decision (verified: two independent statements, theirs and the employer's)
+    if (e.signals.includes("withdrawal:ack") && (quiet(e) || e.type === "rejection")) return sure({ ...e, type: "withdrawn" as const, signals: [...e.signals.filter((s) => s !== "terminal:proposed"), "ending:withdrawal-acknowledged"] });
+    // a plain ending sentence in employer voice about the reader's own application settles it, with or without an earlier anchor
+    if (e.signals.includes("ending:own")) {
+      if (quiet(e) || e.type === "applied") return sure({ ...e, type: "rejection" as const, signals: [...e.signals, "ending:settled-from-update"] });
+      if (e.type === "rejection" && e.signals.includes("terminal:proposed")) return sure({ ...e, signals: [...e.signals.filter((s) => s !== "terminal:proposed"), "ending:settled-own"] });
+    }
+    return e.signals.includes("ending:wording") && quiet(e) && anchored(e) ? { ...e, type: "rejection" as const, signals: [...e.signals, "terminal:proposed", "ending:proposed-from-update"] } : e;
+  });
+}
+
+/** A near miss whose own text ends or withdraws the application of a known employer is not "possible": it is a decided outcome of a real application and enters the pipeline (typed by proposeMissedEndings). */
+export function promoteDecisiveNearMisses(possible: EffectiveEvent[]): { promoted: EffectiveEvent[]; rest: EffectiveEvent[] } {
+  const decisive = (e: EffectiveEvent) => !!e.company && !/^unknown/i.test(e.company) && !e.outbound && (e.signals.includes("ending:own") || e.signals.includes("withdrawal:ack")) && !e.signals.some((s) => s.startsWith("class:"));
+  return { promoted: possible.filter(decisive).map((e) => ({ ...e, signals: [...e.signals.filter((s) => !s.startsWith("near-miss")), "entry:corroborated", "entry:decisive-ending"] })), rest: possible.filter((e) => !decisive(e)) };
 }
 
 /**
@@ -60,7 +80,7 @@ export function proposeMissedEndings(events: EffectiveEvent[]): EffectiveEvent[]
  */
 export function neutralizeClassed(events: EffectiveEvent[]): EffectiveEvent[] {
   const STAGE = new Set(["applied", "recruiter_outreach", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer", "rejection", "withdrawn"]);
-  return events.map((e) => (STAGE.has(e.type) && !e.corrected && !e.confirmed && !e.outbound && e.signals.some((s) => /^class:(?:event|survey|notice|community)$/.test(s)) && !e.signals.some((s) => s.startsWith("decision:"))
+  return events.map((e) => (STAGE.has(e.type) && !e.corrected && !e.confirmed && !e.outbound && e.signals.some((s) => /^class:(?:event|survey|notice|community|admin|logistics|marketing)$/.test(s)) && !e.signals.some((s) => s.startsWith("decision:"))
     ? { ...e, type: "status_update" as const, signals: [...e.signals, "type:neutralized-by-class"] } : e));
 }
 
@@ -72,10 +92,10 @@ export function retypeAssessmentPlatforms(events: EffectiveEvent[]): EffectiveEv
 }
 
 /**
- * A model-only "applied" whose subject is not a receipt (a welcome message, a promotion, a security code, a reminder) states no application and has no corroborating wording: it waits as a
+ * A model-only "applied" with no corroborating wording (no own-application statement: a welcome message, a promotion, an \"apply now\" invitation, a security code, a reminder) states no application: it waits as a
  * possible item instead of riding into a real application. Receipts, corroborated events, and anything a person confirmed or corrected stay.
  */
 export function demoteNonReceipts(events: EffectiveEvent[]): { kept: EffectiveEvent[]; demoted: EffectiveEvent[] } {
-  const demote = (e: EffectiveEvent) => e.type === "applied" && !e.outbound && !e.corrected && !e.confirmed && e.signals.includes("semantic:event") && !e.signals.includes("entry:corroborated") && !e.signals.some((s) => s.startsWith("decision:")) && !receiptLike(e);
+  const demote = (e: EffectiveEvent) => e.type === "applied" && !e.outbound && !e.corrected && !e.confirmed && e.signals.includes("semantic:event") && !e.signals.includes("entry:corroborated") && !e.signals.some((s) => s.startsWith("decision:"));
   return { kept: events.filter((e) => !demote(e)), demoted: events.filter(demote).map((e) => ({ ...e, signals: [...e.signals, "near-miss", "near-miss:weak", "entry:not-a-receipt"] })) };
 }

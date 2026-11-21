@@ -104,6 +104,28 @@ function programConflictWithGroup(g: Group, e: EffectiveEvent): boolean {
   return false;
 }
 
+/** Programme markers a message SUBJECT names ("Externship Headshot", "Fellowship call"): the strong, non-default programme types only. */
+const SUBJECT_PROGRAMS = new Set(["externship", "fellowship", "apprenticeship", "hackathon", "symposium"]);
+const subjectProgramsOf = (e: EffectiveEvent): string[] => [...new Set([...(e.subject ? programsOf(e.subject) : []), ...(e.role && !isRoleFragment(e.role) ? programsOf(e.role) : [])].filter((p) => SUBJECT_PROGRAMS.has(p)))];
+/** A message whose subject names one programme type does not join a group that is another programme type (an Externship's travel and reimbursement mail is not the 2027 Internship). */
+function subjectProgramConflict(g: Group, e: EffectiveEvent): boolean {
+  const ep = subjectProgramsOf(e);
+  if (ep.length === 0) {
+    // the reverse: an event that names the default programme ("Internship") does not join a group whose own mail names another programme type
+    if (!e.role || isRoleFragment(e.role) || !/\bintern(?:ship)?s?\b/i.test(e.role) || programsOf(e.role).length > 0) return false;
+    return g.events.some((x) => subjectProgramsOf(x).length > 0);
+  }
+  const gp = new Set(g.events.flatMap((x) => [...subjectProgramsOf(x), ...(x.role && !isRoleFragment(x.role) ? programsOf(x.role).filter((p) => SUBJECT_PROGRAMS.has(p)) : [])]));
+  if (gp.size > 0) return !ep.some((p) => gp.has(p));
+  return g.events.some((x) => x.role && !isRoleFragment(x.role) && /\bintern(?:ship)?s?\b/i.test(x.role) && programsOf(x.role).length === 0);
+}
+/** The message's subject names a programme type that the group already is: that agreement outweighs a generic "Internship" role the reader filled in. */
+function subjectProgramAgrees(g: Group, e: EffectiveEvent): boolean {
+  const ep = subjectProgramsOf(e);
+  if (ep.length === 0) return false;
+  return g.events.some((x) => [...subjectProgramsOf(x), ...(x.role && !isRoleFragment(x.role) ? programsOf(x.role) : [])].some((p) => ep.includes(p)));
+}
+
 /** The hiring unit a message names ("the Controls team"), from the `unit:` signal the reader recorded. */
 const unitOf = (e: EffectiveEvent): string | null => e.signals.find((x) => x.startsWith("unit:"))?.slice(5) ?? null;
 const unitsOf = (g: Group): Set<string> => new Set(g.events.map(unitOf).filter((u): u is string => !!u));
@@ -114,7 +136,8 @@ export type Relation = "match" | "generic" | "conflict";
 export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, corroborated = false): Relation {
   const ec = eventCycle(e, ctx);
   if (cyclesConflict(groupCycle(g), ec)) return "conflict";
-  if (programConflictWithGroup(g, e)) return "conflict";
+  if (programConflictWithGroup(g, e) && !(ctx?.attribution && subjectProgramAgrees(g, e))) return "conflict";
+  if (ctx?.attribution && subjectProgramConflict(g, e)) return "conflict";
   if (ctx?.attribution && ((isHack(e) && g.events.every((x) => !isHack(x))) || (!isHack(e) && g.events.every(isHack)))) return "conflict"; // a hackathon application is not the employer's job application
   // (Phase 2) A requisition / job reference number is identity: the same number is the same application, and two different numbers are two applications, whatever the wording says.
   // (Phase 2) The same appointment is the same application: an interview at one employer at the same scheduled moment (a calendar invitation and the email about it, or a reminder) is one process.
@@ -141,9 +164,9 @@ export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, cor
 /** Two receipts that state the SAME requisition, or the same specific role within half a day, are one application's confirmations (a portal and a mailbox both write), not two applications. */
 const repeatDelivery = (x: EffectiveEvent, e: EffectiveEvent) => (!!reqOf(e) && reqOf(e) === reqOf(x)) || (specific(e.role) && specific(x.role) && Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) < DAY / 2 && roleRelationV2(x.role!, e.role!) === "match");
 
-const isClassed = (x: EffectiveEvent) => x.signals.some((q) => /^class:(?:event|survey|notice|community)$/.test(q));
+const isClassed = (x: EffectiveEvent) => x.signals.some((q) => /^class:(?:event|survey|notice|community|marketing)$/.test(q));
 
-function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean, ctx?: IdentityContext): boolean {
+export function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean, ctx?: IdentityContext): boolean {
   if (rel === "conflict") return false;
   // event, survey, notice and community messages (message-class signals) cluster with each other, never with an application's own mail, unless the same Gmail thread ties them to it
   if (ctx?.attribution && !viaThread && !e.linkedTo && !e.confirmed && isClassed(e) !== g.events.every(isClassed)) return false;
@@ -158,6 +181,8 @@ function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean,
   if (ctx?.attribution && reqOf(e) && g.events.every((x) => !reqOf(x) && x.signals.includes("semantic:event") && !x.signals.includes("entry:corroborated") && !x.corrected && !x.confirmed)) return false;
   const gap = e.occurredAt.getTime() - lastAt(g);
   if (rel === "generic" && ctx?.cycleEnded && PROCESS_TYPES.has(e.type) && cycleOver(g, e)) return false;
+  // a subject that names the group's own programme type ("Externship Call" for an externship) is stronger than the generic window
+  if (rel === "generic" && ctx?.attribution && subjectProgramAgrees(g, e)) return gap <= SPECIFIC_WINDOW_NO_CYCLE;
   if (rel === "generic") return gap <= (viaThread ? GENERIC_WINDOW_WITH_THREAD : GENERIC_WINDOW);
   // a role-matched message with no cycle of its own, long after the group's single recruiting season ended, outside any shared thread: a new cycle's mail, not the old application
   if (!viaThread && ctx?.cycleEnded && eventCycle(e, ctx).years.length === 0 && cycleOver(g, e)) return false;
@@ -316,12 +341,21 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
         const scored = pool.map((g) => ({ g, rel: relation(g, e, ctx) })).filter(({ g, rel }) => allowed(g, e, rel, false, ctx));
         const matches = scored.filter((s) => s.rel === "match");
         const generics = scored.filter((s) => s.rel === "generic");
-        const pick = matches.length ? matches : generics;
+        // a message whose subject names a programme type ("Externship Call") is attributed among the candidates that ARE that programme before the role-less abstention below applies
+        const subjectNarrow = (list: typeof scored) => {
+          if (!ctx?.attribution || subjectProgramsOf(e).length === 0) return list;
+          const n = list.filter(({ g }) => subjectProgramAgrees(g, e));
+          if (n.length === 0) return list;
+          // several candidates are that programme: the one whose own specific role names it is the application itself, the others are fragments of its mail
+          const named = n.filter(({ g }) => { const r = groupRole(g); return !!r && specific(r) && programsOf(r).some((p) => subjectProgramsOf(e).includes(p)); });
+          return named.length === 1 ? named : n;
+        };
+        const pick = subjectNarrow(matches.length ? matches : generics);
         if (matches.length > 1 && !e.company) { /* employer-less with several role matches: fall through to the most recent */ }
         // ABSTAIN: an event that states no specific role, at an employer with two or more live applications for DIFFERENT roles, cannot be attributed by employer
         // alone. Joining the latest would be a guess that merges two applications; it stays on its own and says why.
         const roleSet = new Set(pick.map(({ g }, i) => { const r = groupRole(g); return r && specific(r) ? roleCore(r).join(" ") : `#${g.events[0].id}:${i}`; }));
-        if (matches.length === 0 && generics.length > 1 && roleSet.size > 1 && !specific(e.role)) {
+        if (matches.length === 0 && subjectNarrow(generics).length > 1 && roleSet.size > 1 && !specific(e.role) && !(subjectNarrow(generics).length === 1)) {
           const byLifecycle = breakTie(generics, e);
           if (byLifecycle) target = byLifecycle.g; else ambiguous = generics.map(({ g }) => groupRole(g) ?? "an application with no stated role").join(" / ");
           if (!target && !CONSEQUENTIAL.has(e.type)) target = generics.sort((a, b) => lastAt(b.g) - lastAt(a.g))[0]?.g;

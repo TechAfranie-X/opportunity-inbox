@@ -20,23 +20,38 @@ if (rb) {
   for (const [id, added] of Object.entries(back)) for (const sig of added) await db.execute(sql`update recruiting_events set signals = (select coalesce(jsonb_agg(x), '[]'::jsonb) from jsonb_array_elements(signals) x where x <> to_jsonb(${sig}::text)) where id = ${id}::uuid and user_google_sub = ${sub} and correction is null`);
   console.log(`rolled back ${Object.keys(back).length} rows`); process.exit(0);
 }
-const rows = rowsOf(await db.execute(sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and (signals::text not like '%near-miss%' or signals::text like '%semantic:%')`));
+const refresh = process.argv.includes("--refresh"); // targeted: re-derive the ending signals of rows that have them (and any listed message-id prefixes), removing the ones the text no longer supports
+const extra = refresh && process.argv[process.argv.indexOf("--refresh") + 1]?.match(/^[0-9a-f,]+$/) ? process.argv[process.argv.indexOf("--refresh") + 1].split(",") : [];
+const STALE = ["ending:own", "withdrawal:ack", "ending:wording", "own:receipt"];
+const modeled = process.argv.includes("--modeled-unclassed"); // targeted: only model-found or near-miss events that carry no message class yet (the mail the class facts exist for)
+const rows = rowsOf(await db.execute(modeled
+  ? sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and signals::text not like '%class:%' and (signals::text like '%semantic:event%' or signals::text like '%near-miss%')`
+  : refresh
+  ? sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and (signals::text like '%ending:own%' or signals::text like '%withdrawal:ack%' or signals::text like '%ending:wording%' or signals::text like '%terminal:proposed%' or type = 'rejection' or left(gmail_message_id, 8) = any(string_to_array(${extra.join(",")}, ',')))`
+  : sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null`));
 const emails = [];
-const token = await refreshGmailAccessToken((await getGmailRefreshToken(sub))!);
-for (let i = 0; i < rows.length; i += 20) emails.push(...(await fetchEmailsById(token, rows.slice(i, i + 20).map((r) => r.gmail_message_id as string))).emails);
+// a run can outlive one access token (an hour): refresh before every batch of 100 messages, and say how far it is
+for (let i = 0; i < rows.length; i += 20) {
+  if (i % 100 === 0) { var token = await refreshGmailAccessToken((await getGmailRefreshToken(sub))!); if (i % 200 === 0) console.log(`  fetched ${i}/${rows.length}`); } // eslint-disable-line no-var
+  emails.push(...(await fetchEmailsById(token!, rows.slice(i, i + 20).map((r) => r.gmail_message_id as string))).emails);
+}
 const by = new Map(emails.map((m) => [m.id, m]));
-const plan: Record<string, string[]> = {}; const tally: Record<string, number> = {}; const names: Record<string, Set<string>> = {};
+const plan: Record<string, string[]> = {}; const removals: Record<string, string[]> = {}; const tally: Record<string, number> = {}; const names: Record<string, Set<string>> = {};
 for (const r of rows) {
   const m = by.get(r.gmail_message_id as string); if (!m) continue;
-  const add = evidenceSignals(m, { type: r.type as never, signals: r.signals as string[], outbound: false });
+  const have = r.signals as string[];
+  const add = evidenceSignals(m, { type: r.type as never, signals: refresh ? have.filter((x) => !STALE.includes(x)) : have, outbound: false }).filter((x) => !have.includes(x));
+  if (refresh) { const fresh = evidenceSignals(m, { type: r.type as never, signals: have.filter((x) => !STALE.includes(x)), outbound: false }); const stale = have.filter((x) => STALE.includes(x) && !fresh.includes(x)); if (stale.length) removals[r.id as string] = stale; }
   if (add.length === 0) continue;
   plan[r.id as string] = add; for (const a of add) { tally[a] = (tally[a] ?? 0) + 1; (names[a] ??= new Set()).add(String(r.company).slice(0, 18)); }
 }
-console.log(`${rows.length} uncorrected stored events read; ${Object.keys(plan).length} get a signal:`, JSON.stringify(tally));
+console.log(`${rows.length} uncorrected stored events read; ${Object.keys(plan).length} get a signal:`, JSON.stringify(tally), refresh ? `; ${Object.keys(removals).length} lose a stale signal` : "");
 for (const [k, v] of Object.entries(names)) console.log(`  ${k}: ${[...v].slice(0, 14).join(", ")}`);
 if (!apply) { console.log("dry run: nothing changed (add --apply)"); process.exit(0); }
 const dir = `${homedir()}/.opportunity-inbox-sealed`; mkdirSync(dir, { recursive: true });
 const file = `${dir}/stamp-evidence-${sub.slice(0, 6)}-${Date.now()}.json`; writeFileSync(file, JSON.stringify(plan));
 for (const [id, add] of Object.entries(plan)) await db.execute(sql`update recruiting_events set signals = signals || ${JSON.stringify(add)}::jsonb where id = ${id}::uuid and user_google_sub = ${sub} and correction is null`);
+for (const [id, rm] of Object.entries(removals)) for (const sig of rm) await db.execute(sql`update recruiting_events set signals = (select coalesce(jsonb_agg(x), '[]'::jsonb) from jsonb_array_elements(signals) x where x <> to_jsonb(${sig}::text)) where id = ${id}::uuid and user_google_sub = ${sub} and correction is null`);
+if (Object.keys(removals).length) writeFileSync(`${file}.removed.json`, JSON.stringify(removals));
 console.log(`applied; backup ${file}; rollback: --rollback ${file}`);
 process.exit(0);

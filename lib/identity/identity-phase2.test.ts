@@ -138,3 +138,17 @@ test("a role-matched reply with no cycle, months after the group's season ended 
   assert.deepEqual(sizes(groupEventsV2([old, late], { cycleEnded: true })), [1, 1]);
   assert.deepEqual(sizes(groupEventsV2([old, late])), [2], "unchanged without the option");
 });
+
+test("a parenthesised posting number in the subject is a requisition: repeated confirmations are one application, two numbers are two", () => {
+  const r = (num: string, d: number, thread: string) => ev("applied", d, { gmailThreadId: thread, subject: `Acme - Next steps for your Internship - Digital (${num}) application`, role: "Internship - Digital" });
+  assert.deepEqual(sizes(groupEventsV2([r("62240", 0, "A"), r("62240", 2, "B")], { distinctThreadReceipts: true, attribution: true })), [2]);
+  assert.deepEqual(sizes(groupEventsV2([r("62240", 0, "A"), r("62217", 2, "B")], { distinctThreadReceipts: true, attribution: true })), [1, 1]);
+});
+
+test("a message whose subject names an externship does not join the same employer's internship application", () => {
+  const intern = ev("interview_scheduled", 0, { company: "Alcon", role: "2027 Internship", gmailThreadId: "A", subject: "2027 Intern Interview Schedule" });
+  const ext = ev("status_update", 20, { company: "Alcon", role: null, gmailThreadId: "B", subject: "Your Externship Headshot", fieldConfidence: { type: 0.9, company: 0.9, role: 0 } });
+  assert.deepEqual(sizes(groupEventsV2([intern, ext], { attribution: true })), [1, 1]);
+  const ext2 = ev("applied", 0, { company: "Alcon", role: "2026 Innovate Boldly Externship", gmailThreadId: "C", subject: "Application received" });
+  assert.deepEqual(sizes(groupEventsV2([ext2, ext], { attribution: true })).sort(), [1, 1].length === 2 ? [2] : []);
+});

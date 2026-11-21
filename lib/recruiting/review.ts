@@ -127,7 +127,8 @@ export function buildReviewQueue(opportunities: Opportunity[], policy: Policy = 
   }
   items.sort((a, b) => b.impact - a.impact || b.event.occurredAt.getTime() - a.event.occurredAt.getTime());
   const maybe = possible
-    .filter((e) => !e.outbound)
+    // Mail that the message-class facts already explain (an event, survey, platform notice, community message, security code, logistics, programme acceptance) is RESOLVED by evidence, not asked about
+    .filter((e) => !e.outbound && !e.signals.some((x) => /^class:/.test(x)))
     .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
     .map((event): ReviewItem => {
       const reasons = [...new Set((event.reviewReasons ?? []).map(plainReason))];
@@ -135,6 +136,14 @@ export function buildReviewQueue(opportunities: Opportunity[], policy: Policy = 
       const { impact, why } = reviewImpact({ event, active: false, possible: true, reasons }, now);
       return { event, opportunityKey: "", company: event.company ?? "Unknown sender", role: null, reasons, possible: true, kind: "possible" as const, ...(weak ? { weak: true } : {}), impact: weak ? 0 : impact, why, tier: !weak && impact >= IMPORTANT_AT ? "important" : "routine" };
     });
-  const queue = [...items, ...maybe].sort((a, b) => Number(Boolean(a.weak)) - Number(Boolean(b.weak)) || b.impact - a.impact || b.event.occurredAt.getTime() - a.event.occurredAt.getTime());
+  // ONE question per Gmail message: every reason that touches the same message is folded into the strongest card (a doubt, a contradiction, a proposed ending and an identity suggestion about one message are one decision)
+  const byMessage = new Map<string, ReviewItem>();
+  for (const it of [...items, ...maybe]) {
+    const k = it.event.gmailMessageId, seen = byMessage.get(k);
+    if (!seen) { byMessage.set(k, it); continue; }
+    const keep = it.impact > seen.impact || (it.impact === seen.impact && !it.weak && seen.weak) ? it : seen, other = keep === it ? seen : it;
+    byMessage.set(k, { ...keep, reasons: [...new Set([...keep.reasons, ...other.reasons])] });
+  }
+  const queue = [...byMessage.values()].sort((a, b) => Number(Boolean(a.weak)) - Number(Boolean(b.weak)) || b.impact - a.impact || b.event.occurredAt.getTime() - a.event.occurredAt.getTime());
   return options.prioritize ? prioritize(queue, opportunities, now) : queue;
 }

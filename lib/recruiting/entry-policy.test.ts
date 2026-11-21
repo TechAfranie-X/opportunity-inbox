@@ -116,8 +116,8 @@ test("an interview-typed invitation from an online-assessment platform is an ass
 import { demoteNonReceipts } from "./entry-policy.ts";
 test("a model-only 'applied' that is not a receipt waits as possible; receipts, corroborated and confirmed ones stay", () => {
   const mk = (subject: string, extra: object = {}) => ev("applied", 1, { subject, signals: ["semantic:event"], ...extra });
-  const r = demoteNonReceipts([mk("Welcome to Google AI Plus"), mk("Thank you for applying to Duolingo!"), mk("Security code for your account"), mk("Welcome aboard", { confirmed: true }), mk("Newsletter", { signals: ["semantic:event", "entry:corroborated"] })]);
-  assert.deepEqual(r.demoted.map((e) => e.subject), ["Welcome to Google AI Plus", "Security code for your account"]);
+  const r = demoteNonReceipts([mk("Welcome to Google AI Plus"), mk("Thank you for applying to Duolingo!", { signals: ["semantic:event", "entry:corroborated"] }), mk("Apply now: Partner Internship"), mk("Security code for your account"), mk("Welcome aboard", { confirmed: true }), mk("Newsletter", { signals: ["semantic:event", "entry:corroborated"] })]);
+  assert.deepEqual(r.demoted.map((e) => e.subject), ["Welcome to Google AI Plus", "Apply now: Partner Internship", "Security code for your account"]);
   assert.equal(r.kept.length, 3);
   assert.ok(r.demoted[0].signals.includes("near-miss:weak"));
 });
@@ -127,4 +127,39 @@ test("a role naming a year range is one programme year, not mixed cycles", () =>
   const two = (a: string, b: string) => detectContradictions([ev("applied", 1, { role: a }), ev("status_update", 5, { role: b })]).some((c) => c.kind === "mixed_cycles");
   assert.equal(two("2026-2027 AI Program", "2026-2027 AI Program"), false);
   assert.equal(two("Software Intern Summer 2026", "Software Intern Summer 2027"), true);
+});
+
+import { promoteDecisiveNearMisses } from "./entry-policy.ts";
+test("an employer's own plain ending settles an application with or without an earlier anchor; an acknowledged withdrawal closes as withdrawn", () => {
+  const lone = proposeMissedEndings([ev("status_update", 2, { company: "Solo Co", signals: ["ending:own", "ending:wording"] })]);
+  assert.equal(lone[0].type, "rejection");
+  assert.ok(!lone[0].signals.includes("terminal:proposed"), "settled, not proposed");
+  const opp = buildOpportunities([ev("applied", 1, { company: "Solo Co" }), lone[0]]);
+  assert.equal(opp[0].status, "closed");
+  const upgraded = proposeMissedEndings([ev("rejection", 2, { company: "Up Co", signals: ["ending:own", "terminal:proposed"] })]);
+  assert.ok(!upgraded[0].signals.includes("terminal:proposed"));
+  const w = proposeMissedEndings([ev("rejection", 3, { company: "Lab", signals: ["withdrawal:ack", "terminal:proposed"] })]);
+  assert.equal(w[0].type, "withdrawn");
+  const guarded = proposeMissedEndings([ev("status_update", 2, { company: "Solo Co", signals: ["ending:own"], confirmed: true })]);
+  assert.equal(guarded[0].type, "status_update", "a person's confirmation is left alone");
+});
+test("a near miss that ends a known employer's application enters the pipeline; an unknown employer or a message class does not", () => {
+  const r = promoteDecisiveNearMisses([ev("status_update", 1, { company: "Volvo", signals: ["near-miss", "ending:own"] }), ev("status_update", 1, { company: "Unknown company", signals: ["near-miss", "ending:own"] }), ev("status_update", 1, { company: "Acme", signals: ["near-miss", "ending:own", "class:event"] }), ev("status_update", 1, { company: "Acme", signals: ["near-miss"] })]);
+  assert.deepEqual(r.promoted.map((e) => e.company), ["Volvo"]);
+  assert.equal(r.rest.length, 3);
+  assert.ok(!r.promoted[0].signals.includes("near-miss"));
+});
+
+import { buildReviewQueue } from "./review.ts";
+test("Review asks ONE question per Gmail message, and mail the message-class facts explain is resolved, not asked about", () => {
+  const same = ev("rejection", 4, { company: "Dup Co", signals: ["terminal:proposed"], reviewReasons: ["type: low confidence"] });
+  const opps = buildOpportunities([ev("applied", 1, { company: "Dup Co" }), same]);
+  const queue = buildReviewQueue(opps, undefined, [], new Date(Date.UTC(2026, 6, 1)));
+  const perMessage = new Map<string, number>();
+  for (const q of queue) perMessage.set(q.event.gmailMessageId, (perMessage.get(q.event.gmailMessageId) ?? 0) + 1);
+  assert.ok([...perMessage.values()].every((c) => c === 1), "no message is asked about twice");
+  const classed = ev("status_update", 2, { company: "Event Co", signals: ["near-miss", "class:event"], reviewReasons: ["possible: a second reader thinks this is hiring mail"] });
+  const plain = ev("status_update", 2, { company: "Plain Co", signals: ["near-miss"], reviewReasons: ["possible: a second reader thinks this is hiring mail"] });
+  const q2 = buildReviewQueue([], undefined, [classed, plain], new Date(Date.UTC(2026, 6, 1)));
+  assert.deepEqual(q2.map((q) => q.event.company), ["Plain Co"]);
 });

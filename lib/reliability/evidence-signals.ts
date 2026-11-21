@@ -1,7 +1,7 @@
 import { requisitionOf } from "../identity/represented-employer.ts";
 import { notAProcess } from "../semantic/assist.ts";
 import type { ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
-import { endingWording, marketingFact } from "./evidence.ts";
+import { endingWording, marketingFact, ownApplicationStatement, ownEnding, withdrawalAcknowledged } from "./evidence.ts";
 import { messageClass } from "./message-class.ts";
 
 /**
@@ -15,7 +15,13 @@ export function evidenceSignals(m: RecruitingEmail, e: Pick<ExtractedEvent, "typ
   if (c) out.push(`class:${c}`);
   // an UPDATE that actually ends the application (the reader typed it as a status update): evidence for a proposed ending, never a settled one. The view layer additionally requires a real
   // application anchor at the same employer before it uses this (lib/recruiting/entry-policy.ts proposeMissedEndings).
-  if (!c && (e.type === "status_update" || e.type === "follow_up") && endingWording(m) && !marketingFact(m) && !notAProcess(m)) out.push("ending:wording");
+  if (!c && (e.type === "status_update" || e.type === "follow_up" || e.type === "rejection") && endingWording(m) && !marketingFact(m) && !notAProcess(m)) out.push("ending:wording");
+  // the employer ends THIS application in plain voice about the reader's own application: strong enough to settle; and an acknowledged candidate withdrawal
+  // (an "applied" receipt that mentions an ending in passing is still a receipt)
+  if (!c && ownEnding(m) && !marketingFact(m) && !notAProcess(m) && !(e.type === "applied" && ownApplicationStatement(m))) out.push("ending:own");
+  if (!c && withdrawalAcknowledged(m)) out.push("withdrawal:ack");
+  // the message states the reader's own application (a receipt) and contains no ending sentence: a rule-typed "rejection" on it is a mistake
+  if (!c && ownApplicationStatement(m) && !endingWording(m) && !withdrawalAcknowledged(m)) out.push("own:receipt");
   // a requisition / job number the message states is identity evidence (only the id is kept, never text)
   const req = requisitionOf(`${m.subject}\n${m.bodyText.slice(0, 3000)}`);
   if (req) out.push(`req:${req}`);
