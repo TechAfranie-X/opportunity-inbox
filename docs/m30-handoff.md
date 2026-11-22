@@ -111,3 +111,6 @@ Programme lifecycle (`lib/lifecycle/program.ts`), hard identity constraints and 
 
 ## Checkpoint 9: journey trust and correctness (see docs/m30-journey-trust.md)
 Hard identity vetoes, terminal-to-open-sibling reconciliation, corrected-event regrouping (fields untouched), programme states removed/awarded/completed externship, no elapsed-time actions (+ programme deadline action), programme evidence recovery and history deepening scripts (insert-only, reversible), vendor evidence recovery, wording families for hard negatives. Invariants 53/53; Today 2 supported actions; Review 0/40/89. Remaining: Susquehanna, TMCF corrected fragments, 40 housekeeping, CRE session confirmations. Next: fresh independent validation.
+
+## Checkpoint 10: autonomous evidence resolution (see docs/m31-autonomous-evidence-resolution.md)
+`lib/recruiting/autonomy.ts` decides handled / set aside / unassigned / ask before any question exists; Review shows only genuine questions with what is missing, why Gmail cannot answer and what depends on it; no "Yes, it is recruiting" prompts; class `draft` and wider notice/event/account wording; programme mail attaches across hosts. The 128 items: 0 questions. Remaining: independent validation of the dispositions, false platform journeys (CodePath), 7 unassigned.

@@ -24,6 +24,8 @@ export type TriageItem = {
   source: string;
   /** The Gmail conversation to open, or null (sample mailbox). The link itself is built client-side for the connected account. */
   gmailThread: string | null;
+  /** What the question needs: what is missing, why Gmail cannot answer it, and what depends on the answer. */
+  ask?: { missing: string; whyNotResolved: string; decision: string };
 };
 
 /**
@@ -33,8 +35,6 @@ export type TriageItem = {
  */
 export function Triage({ items, editors }: { items: TriageItem[]; editors: Record<string, ReactNode> }) {
   const important = items.filter((i) => !i.weak && i.tier === "important");
-  const housekeeping = items.filter((i) => !i.weak && i.tier === "routine");
-  const suggestions = items.filter((i) => i.weak);
   const [skipped, setSkipped] = useState<string[]>([]);
   const [picked, setPicked] = useState<string | null>(null);
   const [fixingFor, setFixingFor] = useState<string | null>(null);
@@ -62,14 +62,6 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
     return () => window.removeEventListener("keydown", onKey);
   }, [current]);
 
-  const below = (
-    <>
-      {housekeeping.length + suggestions.length > 0 ? <p className="t-meta mt-8 max-w-[56ch] text-ink-3">Also waiting, and not in your pipeline: {housekeeping.length} smaller check{housekeeping.length === 1 ? "" : "s"} and {suggestions.length} weak suggestion{suggestions.length === 1 ? "" : "s"}. Nothing is marked right for you in bulk.</p> : null}
-      {housekeeping.length > 0 ? <div className="mt-10"><FoldedList title="Housekeeping" note="Smaller questions that keep your history accurate. None of them affects what needs you now." items={housekeeping} editors={editors} confirmLabel="Looks right" /></div> : null}
-      {suggestions.length > 0 ? <div className="mt-6"><FoldedList title="Also possibly recruiting" note="Mail that looks a little like hiring but that we are less sure about. None of it is in your pipeline." items={suggestions} editors={editors} confirmLabel="Yes, it is recruiting" /></div> : null}
-    </>
-  );
-
   if (!current) {
     return (
       <div>
@@ -77,7 +69,6 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
           <h2 className="t-title">Nothing important to review.</h2>
           <p className="mt-2 max-w-[44ch] text-ink-2">Everything that could change what you do next is settled. New doubts will wait here, most important first.</p>
         </div>
-        {below}
       </div>
     );
   }
@@ -86,7 +77,7 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
   return (
     <div>
       <p className="t-meta tnum text-ink-3" aria-live="polite">
-        {isImportant ? `${position + 1} of ${important.length} important ${important.length === 1 ? "review" : "reviews"}${housekeeping.length ? ` · ${housekeeping.length} housekeeping below` : ""}` : "Housekeeping"}
+        {isImportant ? `${position + 1} of ${important.length} important ${important.length === 1 ? "review" : "reviews"}` : "Housekeeping"}
       </p>
       <div className="triage-rail mt-3" aria-hidden>
         <span style={{ width: `${isImportant ? Math.max(4, ((position + 1) / Math.max(1, important.length)) * 100) : 4}%` }} />
@@ -112,9 +103,10 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
         <p className="t-meta mt-2"><span className="chip">{current.why}</span></p>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <div>
-            <p className="t-meta text-ink-3">Why we are unsure</p>
-            <p className="mt-1 text-ink-2">{current.reasons.join(" ")}</p>
+          <div className="space-y-2">
+            <p className="t-meta text-ink-3">What is missing</p>
+            <p className="text-ink-2">{current.ask?.missing ?? current.reasons.join(" ")}</p>
+            {current.ask ? (<><p className="t-meta text-ink-3">Why Gmail cannot answer it</p><p className="text-ink-2">{current.ask.whyNotResolved}</p><p className="t-meta text-ink-3">What depends on it</p><p className="text-ink-2">{current.ask.decision}</p></>) : null}
           </div>
           <div className="min-w-0">
             <p className="t-meta text-ink-3">From the email</p>
@@ -129,7 +121,7 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
           <form ref={confirmForm} action={confirmEventAction}>
             <input type="hidden" name="eventId" value={current.id} />
             <button type="submit" className="btn-primary inline-flex items-center gap-2">
-              <IconCheck />{current.possible ? "Yes, it is recruiting" : "Looks right"} <span className="keyhint ml-1 !border-white/30 !text-white/80" aria-hidden>Y</span>
+              <IconCheck />Looks right <span className="keyhint ml-1 !border-white/30 !text-white/80" aria-hidden>Y</span>
             </button>
           </form>
           <button type="button" className="btn-soft inline-flex items-center gap-2" aria-expanded={fixing} aria-controls={editorId} onClick={toggleFix}>
@@ -173,68 +165,6 @@ export function Triage({ items, editors }: { items: TriageItem[]; editors: Recor
           </ul>
         </section>
       ) : null}
-      {below}
-    </div>
-  );
-}
-
-/** Quiet lists: offered, folded, never counted. Each can still be settled in place. */
-function FoldedList({ title, note, items, editors, confirmLabel }: { title: string; note: string; items: TriageItem[]; editors: Record<string, ReactNode>; confirmLabel: string }) {
-  const [open, setOpen] = useState(false);
-  const id = useId();
-  return (
-    <div>
-      <button type="button" className="link-quiet inline-flex items-center gap-1.5" aria-expanded={open} aria-controls={id} onClick={() => setOpen((v) => !v)}>
-        <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ transform: open ? "rotate(90deg)" : "none" }}>
-          <path d="M3 1.5 6 4.5 3 7.5" />
-        </svg>
-        {title} · {items.length}
-      </button>
-      <div id={id} className="disclose" data-open={open} aria-hidden={!open} inert={!open}>
-        <div>
-          <p className="t-meta mb-2 mt-3 max-w-[52ch] text-ink-3">{note}</p>
-          <ul className="list border-y border-line">
-            {items.map((i) => (
-              <li key={i.id} className="py-4">
-                <div className="flex flex-wrap items-center justify-between gap-x-6">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <EntityMark name={i.company} state={i.entity} size="sm" />
-                    <p className="truncate font-medium tracking-tight">{i.company}</p>
-                  </div>
-                  <p className="t-meta tnum text-ink-3">{i.date}</p>
-                </div>
-                <p className="t-meta mt-1 truncate text-ink-3">{i.source}</p>
-                <InlineActions id={i.id} editor={editors[i.id]} confirmLabel={confirmLabel} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InlineActions({ id, editor, confirmLabel }: { id: string; editor: ReactNode; confirmLabel: string }) {
-  const [fix, setFix] = useState(false);
-  const eid = useId();
-  return (
-    <div className="mt-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <form action={confirmEventAction}>
-          <input type="hidden" name="eventId" value={id} />
-          <button type="submit" className="btn-soft">{confirmLabel}</button>
-        </form>
-        <button type="button" className="link-quiet" aria-expanded={fix} aria-controls={eid} onClick={() => setFix((v) => !v)}>
-          {fix ? "Close" : "Fix details"}
-        </button>
-        <form action={ignoreEventAction}>
-          <input type="hidden" name="eventId" value={id} />
-          <button type="submit" className="link-quiet">Not recruiting</button>
-        </form>
-      </div>
-      <div id={eid} className="disclose" data-open={fix} aria-hidden={!fix} inert={!fix}>
-        <div>{editor}</div>
-      </div>
     </div>
   );
 }

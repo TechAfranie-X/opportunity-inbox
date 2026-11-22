@@ -163,7 +163,9 @@ test("a stated consequence is not a withdrawal: 'failing to attend will result i
 });
 
 test("platform names are never the employer, and a registration outcome is not an application outcome", () => {
-  assert.equal(employerNamed({ subject: "Thanks for your interest in ZipRecruiter!", bodyText: "We received your application." }), null);
+  // a platform is the employer when it is hiring for its own role ("applying to the Software Engineer - Intern role at ZipRecruiter"); a platform merely named in a greeting is not
+  assert.equal(employerNamed({ subject: "Thanks for your interest in ZipRecruiter!", bodyText: "Thanks so much for applying to the Software Engineer - Intern role at ZipRecruiter!" }), "ZipRecruiter");
+  assert.equal(employerNamed({ subject: "Jobs picked for you", bodyText: "Apply through LinkedIn today." }), null);
   assert.equal(ownEnding({ subject: "Your FGIT Resume Hub Registration", bodyText: "Unfortunately we are unable to confirm your registration for the hub at this time." }), false);
   assert.equal(messageClass({ subject: "Action Required: Complete Identity Verification", bodyText: "Please complete your identity verification to continue." }), "admin");
 });
@@ -252,4 +254,22 @@ test("job-match notices, talent-community mail and account verification are not 
 test("a programme's dated session confirmation or reminder is an event; an interview confirmation is not", () => {
   assert.equal(messageClass({ subject: "Confirmed: CRE Fundamentals Level I with Project Destined on Saturday, February 7, 2026", bodyText: "Please view the board." }), "event");
   assert.equal(messageClass({ subject: "Confirmed: Interview with Acme on Tuesday", bodyText: "Your interview with Acme is on Tuesday at 10am." }), null);
+});
+
+test("an application the reader started and did not submit is a draft, never an application; a rejection that mentions applying again is not a draft", () => {
+  assert.equal(messageClass({ subject: "Your job application is incomplete!", bodyText: "Your application is incomplete for job: DevCon. Please follow this link to finish it." }), "draft");
+  assert.equal(messageClass({ subject: "Incomplete Job Application Alert", bodyText: "You have an incomplete job application. The deadline to submit is Friday." }), "draft");
+  assert.equal(messageClass({ subject: "Application Update", bodyText: "We have decided not to move forward with your application. You may apply again to other roles." }), null);
+  assert.notEqual(messageClass({ subject: "Complete your assessment", bodyText: "Please complete your application assessment on CodeSignal by Friday." }), "draft");
+});
+
+test("a weekly digest, a forwarded message and a recommendation from a matching platform are notices", () => {
+  assert.equal(messageClass({ subject: "LeetCode Weekly Digest", bodyText: "Fresh feature updates." }), "notice");
+  assert.equal(messageClass({ subject: "Fwd: MS Business Analytics Applicant", bodyText: "---------- Forwarded message ---------" }), "notice");
+  assert.equal(messageClass({ subject: "UX Researcher Internship at Esri", bodyText: "RippleMatch Hi Afrane, Esri is hiring a UX researcher intern." }), "notice");
+});
+
+test("a registration confirmation is an event and 'how did your interview go' from a third party is a survey", () => {
+  assert.equal(messageClass({ subject: "AI Builders Challenge Successful registration", bodyText: "You have successfully registered for the AI Builders Challenge." }), "event");
+  assert.equal(messageClass({ subject: "How did your Salesforce interview go?", bodyText: "It's been a couple weeks since your interview." }), "survey");
 });

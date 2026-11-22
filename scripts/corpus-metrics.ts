@@ -32,6 +32,7 @@ console.log(`active applications ${ws.opportunities.filter((o) => o.status === "
 if (process.argv.includes("--details")) {
   const line = (r: Row) => `   ${r.company.slice(0, 28)} (${r.storedType})`;
   console.log("MISSED true applications:"); for (const r of yes.filter((x) => !inPipe.has(x.messageId))) console.log(line(r));
+  console.log("REAL offers NOT kept:"); for (const r of realOffers.filter((x) => !asOffer(x))) console.log(`   ${r.company.slice(0, 28)} -> ${inPipe.get(r.messageId)?.type ?? "not in pipeline"}`);
   console.log("FALSE opportunities still in the pipeline:"); for (const r of no.filter((x) => inPipe.has(x.messageId))) console.log(line(r));
   console.log("FALSE offers still shown as offers:"); for (const r of falseOffers.filter(asOffer)) console.log(line(r));
   console.log("FALSE rejections that close:"); for (const r of falseRej.filter(settled)) console.log(line(r));

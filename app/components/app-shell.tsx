@@ -15,7 +15,7 @@ import { WorkspaceProvider } from "@/app/components/workspace";
 import { cachedBrandUrls } from "@/lib/brand/cache";
 import { connectedGmailAccount } from "@/lib/gmail/account";
 import { lookupKeys } from "@/lib/identity/names";
-import { attentionCount, buildReviewQueue } from "@/lib/recruiting/review";
+import { autonomousAttention, buildAutonomousReview } from "@/lib/recruiting/autonomy";
 import { reviewOptions } from "@/lib/recruiting/product-config";
 import type { EffectiveEvent, Opportunity } from "@/lib/recruiting/types";
 
@@ -66,9 +66,7 @@ export async function AppShell({
   width?: "reading" | "mid" | "wide";
   children: ReactNode;
 }) {
-  const reviewQueue = demo ? [] : buildReviewQueue(opportunities, undefined, possible, new Date(), reviewOptions());
-  const reviewCount = attentionCount(reviewQueue);
-  const housekeepingCount = reviewQueue.filter((i) => !i.weak && i.tier === "routine").length;
+  const reviewCount = demo ? 0 : autonomousAttention(buildAutonomousReview(opportunities, undefined, possible, new Date(), reviewOptions()));
   const hrefOf = (item: (typeof NAV)[number]) => (demo ? item.demoHref : item.href);
   const initial = firstName(user?.name, user?.email).charAt(0);
   const gmailAccount = demo || !user?.googleSub ? null : await connectedGmailAccount(user.googleSub);
@@ -114,7 +112,7 @@ export async function AppShell({
             <Link href="/review" className="side-link" aria-current={active === "review" ? "page" : undefined}>
               <IconReview />
               <span>Review</span>
-              {reviewCount > 0 ? <span className="side-badge" aria-label={`${reviewCount} need review${housekeepingCount ? `, plus ${housekeepingCount} housekeeping` : ""}`} title={housekeepingCount ? `${reviewCount} need you now; ${housekeepingCount} smaller housekeeping questions wait inside` : undefined}>{reviewCount}</span> : null}
+              {reviewCount > 0 ? <span className="side-badge" aria-label={`${reviewCount} need review`}>{reviewCount}</span> : null}
             </Link>
           ) : null}
           <SideSearch />

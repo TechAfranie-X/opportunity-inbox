@@ -208,7 +208,7 @@ export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, cor
 const repeatDelivery = (x: EffectiveEvent, e: EffectiveEvent) => (!!reqOf(e) && reqOf(e) === reqOf(x)) || (specific(e.role) && specific(x.role) && Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) < DAY / 2 && roleRelationV2(x.role!, e.role!) === "match");
 
 const isProgAcc = (x: EffectiveEvent) => x.signals.includes("class:program-acceptance");
-const isClassed = (x: EffectiveEvent) => x.signals.some((q) => /^class:(?:event|survey|notice|community|marketing)$/.test(q));
+const isClassed = (x: EffectiveEvent) => x.signals.some((q) => /^class:(?:event|survey|notice|community|marketing|draft)$/.test(q));
 
 export function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean, ctx?: IdentityContext): boolean {
   if (rel === "conflict") return false;

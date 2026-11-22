@@ -7,13 +7,14 @@
  */
 import { writeFileSync } from "node:fs";
 import { disposeOutside } from "../lib/recruiting/disposition.ts";
+import { buildAutonomousReview } from "../lib/recruiting/autonomy.ts";
 import { loadWorkspace } from "../lib/recruiting/store.ts";
 import { reviewOptions } from "../lib/recruiting/product-config.ts";
 import { attentionCount, autoResolved, buildReviewQueue } from "../lib/recruiting/review.ts";
 const sub = process.argv[2]; const details = process.argv.includes("--details");
 const ws = await loadWorkspace(sub, new Date());
 const STAGE = new Set(["applied", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer", "rejection", "withdrawn"]);
-const CLASSED = /^class:(?:event|survey|notice|community|admin|logistics|marketing)$/;
+const CLASSED = /^class:(?:event|survey|notice|community|admin|logistics|marketing|draft)$/;
 const open = ws.opportunities.filter((o) => o.status === "active" && o.kind === "job");
 const list = (label: string, ids: string[]) => { console.log(`${label}: ${ids.length}`); if (details) for (const i of ids.slice(0, 40)) console.log(`   ${i}`); };
 const id8 = (e: { gmailMessageId: string }) => e.gmailMessageId.slice(0, 8);
@@ -41,6 +42,7 @@ console.log(`investigator: resolved with stated evidence (listed on the Review s
 const disp = new Map<string, number>(); const violations: string[] = []; for (const e of ws.possible.filter((x) => !x.outbound)) { const d = disposeOutside(e); disp.set(d.kind, (disp.get(d.kind) ?? 0) + 1); if (d.kind === "violation") violations.push(`${e.gmailMessageId.slice(0, 8)} ${e.company ?? ""} | ${d.why}`); }
 console.log(`--- Disposition of messages outside any journey: ${JSON.stringify(Object.fromEntries(disp))} (journeys hold ${ws.opportunities.reduce((a, o) => a + o.events.filter((x) => !x.outbound).length, 0)} inbound messages; violations = a message whose own facts put it in a journey but waits outside one, target 0)`);
 if (details) for (const v of violations.slice(0, 30)) console.log(`   ${v}`);
+{ const ar = buildAutonomousReview(ws.opportunities, undefined, ws.possible, new Date(), reviewOptions()); const kinds = (xs: { kind: string }[]) => JSON.stringify(xs.reduce((m: Record<string, number>, x) => { m[x.kind] = (m[x.kind] ?? 0) + 1; return m; }, {})); console.log(`--- Autonomy-first review: questions for the student ${ar.asks.length}; handled in journeys ${ar.handled.length} ${kinds(ar.handled)}; set aside ${ar.setAside.length} ${kinds(ar.setAside)}; unassigned neutral evidence ${ar.unassigned.length}`); for (const a of ar.asks) console.log(`   ASK ${a.company} | ${a.ask.missing}`); }
 console.log(`--- Invariants (target 0)`);
 list("explicit ending text but the application is still open", endedButOpen);
 list("open applications resting on an unsettled (proposed) ending", proposedOpen);

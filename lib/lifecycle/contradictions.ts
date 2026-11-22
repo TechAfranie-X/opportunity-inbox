@@ -42,7 +42,9 @@ export function detectContradictions(events: EffectiveEvent[]): Contradiction[] 
   const years = new Set<number>();
   // a role that names a year RANGE ("2026-2027 AI Program", "2026-27 Fellowship") is one programme year, not two cycles
   const YEAR_RANGE = /\b20\d\d\s*[-–/]\s*(?:20)?\d\d\b/;
-  for (const e of events) if (!e.outbound && !e.signals.includes("identity:reattached") && !YEAR_RANGE.test(e.role ?? "")) for (const y of cycleOf(e.role).years) years.add(y);
+  // (a requisition number that starts with a year, "2026-90947", is a number, not a recruiting cycle)
+  const noReq = (r: string | null) => (r ?? "").replace(/\b20\d\d-\d{3,}\b/g, " ");
+  for (const e of events) if (!e.outbound && !e.signals.includes("identity:reattached") && !YEAR_RANGE.test(noReq(e.role))) for (const y of cycleOf(noReq(e.role)).years) years.add(y);
   if (years.size > 1) out.push({ kind: "mixed_cycles", eventIds: [events[events.length - 1].id], text: `This application's messages mention more than one recruiting cycle (${[...years].sort().join(" and ")}). Check whether they are one application or two.` });
   return out;
 }

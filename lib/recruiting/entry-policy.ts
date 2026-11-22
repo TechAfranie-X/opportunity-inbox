@@ -25,7 +25,7 @@ export function applyEntryPolicy(events: EffectiveEvent[], build: (events: Effec
     // (a) built only from uncorroborated model readings, or (b) one message that names no employer at all: neither is evidence of an application the person made (all six such cases checked against the real mailbox were junk)
     // (c) every message is an event, survey, platform notice or community message (the message-class signals): attending or answering, not applying
     const programJourney = inbound.some((e) => e.signals.includes("class:program-acceptance") || e.signals.some((x) => x.startsWith("program:evidence:")));
-    const classOnly = !programJourney && inbound.length > 0 && inbound.every((e) => !e.corrected && !e.confirmed && e.signals.some((x) => /^class:(?:event|survey|notice|community|admin|logistics|marketing)$/.test(x)));
+    const classOnly = !programJourney && inbound.length > 0 && inbound.every((e) => !e.corrected && !e.confirmed && e.signals.some((x) => /^class:(?:draft|event|survey|notice|community|admin|logistics|marketing|draft)$/.test(x)));
     const noEmployer = !programJourney && o.company === "Unknown company" && inbound.length === 1 && !inbound[0].corrected && !inbound[0].confirmed;
     if (inbound.length === 0 || programJourney || !(inbound.every(modelOnly) || noEmployer || classOnly)) continue;
     for (const e of o.events) drop.add(e.id);
@@ -89,7 +89,7 @@ export function promoteDecisiveNearMisses(possible: EffectiveEvent[]): { promote
  */
 export function neutralizeClassed(events: EffectiveEvent[]): EffectiveEvent[] {
   const STAGE = new Set(["applied", "recruiter_outreach", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer", "rejection", "withdrawn"]);
-  return events.map((e) => (STAGE.has(e.type) && !e.corrected && !e.confirmed && !e.outbound && e.signals.some((s) => /^class:(?:event|survey|notice|community|admin|logistics|marketing)$/.test(s)) && !e.signals.some((s) => s.startsWith("decision:"))
+  return events.map((e) => (STAGE.has(e.type) && !e.corrected && !e.confirmed && !e.outbound && (e.signals.some((s) => /^class:(?:event|survey|notice|community|admin|logistics|marketing|draft)$/.test(s)) || (e.type === "offer" && e.signals.includes("class:program-acceptance"))) && !e.signals.some((s) => s.startsWith("decision:"))
     ? { ...e, type: "status_update" as const, signals: [...e.signals, "type:neutralized-by-class"] } : e));
 }
 
@@ -224,7 +224,8 @@ export function applyNamedEmployer(events: EffectiveEvent[]): EffectiveEvent[] {
 
 const PROGRAM_NOUN = /\b(?:program(?:me)?|fellowship|academy|cohort|boot ?camp|institute|certificate|course|workshop|bridge|training|student application|launch)\b/i;
 const GENERIC = new Set(["program", "programme", "fellowship", "application", "applications", "update", "confirmed", "confirmation", "invitation", "invited", "thank", "thanks", "your", "reminder", "session", "sessions", "welcome", "congratulations", "powered", "project", "important", "action", "required", "this", "that", "with", "from", "have", "will", "next", "step", "steps", "email", "message", "week", "today", "tonight", "tomorrow", "event", "events", "info", "last", "chance", "join", "student", "students", "spring", "summer", "fall", "winter", "2025", "2026", "2027"]);
-const toks = (x: string | null | undefined) => new Set((x ?? "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !GENERIC.has(w)));
+// (a three-letter ALL-CAPS word is an acronym, a programme's name: CTI, BTT, SEO; any other word under four letters says nothing)
+const toks = (x: string | null | undefined) => new Set((x ?? "").normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^A-Za-z0-9]+/).filter((w) => (w.length >= 4 || (w.length === 3 && w === w.toUpperCase() && /^[A-Z]+$/.test(w))) && !GENERIC.has(w.toLowerCase())).map((w) => w.toLowerCase()));
 
 /**
  * Programme evidence finds its programme. A receipt naming a programme (or an acceptance into one, or a fellowship's own correspondence) is an ANCHOR; messages that are about the same programme (its
@@ -262,15 +263,20 @@ export function attachProgramEvidence(events: EffectiveEvent[], possible: Effect
     d.total += 1; for (const t of toks(x.subject)) d.tokens.set(t, (d.tokens.get(t) ?? 0) + 1);
     df.set(x.senderDomain, d);
   }
-  const hostGeneric = (domain: string | null | undefined, t: string) => { const d = domain ? df.get(domain) : undefined; return !!d && d.total >= 12 && (d.tokens.get(t) ?? 0) / d.total > 0.12; };
+  // (only for a host that runs SEVERAL programmes: a host with one or two programmes says its programme's name in most of its mail, and that name IS the identity)
+  const programmesOf = (domain: string | null | undefined) => new Set(anchors.filter((a) => a.e.senderDomain === domain).map((a) => [...a.nameTokens].sort().join(" "))).size;
+  const hostGeneric = (domain: string | null | undefined, t: string) => { const d = domain ? df.get(domain) : undefined; return !!d && d.total >= 12 && (d.tokens.get(t) ?? 0) / d.total > 0.12 && programmesOf(domain) >= 3; };
   const used = new Set<string>();
   const attach = (e: EffectiveEvent, crossHost = false): EffectiveEvent | null => {
     if (e.outbound || e.corrected || e.confirmed || anchors.length === 0 || e.signals.includes("recovered:programme-evidence")) return null; // (recovered evidence already names its programme)
-    if (e.signals.some((x) => x === "class:marketing" || x === "class:notice" || x === "class:admin" || x === "entry:not-a-receipt")) return null; // campaigns, platform notices and promotions that only look like receipts are not the programme's own mail
+    if (e.signals.some((x) => x === "class:marketing" || x === "class:notice" || x === "class:admin")) return null; // campaigns, platform notices and promotions that only look like receipts are not the programme's own mail
     // a rule-read employer-process message (an assessment, an interview, an offer, a rejection the RULE reader found) is that application's evidence, never a programme's
     if (["assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer", "rejection", "withdrawn"].includes(e.type) && !e.signals.includes("semantic:event") && !e.signals.some((x) => x.startsWith("class:"))) return null;
     // a message that is a receipt, or that names its OWN opportunity, is that opportunity's evidence, never another programme's
-    if (e.signals.includes("own:receipt") || (e.signals.some((x) => x.startsWith("role:named:")) && !e.signals.includes("class:program-acceptance"))) return null;
+    if (e.signals.includes("own:receipt")) return null;
+    // a message that names its OWN opportunity belongs to that opportunity: another programme's anchor takes it only when the name it states is (mostly) that programme's own name
+    const selfNamed = e.signals.find((x) => x.startsWith("role:named:"))?.slice(11);
+    const selfTokens = selfNamed && !e.signals.includes("class:program-acceptance") ? toks(selfNamed) : null;
     // (a programme acceptance whose subject names nothing carries the programme's name in its own words: the named position)
     const mine = new Set([...toks(e.subject), ...(e.signals.includes("class:program-acceptance") ? toks(e.signals.find((x) => x.startsWith("role:named:"))?.slice(11)) : [])]);
     if (mine.size === 0) return null;
@@ -286,7 +292,9 @@ export function attachProgramEvidence(events: EffectiveEvent[], possible: Effect
       const nameShared = [...a.nameTokens].filter((t) => mine.has(t)).length;
       const crossOk = crossHost && shared.length >= 2 && a.nameTokens.size > 0 && nameShared / a.nameTokens.size >= 0.6 && ![...ownWords].some((w) => mine.has(w));
       // (a programme's dated session mail sent through a scheduler names the programme in its subject: three or more of the programme's own words)
-      const crossSessions = crossHost && e.signals.includes("class:event") && shared.length >= 3 && shared.every((t) => a.tokens.has(t));
+      const crossSessions = crossHost && ((e.signals.includes("class:event") && shared.length >= 3) || shared.length >= 2) && shared.every((t) => a.tokens.has(t));
+      // (a model-typed "applied" with no receipt wording is a promotion unless it names the programme in its own words: at least two shared words from its host, three from another)
+      if (e.signals.includes("entry:not-a-receipt") && !(sameHost ? shared.length >= 2 : shared.length >= 3)) continue;
       if (score === 0 || (!sameHost && !crossOk && !crossSessions)) continue;
       if (!best || score > best.score) { best = { a, score }; tie = false; } else if (score === best.score && companyKey(a.e.company ?? "") !== companyKey(best.a.e.company ?? "") && [...a.tokens].filter((t) => best!.a.tokens.has(t)).length < 2) tie = true; // (two anchors that are the same programme under two host spellings do not tie)
     }
@@ -309,15 +317,16 @@ export function attachProgramEvidence(events: EffectiveEvent[], possible: Effect
       }
     }
     if (!best || tie) return null;
+    if (selfTokens && selfTokens.size > 0 && [...selfTokens].filter((t) => best!.a.nameTokens.has(t)).length / selfTokens.size < 0.6) return null;
     const STAGE = new Set(["applied", "recruiter_outreach", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer"]);
     used.add(e.id);
-    return { ...e, company: best.a.e.company ?? e.company, role: best.a.e.role ?? e.role, type: (STAGE.has(e.type) && !e.signals.includes("class:program-acceptance")) || (e.type === "offer" && e.signals.includes("class:program-acceptance")) ? "status_update" : e.type, // (an acceptance into a programme is never a job OFFER; its stage is the programme state)
+    return { ...e, company: best.a.e.company ?? null, role: best.a.e.role ?? e.role, type: (STAGE.has(e.type) && !e.signals.includes("class:program-acceptance")) || (e.type === "offer" && e.signals.includes("class:program-acceptance")) ? "status_update" : e.type, // (an acceptance into a programme is never a job OFFER; its stage is the programme state)
       signals: [...e.signals.filter((x) => !x.startsWith("near-miss") && x !== "entry:uncorroborated"), "entry:corroborated", `program:evidence:${best.a.e.gmailMessageId.slice(0, 8)}`], reviewReasons: [] };
   };
   const rename = (e: EffectiveEvent): EffectiveEvent => (anchorRole.has(e.id) && e.role !== anchorRole.get(e.id) && !e.corrected && !e.confirmed ? { ...e, role: anchorRole.get(e.id)!, signals: [...e.signals, "program:named"] } : e);
   const outEvents = events.map(rename).map((e) => (e.signals.some((x) => /^class:(?:event|admin|logistics|community|survey)$/.test(x)) || e.signals.includes("class:program-acceptance") || (!e.signals.includes("program:named") && !e.signals.some((x) => x.startsWith("program:evidence:"))) ? attach(e, !isAnchor(e)) ?? e : e));
   const moved: EffectiveEvent[] = [], stay: EffectiveEvent[] = [];
-  for (const e of possible) { const a = attach(e, e.signals.includes("class:event")); if (a) moved.push(a); else if (promotedAcceptances.includes(e)) moved.push({ ...e, signals: [...e.signals.filter((x) => !x.startsWith("near-miss") && x !== "entry:uncorroborated"), "entry:corroborated", "program:own-journey"], reviewReasons: [] }); else stay.push(e); }
+  for (const e of possible) { const a = attach(e, e.signals.some((x) => /^class:(?:event|logistics|community|survey|admin)$/.test(x)) || e.signals.some((x) => x.startsWith("program:"))); if (a) moved.push(a); else if (promotedAcceptances.includes(e)) moved.push({ ...e, signals: [...e.signals.filter((x) => !x.startsWith("near-miss") && x !== "entry:uncorroborated"), "entry:corroborated", "program:own-journey"], reviewReasons: [] }); else stay.push(e); }
   return { events: [...outEvents, ...moved], possible: stay };
 }
 
