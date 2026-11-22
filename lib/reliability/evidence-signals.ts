@@ -1,7 +1,7 @@
 import { requisitionOf } from "../identity/represented-employer.ts";
 import { notAProcess } from "../semantic/assist.ts";
 import type { ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
-import { employerNamed, endingWording, namedRole, programStage, marketingFact, ownApplicationStatement, ownEnding, withdrawalAcknowledged } from "./evidence.ts";
+import { employerNamed, endingWording, namedRole, programStage, marketingFact, ownApplicationStatement, ownEnding, studentDeclines, awaitingThem, withdrawalAcknowledged } from "./evidence.ts";
 import { messageClass } from "./message-class.ts";
 
 /**
@@ -9,7 +9,7 @@ import { messageClass } from "./message-class.ts";
  * function, used both when new mail is read and by the stamp script for stored events, so the two can never disagree.
  */
 export function evidenceSignals(m: RecruitingEmail, e: Pick<ExtractedEvent, "type" | "signals" | "outbound">): string[] {
-  if (e.outbound) return [];
+  if (e.outbound) return studentDeclines(m) && !e.signals.includes("student:declines") ? ["student:declines"] : [];
   const out: string[] = [];
   const c = messageClass(m);
   if (c) out.push(`class:${c}`);
@@ -20,6 +20,8 @@ export function evidenceSignals(m: RecruitingEmail, e: Pick<ExtractedEvent, "typ
   // (an "applied" receipt that mentions an ending in passing is still a receipt)
   if (!c && ownEnding(m) && !marketingFact(m) && !notAProcess(m) && !(e.type === "applied" && ownApplicationStatement(m))) out.push("ending:own");
   if (!c && withdrawalAcknowledged(m)) out.push("withdrawal:ack");
+  // the sender will act next and asks the reader for nothing
+  if (awaitingThem(m)) out.push("awaiting:them");
   // the employer the message names in its own words, and where a programme message sits in its programme's lifecycle
   const en = c ? null : employerNamed(m);
   if (en) out.push(`employer:named:${en}`);

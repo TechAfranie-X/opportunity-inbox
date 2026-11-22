@@ -43,6 +43,9 @@ export function employerAlias(a: string | null | undefined, b: string | null | u
   const toks = (x: string) => x.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9]+/).filter(Boolean);
   const x = toks(a ?? ""), y = toks(b ?? "");
   if (x.length === 0 || y.length === 0 || x.length === y.length) return false;
+  // an acronym is the same name as its spelled-out form (TMCF / Thurgood Marshall College Fund)
+  const initials = (t: string[]) => t.map((w) => w[0]).join("");
+  if ((x.length === 1 && y.length >= 3 && x[0].length >= 3 && x[0] === initials(y)) || (y.length === 1 && x.length >= 3 && y[0].length >= 3 && y[0] === initials(x))) return true;
   const [short, long] = x.length < y.length ? [x, y] : [y, x];
   return long.length - short.length <= 2 && short.every((t, i) => t === long[i]) && short.join("").length >= 4;
 }
@@ -148,7 +151,8 @@ export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, cor
   const progName = (x: EffectiveEvent) => x.signals.some((q) => q === "program:named" || q.startsWith("program:evidence:"));
   if (ctx?.attribution && progName(e) && e.role && g.events.some((x) => progName(x) && x.role && x.role.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === e.role!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim())) return "match";
   if (programConflictWithGroup(g, e) && !(ctx?.attribution && subjectProgramAgrees(g, e))) return "conflict";
-  if (ctx?.attribution && subjectProgramConflict(g, e)) return "conflict";
+  // (a subject that names another programme type does not outweigh the very Gmail thread the group already holds: replies keep the subject of the message they answer)
+  if (ctx?.attribution && !(corroborated && g.threads.has(e.gmailThreadId)) && subjectProgramConflict(g, e)) return "conflict";
   if (ctx?.attribution && ((isHack(e) && g.events.every((x) => !isHack(x))) || (!isHack(e) && g.events.every(isHack)))) return "conflict"; // a hackathon application is not the employer's job application
   // (Phase 2) A requisition / job reference number is identity: the same number is the same application, and two different numbers are two applications, whatever the wording says.
   // (Phase 2) The same appointment is the same application: an interview at one employer at the same scheduled moment (a calendar invitation and the email about it, or a reminder) is one process.
@@ -157,7 +161,8 @@ export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, cor
   // The hiring unit is soft identity evidence: at one employer, two applications to different units are different applications, and a message naming the unit one of them
   // is for belongs to it. Only when BOTH sides name a unit; a side that names none says nothing.
   const eu = unitOf(e), gu = unitsOf(g);
-  if (eu && gu.size > 0) return [...gu].some((u) => unitsMatch(u, eu)) ? (specific(e.role) && g.events.some((x) => specific(x.role)) && !g.events.some((x) => specific(x.role) && roleRelationV2(x.role, e.role) === "match") ? "conflict" : "match") : "conflict";
+  // (a hiring unit is soft evidence: the very Gmail thread the group already holds outweighs it, and a unit that is only the employer's own name or a person's name says nothing)
+  if (eu && gu.size > 0 && !(corroborated && ctx?.attribution)) return [...gu].some((u) => unitsMatch(u, eu)) ? (specific(e.role) && g.events.some((x) => specific(x.role)) && !g.events.some((x) => specific(x.role) && roleRelationV2(x.role, e.role) === "match") ? "conflict" : "match") : "conflict";
   if (!specific(e.role)) return "generic";
   const roles = g.events.map((x) => x.role).filter((r): r is string => specific(r));
   if (roles.length === 0) return "generic";
@@ -169,6 +174,8 @@ export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, cor
     const rel = verdict === "different" ? "conflict" : verdict === "same" && corroborated ? "match" : roleRelationV2(r, e.role);
     return rel === "match" && !programsConflict(r, e.role) && !cyclesConflict(cycleOf(r), ec);
   });
+  // a role that differs in wording (not in programme or season) from the group's, inside the very Gmail thread the group holds, is the same conversation's looser name for it, not another opportunity
+  if (!ok && corroborated && ctx?.attribution && g.threads.has(e.gmailThreadId) && !roles.some((r) => programsConflict(r, e.role!) || cyclesConflict(cycleOf(r), ec))) return "generic";
   return ok ? "match" : "conflict";
 }
 
@@ -272,6 +279,8 @@ function sharesDistinctiveRole(g: Group, e: EffectiveEvent, ctx?: IdentityContex
   if (er && gr.size > 0 && !gr.has(er)) return false;
   return Math.abs(e.occurredAt.getTime() - lastAt(g)) <= 14 * DAY;
 }
+/** Hosts that many unrelated organisations share: a platform, a mail service or a scheduler says nothing about WHO is writing. */
+const SHARED_HOST = /\.(?:greenhouse|lever|myworkday|workday|smartrecruiters|icims|ashbyhq|taleo|gmail|googlemail|outlook|google|zoom|calendly|linkedin|handshake|ripplematch|slack|eventbrite|luma|mailchimp|hubspot|typeform|substack|notion|discord|meetup|salesforce|forage)\./i;
 export type Attribution = { link: Group | null; suggest: Group | null; score: number; reasons: string[] };
 /**
  * Evidence-scored attribution of a message to one of several candidate applications (Phase 2). Each candidate is scored on independent kinds of evidence; a hard conflict (a different cycle,
@@ -292,6 +301,9 @@ export function attribute(groups: Group[], e: EffectiveEvent, ctx?: IdentityCont
     if (e.company && companyKey(g.company) === companyKey(e.company)) add("employer", 2, "same employer");
     else if (e.company && employerAlias(g.company, e.company)) add("employer", weakEmployer(e) || g.events.every((x) => !x.company || weakEmployer(x)) ? 2 : 1, "employer name is a form of the same name");
     else if (e.company && sharesDistinctiveRole(g, e, ctx)) { add("program-token", 2, "the same distinctive programme/role word under two employer names"); if (Math.abs(e.occurredAt.getTime() - lastAt(g)) <= 7 * DAY) add("timing", 1, "within a week"); }
+    // an application receipt with no stated role of its own, from the same institutional host that wrote the group's receipt within days: one application receipted twice under two names of one organisation
+    else if (e.company && ctx?.attribution && e.type === "applied" && e.signals.includes("own:receipt") && e.senderDomain && !SHARED_HOST.test(`.${e.senderDomain}`) && Math.abs(e.occurredAt.getTime() - lastAt(g)) <= 3 * DAY
+      && g.events.some((x) => !x.outbound && x.type === "applied" && x.senderDomain === e.senderDomain)) { add("host", 2, "the same institutional host receipted the same application within days"); add("timing", 1, "within days"); }
     else if (!weakEmployer(e) && e.company && !g.events.every((x) => !x.company || weakEmployer(x))) continue; // two confident, different employers
     // a message that states the LONGER form of the employer name ("Claude Corps" in a receipt for "Claude", whose rejection comes from "Claude Corps Fellowship") is evidence for the alias
     if (e.company && employerAlias(g.company, e.company)) {
@@ -307,6 +319,8 @@ export function attribute(groups: Group[], e: EffectiveEvent, ctx?: IdentityCont
     if (eu && [...gu].some((u) => unitsMatch(u, eu))) add("team", 1, "same team");
     if (g.threads.has(e.gmailThreadId)) add("thread", 2, "same Gmail thread");
     if (e.senderName && g.events.some((x) => !x.outbound && x.senderName === e.senderName && x.senderDomain === e.senderDomain && Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) <= 45 * DAY)) add("sender", 1, "same sender");
+    // the same institutional sender host (not a shared platform) writing about the same distinctive programme/role word under two names of one organisation (a university and its laboratory)
+    if (kinds.has("program-token") && e.senderDomain && !SHARED_HOST.test(`.${e.senderDomain}`) && g.events.some((x) => !x.outbound && x.senderDomain === e.senderDomain)) add("host", 1, "same sender host");
     // mail arriving within days of the application's own, from a name that is a form of its employer: one burst of mail about one application, not a coincidence of names
     if (kinds.has("employer") && !companyKeyEq(g, e) && Math.abs(e.occurredAt.getTime() - lastAt(g)) <= 3 * DAY) add("timing", 1, "arrived within days");
     if (e.occurredAt.getTime() - lastAt(g) <= 30 * DAY) score += 0.5;

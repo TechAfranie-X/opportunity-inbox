@@ -75,6 +75,55 @@ export function terminalFragmentMoves(opportunities: Opportunity[]): Move[] {
   return moves;
 }
 
+/**
+ * Fragment consolidation. Grouping is greedy, so one application whose mail names it differently (an acronym and its spelled-out form, a role with or without its ordinal and year, a receipt from the platform
+ * and a calendar message from the host) can end as several small journeys. A small journey joins another when ALL of these hold: the same kind of opportunity; the same distinctive role words once years,
+ * ordinals, generic words and the employer's own name are removed (and at least two of them); the employers are not different (the same, an alias, an acronym, or one side states none / is only the role's
+ * own name); no conflicting recruiting year; no two different requisitions; the two are not both separately receipted applications; and they touch within 120 days. The larger journey is the home. Whole journeys move,
+ * through the same "belongs with" link, so Today, Pipeline and Review all show one journey.
+ */
+const STOP = new Set(["the", "a", "an", "to", "for", "of", "and", "in", "at", "on", "attend", "join", "annual", "program", "programme", "application", "summer", "intern", "internship", "role", "position", "our", "your", "my", "update"]);
+const GENERIC_ROLE = new Set(["software", "engineer", "engineers", "engineering", "developer", "analyst", "data", "science", "scientist", "research", "researcher", "associate", "product", "design", "designer", "manager", "management", "business", "technology", "technical", "student", "students", "opportunity", "opportunities", "career", "careers", "job", "full", "time", "part", "new", "grad", "graduate", "undergraduate", "fall", "spring", "winter"]);
+const normTokens = (x: string | null | undefined, drop: Set<string>) => new Set((x ?? "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+(st|nd|rd|th)?$/.test(t) && !/^20\d\d$/.test(t) && !drop.has(t)));
+export function fragmentMoves(opportunities: Opportunity[], alias: (a: string, b: string) => boolean): Move[] {
+  const moves: Move[] = [];
+  const years = (o: Opportunity) => new Set((o.role ?? "").match(/\b20\d\d\b/g) ?? []);
+  const reqs = (o: Opportunity) => new Set(o.events.map((y) => y.signals.find((q) => q.startsWith("req:"))).filter(Boolean));
+  const weak = (name: string, roleTokens: Set<string>) => /^unknown/i.test(name) || [...normTokens(name, new Set())].every((t) => roleTokens.has(t));
+  const sorted = [...opportunities].sort((a, b) => b.events.length - a.events.length || a.firstActivityAt.getTime() - b.firstActivityAt.getTime());
+  // the distinctive role words: the employer's own name is removed unless nothing distinctive would be left
+  const coreOf = (o: Opportunity) => { const full = normTokens(o.role, new Set()); const less = normTokens(o.role, normTokens(o.company, new Set())); return less.size >= 2 ? less : full; };
+  const initials = (name: string) => (name.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w && !STOP.has(w)).map((w) => w[0]).join(""));
+  const acronymOf = (x: Opportunity, y: Opportunity) => { const t = [...normTokens(x.company, new Set())]; const i = initials(y.company); return i.length >= 3 && t.includes(i); };
+  const taken = new Set<string>();
+  for (const b of sorted) {
+    if (b.events.length > 8 || b.events.some((e) => e.corrected || e.confirmed || e.linkedTo) || taken.has(b.key)) continue;
+    const bw = coreOf(b);
+    if ([...bw].filter((t) => !GENERIC_ROLE.has(t)).length < 2) continue;
+    for (const a of sorted) {
+      if (a === b || a.events.length < b.events.length || a.kind !== b.kind || taken.has(a.key) || moves.some((m) => m.from === a.key)) continue;
+      const aw = coreOf(a);
+      if ([...aw].filter((t) => !GENERIC_ROLE.has(t)).length < 2 || [...bw].some((t) => !aw.has(t)) || [...aw].some((t) => !bw.has(t))) continue;
+      const [ya, yb] = [years(a), years(b)];
+      if (ya.size > 0 && yb.size > 0 && ![...yb].some((y) => ya.has(y))) continue;
+      const ra = reqs(a), rb = reqs(b);
+      if (ra.size > 0 && rb.size > 0 && ![...rb].some((q) => ra.has(q))) continue;
+      if (a.events.some((e) => e.type === "applied" && e.signals.includes("own:receipt")) && b.events.some((e) => e.type === "applied" && e.signals.includes("own:receipt"))) continue;
+      const roleTokens = new Set([...aw, ...bw]);
+      const employersOk = a.company === b.company || alias(a.company, b.company) || acronymOf(a, b) || acronymOf(b, a) || weak(a.company, roleTokens) || weak(b.company, roleTokens);
+      if (!employersOk) continue;
+      const gap = Math.max(0, Math.max(a.firstActivityAt.getTime(), b.firstActivityAt.getTime()) - Math.min(a.lastActivityAt.getTime(), b.lastActivityAt.getTime()));
+      if (gap > 120 * DAY) continue;
+      const anchor = [...a.events].reverse().find((x) => !x.outbound && x.occurredAt.getTime() <= b.events[0].occurredAt.getTime()) ?? a.events.find((x) => !x.outbound);
+      if (!anchor) continue;
+      for (const e of b.events) moves.push({ eventId: e.id, anchorId: anchor.id, from: b.key, to: a.key, reason: "the same journey under another name" });
+      taken.add(b.key);
+      break;
+    }
+  }
+  return moves;
+}
+
 export function applyMoves(events: EffectiveEvent[], moves: Move[]): EffectiveEvent[] {
   const by = new Map(moves.map((m) => [m.eventId, m]));
   return events.map((e) => (by.has(e.id) ? { ...e, signals: [...e.signals, "identity:reattached", `identity:attach:${by.get(e.id)!.anchorId}`] } : e));

@@ -155,7 +155,9 @@ export function refineEvents(events: EffectiveEvent[], options: { resolveEmploye
     // bulk mail (a job-alert digest, a newsletter, a promotion) is recognised at ingestion by what it IS; it is never a candidacy, whatever employer it names
     // (a job-alert digest is always bulk; "bulk" by footer markers alone never removes a decisive message: an offer, an interview, an explicit closure)
     if (!reason && !e.outbound && (e.signals.includes("marketing:alert") || (e.signals.includes("marketing:bulk") && !["offer", "interview_scheduled", "interview_invite", "rejection", "withdrawn"].includes(e.type)))) reason = "marketing";
-    if (!reason && !e.outbound && programs.has(e.senderDomain) && SOFT_TYPES.has(e.type) && !MINE.test(e.subject ?? "")) reason = "marketing";
+    // (a host that mass-mails is not a reason to lose its message that the facts show is the reader's own: a programme acceptance, a programme stage, a receipt, an ending)
+    const ownFacts = e.signals.includes("class:program-acceptance") || e.signals.some((x) => x.startsWith("program:") || x === "own:receipt" || x === "ending:own" || x === "withdrawal:ack");
+    if (!reason && !e.outbound && !ownFacts && programs.has(e.senderDomain) && SOFT_TYPES.has(e.type) && !MINE.test(e.subject ?? "")) reason = "marketing";
     if (reason) { excluded.push({ event: e, reason }); continue; }
     const r: EffectiveEvent = { ...e };
     // Weak sweep-only evidence with no candidacy wording is low-value uncertainty: it is not placed in the pipeline AND not offered for review (it stays stored,
@@ -163,7 +165,7 @@ export function refineEvents(events: EffectiveEvent[], options: { resolveEmploye
     // A message ONLY the model found (the rules saw nothing), in a wide sweep, typed as nothing more specific than a bare update, with no candidacy wording in its subject,
     // is the weakest evidence there is: it needs a person's word, not a place in the pipeline.
     const modelOnlyBareUpdate = e.signals.includes("semantic:event") && e.signals.includes("via:sweep") && (e.type === "status_update" || e.type === "follow_up");
-    if (!e.outbound && !isNearMissEvent(e) && (SOFT_OR_REJECTION.has(e.type) && WEAK_SWEEP_EVIDENCE(e.signals) || modelOnlyBareUpdate) && !CANDIDACY_SUBJECT.test(e.subject ?? "") && (!MODEL_AGREED(e.signals) || modelOnlyBareUpdate)) {
+    if (!e.outbound && !ownFacts && !isNearMissEvent(e) && (SOFT_OR_REJECTION.has(e.type) && WEAK_SWEEP_EVIDENCE(e.signals) || modelOnlyBareUpdate) && !CANDIDACY_SUBJECT.test(e.subject ?? "") && (!MODEL_AGREED(e.signals) || modelOnlyBareUpdate)) {
       excluded.push({ event: e, reason: "unrelated" });
       continue;
     }
@@ -238,7 +240,7 @@ function demoteFollowUpOffers(events: EffectiveEvent[]): EffectiveEvent[] {
   });
 }
 
-const SCHOLARSHIP = /\b(?:scholarship|fellowship|grant)\b/i;
+const SCHOLARSHIP = /\b(?:scholarship|fellowship|grant(?:ee)?s?|financial (?:aid|support|assistance))\b/i;
 const MENTORSHIP = /\bmentor(?:ship)?\b/i;
 /** Jobs and internships are the default; a scholarship, fellowship, mentorship program or event (workshop, conference, summit, career fair, hackathon) is typed so it is never mistaken for employer recruiting. */
 const EVENT_WORDS = /\b(?:workshops?|conferences?|summits?|boot ?camps?|webinars?|symposi(?:um|a)|hackathons?|career fairs?|job fairs?|info(?:rmation)? sessions?|expos?|meet-?ups?|seminars?|colloqui(?:um|a)|open house|networking (?:event|night)|competition|contest)\b/i;

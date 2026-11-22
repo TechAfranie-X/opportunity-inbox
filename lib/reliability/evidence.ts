@@ -219,6 +219,8 @@ export function withdrawalAcknowledged(email: Pick<RecruitingEmail, "subject" | 
  * or null. Identity evidence for a message whose stored role is generic. Wording families, current text only.
  */
 const NAMED_ROLE = [
+  /\b(?:spot|seat|place) (?:has (?:just )?opened (?:up )?)?in (?:the |our )?\*?([A-Z][\w &'’-]{6,80}?\b(?:Program|Programme|Fellowship|Academy|Cohort|Bootcamp|Institute|Course))\b/,
+  /\b(?:[Ff]ollow-?[Uu]p|[Uu]pdate|[Qq]uestion|[Ii]nquiry|[Ss]tatus)s? (?:on|about|regarding|for) (?:my |your |the )?([A-Z0-9][\w ,&/()'’+.-]{6,80}?) (?:[Aa]pplication|[Cc]andidacy)\b/,
   /\b(?:selected|invited|accepted|admitted|chosen) (?:to|for|into) (?:attend |join |participate in |be part of )?(?:the |our )?([A-Z][^.!?]{6,80}?\b(?:Accelerator|Program|Programme|Lab|Fellowship|Academy|Series|Cohort|Institute|Bootcamp|Workshop|Summit|Course)\b)/,
   /\b(?:join|joining|accepted (?:in|into|to)|admitted (?:in|into|to)|invited to) (?:our |the )?([A-Z][^.]{6,90}?\b(?:Program|Programme|Fellowship|Academy|Cohort|Bootcamp|Institute|Course|Workshop|Certificate)\b[^.,(]{0,30}?)(?=[.,(]| delivered| via|$)/,
   /\b(?:for|to|regarding) (?:the |our )?([A-Z0-9][\w ,&/()'’+.-]{6,100}?) (?:position|role|opportunity)\b/,
@@ -230,7 +232,7 @@ export function namedRole(email: Pick<RecruitingEmail, "subject" | "bodyText">):
   for (const sentence of sentencesOf(email)) for (const re of NAMED_ROLE) {
     const m = re.exec(sentence);
     const role = m?.[1]?.trim().replace(/[ ,.-]+$/, "").replace(/\s+(?:and|which|that|will|has|is|was|where|when|so)\b.*$/i, "").trim();
-    if (role && role.length >= 8 && role.length <= 100 && !/[.!?]\s/.test(role) && !NOT_A_ROLE.test(role) && /\b(?:intern(?:ship)?|engineer|developer|analyst|scientist|designer|manager|associate|fellow|apprentice|co-?op|extern(?:ship)?|researcher|program|programme|ux|design|data|software|product)\b/i.test(role)) return role;
+    if (role && role.length >= 8 && role.length <= 100 && !/[.!?]\s/.test(role) && (role.match(/\(/g)?.length ?? 0) === (role.match(/\)/g)?.length ?? 0) && !NOT_A_ROLE.test(role) && /\b(?:intern(?:ship)?|engineer|developer|analyst|scientist|designer|manager|associate|fellow|apprentice|co-?op|extern(?:ship)?|researcher|program|programme|academy|accelerator|institute|bootcamp|cohort|course|ux|design|data|software|product)\b/i.test(role)) return role;
   }
   return null;
 }
@@ -241,11 +243,13 @@ export function namedRole(email: Pick<RecruitingEmail, "subject" | "bodyText">):
  * apply ("CLICK HERE TO APPLY", "Apply Here"), with no statement about the reader's own application. An invitation to apply is not an application; a host that announces partner opportunities weekly
  * (a programme operator, a job board) is not an employer the reader applied to. Wording and infrastructure families, not any sender's template.
  */
-const BULK_PLATFORM = /(?:list-manage\.com|mailchi\.mp|campaign-archive\.com|mcusercontent\.com|constantcontact\.com|hubspotlinks\.com|view this email in your browser|view in browser)/i;
-const APPLY_CTA = /\b(?:click here to apply|apply here|apply now|learn more and apply|apply today|sign up (?:now|here)|applications? (?:are )?(?:now )?open)\b/i;
+const BULK_PLATFORM = /(?:utm_source=email%20campaign|utm_medium=xxxxx|list-manage\.com|mailchi\.mp|campaign-archive\.com|mcusercontent\.com|constantcontact\.com|hubspotlinks\.com|view this email in your browser|view in browser)/i;
+const APPLY_CTA = /\b(?:(?:invite|inviting|encourage|invited) you to apply|(?:we(?:'|’)re|we are) opening applications|click here to apply|apply here|apply now|learn more and apply|apply today|sign up (?:now|here)|applications? (?:are )?(?:now )?open)\b/i;
+// a SUBJECT that is itself a call to apply to something the reader has not applied to ("Apply by June 6: ...", "4 Days Left: ...", "Applications Open: ...", "Last Call to Apply")
+const CALL_TO_APPLY_SUBJECT = /^\W*(?:(?:re|fwd?)\s*:\s*)*(?:reminder\s*:\s*)?(?:apply (?:by|now|today|here)|applications? (?:open|close|due|closing)|last call to apply|\d+ days? left|final (?:call|days?)|invitation to apply|invites? you to apply|now accepting applications)\b|\b\d+ days? left\b/i;
 export function campaignFact(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
   const text = unquoted(`${email.subject}\n${email.bodyText}`);
-  return BULK_PLATFORM.test(text) && APPLY_CTA.test(text) && !ownApplicationStatement(email);
+  return ((BULK_PLATFORM.test(text) && APPLY_CTA.test(text)) || CALL_TO_APPLY_SUBJECT.test(email.subject)) && !ownApplicationStatement(email);
 }
 
 
@@ -276,8 +280,8 @@ export function employerNamed(email: Pick<RecruitingEmail, "subject" | "bodyText
  * Where a PROGRAMME message sits in its own lifecycle, when the source says so: invited (an invitation to join), accepted (accepted / selected into it), enrolled (welcome / confirmed participation /
  * a session, assignment or section of it), completed (completion certificate). Wording families; the product uses it to keep programme evidence in the programme's journey.
  */
-const P_COMPLETED = /\b(?:certificate of (?:completion|participation)|congratulations on your (?:successful )?completion of|congratulations on (?:completing|finishing|graduating)|you(?:'|’)ve (?:successfully )?(?:completed|graduated)|you have (?:successfully )?completed|completion certificate)\b/i;
-const P_ACCEPTED = /\b(?:formal(?:ly)? invit(?:ation|ed)|we (?:reviewed|received) [^.]{0,40}applications and[^.]{0,60}(?:impressed|pleased|excited)|you(?:'|’)ve been (?:accepted|selected|admitted)|you have been (?:accepted|selected|admitted)|congratulations[^.]{0,60}(?:accepted|selected|admitted)|formally invited|we are pleased to (?:accept|admit))\b/i;
+const P_COMPLETED = /\b(?:thank you for (?:an? )?(?:incredible|amazing|wonderful|great|fantastic) (?:week|program(?:me)?|experience|cohort|externship)|thank you for (?:attending|participating in|being (?:a )?part of) (?:the |our |this )?[\w &'’-]{0,40}(?:externship|program(?:me)?|cohort|bootcamp|academy)\b|certificate of (?:completion|participation)|congratulations on your (?:successful )?completion of|congratulations on (?:completing|finishing|graduating)|you(?:'|’)ve (?:successfully )?(?:completed|graduated)|you have (?:successfully )?completed|completion certificate)\b/i;
+const P_ACCEPTED = /\b(?:you(?:'|’)re (?:officially )?in (?:the )?[A-Z][\w &'’-]{2,50}\b(?:Academy|Program|Programme|Cohort|Fellowship|Bootcamp|Institute|Course)\b|your (?:\w+ ){0,3}spot is confirmed|formal(?:ly)? invit(?:ation|ed)|we (?:reviewed|received) [^.]{0,40}applications and[^.]{0,60}(?:impressed|pleased|excited)|you(?:'|’)ve been (?:accepted|selected|admitted)|you have been (?:accepted|selected|admitted)|congratulations[^.]{0,60}(?:accepted|selected|admitted)|formally invited|we are pleased to (?:accept|admit))\b/i;
 const P_INVITED = /\b(?:(?:thrilled|pleased|excited) to invite you to (?:continue|join|take part)|invitation to join|invited to join|invite you to join|you(?:'|’)re invited to (?:join|apply))\b/i;
 const P_ENROLLED = /\b(?:welcome to|section reminder|first section|assignment graded|deep work session|kick-?off|cohort (?:call|session)|your (?:cohort|section|session))\b/i;
 export type ProgramStage = "invited" | "accepted" | "enrolled" | "completed";
@@ -286,9 +290,35 @@ export function programStage(email: Pick<RecruitingEmail, "subject" | "bodyText"
   const COND = /\b(?:if|in the case|in case|should|whether|unless|when)\b/i;
   const sentences = sentencesOf({ subject: email.subject, bodyText: email.bodyText.slice(0, 2200) }).filter((x) => !COND.test(x));
   const any = (re: RegExp) => sentences.some((x) => re.test(x));
-  if (any(P_COMPLETED)) return "completed";
+  // completion of the PROGRAMME itself: not an earlier level, an onboarding step, a form, or the reminder/invitation that mentions what the person already did
+  const NOT_THE_END = /\b(?:onboarding|application|form|profile|registration|survey|level|step|prerequisite|reminder|section|invit\w*|before|prior)\b/i;
+  if (sentences.some((x) => P_COMPLETED.test(x) && !NOT_THE_END.test(`${email.subject} ${x}`))) return "completed";
+  // finishing a level and being invited to the next is advancement inside the programme, not its end
+  if (any(P_COMPLETED) && (any(P_INVITED) || any(P_ACCEPTED))) return "accepted";
   if (any(P_ACCEPTED)) return "accepted";
   if (any(P_INVITED)) return "invited";
   if (any(P_ENROLLED)) return "enrolled";
   return null;
+}
+
+/**
+ * The reader's OWN reply declines or withdraws from the opportunity ("I have already made a commitment ... so I am not in a position to pursue another internship", "I would like to withdraw").
+ * First person, own words, sentence by sentence; a question or a condition is not a decision. Used only on outbound mail.
+ */
+const DECLINE = /\b(?:i(?:'|’)?(?:ve| have) (?:already )?(?:made a commitment|committed to|accepted (?:another|an|a)\b)|i(?:'m| am) (?:not|no longer) (?:currently )?(?:in a position|able|available|interested|looking) (?:to )?(?:pursue|continue|move forward|take|accept|proceed|for)|i(?:'d| would) (?:like|need|have) to (?:respectfully )?(?:withdraw|decline)|i (?:must|have to|need to|will have to|regret to) (?:respectfully )?(?:withdraw|decline)|(?:please )?(?:withdraw|remove) my (?:application|candidacy)|i (?:am|'m) withdrawing|i (?:have )?decided (?:not to|to (?:decline|withdraw|pursue (?:another|other)))|i(?:'|’)?ll (?:have to )?(?:decline|pass))\b/i;
+export function studentDeclines(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
+  const COND = /\b(?:if|whether|should|unless|could you|can you|would you)\b/i;
+  return sentencesOf({ subject: "", bodyText: email.bodyText.slice(0, 1500) }).filter((x) => !COND.test(x) || /^i\b/i.test(x.trim())).some((x) => DECLINE.test(x) && !/\?\s*$/.test(x));
+}
+
+/**
+ * Conversational responsibility: the sender says THEY will act next ("I will look for a time and send you an update", "we'll be in touch") and asks the reader for nothing. The message is then not a request
+ * to the reader (an invitation to book, a question to answer): the ball is with the sender. Sentence by sentence on this message's own words; any ask of the reader in the same message cancels it.
+ */
+const THEY_WILL = /\b(?:i|we)(?:'|’)?(?:ll| will| am going to| are going to)\s+(?:\w+\s+){0,3}(?:send|get back|circle back|follow up|reach out|let you know|be in touch|confirm|update|share|look (?:for|into|at)|find|check|coordinate|schedule|set up|arrange|propose)\b|\b(?:the team|our team|recruiting|the recruiter) will (?:\w+\s+){0,3}(?:be in touch|get back|follow up|reach out|send|update|confirm|schedule|contact)\b/i;
+const ASKS_YOU = /\?|\b(?:please (?:\w+\s+){0,2}(?:reply|respond|send|share|confirm|provide|complete|schedule|book|select|choose|pick|let me know|let us know)|let (?:me|us) know|could you|can you|would you|will you|reply (?:to this|with)|use the link|click (?:the|this) link|sign up|select a (?:time|slot)|book a (?:time|slot)|action required|what(?:'|’)?s your availability|are you available)\b/i;
+export function awaitingThem(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
+  const own = sentencesOf({ subject: "", bodyText: email.bodyText.slice(0, 1200) });
+  if (own.length === 0 || own.length > 14) return false;
+  return own.some((x) => THEY_WILL.test(x)) && !own.some((x) => ASKS_YOU.test(x));
 }

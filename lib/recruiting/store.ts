@@ -4,8 +4,9 @@ import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-or
 import { getDb } from "@/lib/db";
 import { refineEvents } from "@/lib/lifecycle/refine";
 import { deleteEvidenceLedgers } from "@/lib/ledger/store";
-import { applyMoves, plannedMoves, terminalFragmentMoves } from "@/lib/investigate/reattach";
-import { applyEntryPolicy, applyNamedEmployer, applyNamedRoles, attachProgramEvidence, attachVendorMail, demoteCampaigns, demoteNonReceipts, promoteDecisiveNearMisses, neutralizeClassed, proposeMissedEndings, retypeAssessmentPlatforms, retypeUnverifiedClaims } from "@/lib/recruiting/entry-policy";
+import { employerAlias } from "@/lib/lifecycle/identity";
+import { applyMoves, fragmentMoves, plannedMoves, terminalFragmentMoves } from "@/lib/investigate/reattach";
+import { applyEntryPolicy, applyNamedEmployer, applyNamedRoles, attachProgramEvidence, attachVendorMail, demoteCampaigns, demoteNonReceipts, promoteDecisiveNearMisses, neutralizeClassed, proposeMissedEndings, retypeAssessmentPlatforms, retypeAwaitingThem, retypeIncompleteApplications, retypeUnverifiedClaims } from "@/lib/recruiting/entry-policy";
 import { entryPolicyOn, identityContext } from "@/lib/recruiting/product-config";
 import { withConfirmationConflicts, type LatestReading } from "@/lib/recruiting/confirmation-conflicts";
 import {
@@ -117,7 +118,7 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
     events = campaigns.kept;
     possible.push(...campaigns.demoted);
     const nonReceipts = demoteNonReceipts(events);
-    events = retypeAssessmentPlatforms(neutralizeClassed(proposeMissedEndings(retypeUnverifiedClaims(nonReceipts.kept))));
+    events = retypeAwaitingThem(retypeIncompleteApplications(retypeAssessmentPlatforms(neutralizeClassed(proposeMissedEndings(retypeUnverifiedClaims(nonReceipts.kept))))));
     possible.push(...nonReceipts.demoted);
     const { kept, demoted } = applyEntryPolicy(events, (evs) => buildOpportunities(evs, new Map(), parsePolicy(process.env.OPPORTUNITY_POLICY), ident));
     events = kept;
@@ -135,7 +136,10 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
   let opportunities = buildOpportunities(events, overrides, policy, ident);
   // the investigator corrects what the product itself contradicts (INVESTIGATE_REATTACH=off to roll back): one more grouping pass with the moved events linked to the application they belong to
   if (entryPolicyOn() && ident && process.env.INVESTIGATE_REATTACH !== "off") {
-    const moves = [...plannedMoves(opportunities), ...terminalFragmentMoves(opportunities)];
+    const base = [...plannedMoves(opportunities), ...terminalFragmentMoves(opportunities)];
+    const taken = new Set(base.map((m) => m.eventId));
+    const moves = [...base, ...fragmentMoves(opportunities, employerAlias).filter((m) => !taken.has(m.eventId))];
+    if (process.env.DEBUG_MOVES) for (const m of moves) console.log("MOVE", m.from.slice(0, 40), "->", m.to.slice(0, 40), m.reason);
     if (moves.length > 0) { events = applyMoves(events, moves); opportunities = buildOpportunities(events, overrides, policy, ident); }
   }
   // OFF by default (CONFIRMATION_CONFLICTS=on): ask about a plain "Looks right" that the latest reading of the same message disagrees with. Nothing is rewritten.

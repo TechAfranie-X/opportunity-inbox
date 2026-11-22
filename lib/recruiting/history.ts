@@ -1,3 +1,4 @@
+import { PROGRAM_STATE_LABEL, programLifecycle } from "../lifecycle/program.ts";
 import { cancelledDays, isCancelledSchedule } from "../lifecycle/cancelled.ts";
 import { stageOfEvent } from "./opportunity.ts";
 import { daysBetween } from "./format.ts";
@@ -168,6 +169,10 @@ export function lastMeaningful(opportunity: Opportunity): { label: string; at: D
   const quiet = new Set<EventType>(["user_reply", "status_update", "follow_up"]);
   const event = [...opportunity.events].reverse().find((e) => !quiet.has(e.type)) ?? opportunity.events[opportunity.events.length - 1];
   const annotated = annotateTimeline(opportunity.events).find((i) => i.event === event);
+  if (opportunity.programState && opportunity.programState !== "applied") {
+    const at = programLifecycle(opportunity.events).at;
+    return { label: PROGRAM_STATE_LABEL[opportunity.programState], at: at ?? event.occurredAt, scheduled: null };
+  }
   return {
     label: annotated?.label ?? BASE_LABEL[event.type],
     at: event.occurredAt,

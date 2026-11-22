@@ -586,7 +586,9 @@ export function OpportunityHistory({ opportunity, now, editable }: { opportunity
   const latestInbound = [...opportunity.events].reverse().find((e) => !e.outbound);
   const closedNote =
     opportunity.status === "closed"
-      ? opportunity.closedBy === "expired"
+      ? opportunity.closedBy === "completed"
+        ? "Completed: the programme ran its course"
+        : opportunity.closedBy === "expired"
         ? "Closed: the request expired"
         : opportunity.closedBy === "not_recruiting"
           ? "Not in your pipeline: nothing here shows an application"

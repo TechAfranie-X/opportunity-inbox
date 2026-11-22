@@ -118,7 +118,7 @@ export type Opportunity = {
   /** Whether the opportunity is still open. Separate from `stage`, which is how far it got. */
   status: "active" | "closed";
   /** Why it is closed: an employer/person ending, an expired request, or no evidence of a candidacy. Null while active. */
-  closedBy?: "rejected" | "withdrawn" | "expired" | "not_recruiting" | null;
+  closedBy?: "rejected" | "withdrawn" | "expired" | "not_recruiting" | "completed" | null;
   /** The ending rests on one uncorroborated automated reading (decision engine, shadow): shown as "likely ended, please confirm" once the product uses it. */
   closureProposed?: boolean;
   /** One uncorroborated reading says this application ended; it is NOT settled and the application stays active and visible. */
@@ -136,6 +136,8 @@ export type Opportunity = {
   contradictions?: Array<{ kind: "reopened" | "offer_ended" | "ambiguous_identity" | "mixed_cycles"; eventIds: string[]; text: string }>;
   /** What kind of opportunity this is. Scholarships and mentorship programs are real applications but not employer recruiting. Absent = job or internship. */
   kind?: OpportunityKind;
+  /** Programme journeys only: where the person is in the programme (lib/lifecycle/program.ts). A programme is never a job stage. */
+  programState?: import("../lifecycle/program.ts").ProgramState;
 };
 
 export type OpportunityKind = "job" | "scholarship" | "mentorship" | "event";

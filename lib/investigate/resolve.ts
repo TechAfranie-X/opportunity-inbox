@@ -152,7 +152,22 @@ function programEvidenceRouted({ o, e }: Ctx): Resolution | null {
   return { eventId: e.id, gmailMessageId: e.gmailMessageId, resolver: "program-evidence-routed", decision: `part of the ${o.kind} journey`, explanation: "The message is the programme's own mail and sits in the programme's journey, never in a job stage.", evidence: [{ kind: "programme-evidence", ref: id8(e) }] };
 }
 
-const RESOLVERS = [programEvidenceRouted, typeByFacts, staleGoodbye, employerByCorroboration, membershipByThread, ownProcessStatement, companyByMessage, programLooksLike, companyAlias, assessmentByVendor, updateInThread];
+/**
+ * A plain update or nudge (no stage, no ending, no date) never changes what the journey says: the stage is monotonic on stage-bearing evidence and an update advances nothing. When the journey that holds it
+ * already stands on at least two other confidently read messages from the same sender or thread, "what kind of update is this?" cannot change anything the student sees, so it is not a question. It stays
+ * listed (not hidden) with this reason.
+ */
+function immaterialUpdate({ o, e }: Ctx): Resolution | null {
+  if ((e.type !== "status_update" && e.type !== "follow_up") || e.eventDate || has(e, "terminal:proposed") || has(e, "ending:wording") || has(e, "identity:ambiguous") || hasPrefix(e, "identity:suggest:")) return null;
+  const reasons = e.reviewReasons ?? [];
+  if (reasons.some((r) => !/^type: |^membership: /i.test(r))) return null;
+  if (reasons.some((r) => /^membership: /i.test(r)) && !(subjectNames(e) || o.events.some((x) => x !== e && x.gmailThreadId === e.gmailThreadId) || hasPrefix(e, "identity:class:thread"))) return null;
+  const solid = o.events.filter((x) => x !== e && !x.outbound && (x.fieldConfidence?.type ?? x.confidence ?? 0) >= 0.7 && !has(x, "semantic:event") && (x.senderDomain === e.senderDomain || x.gmailThreadId === e.gmailThreadId || x.company === e.company));
+  if (solid.length < 2) return null;
+  return { eventId: e.id, gmailMessageId: e.gmailMessageId, resolver: "immaterial-update", decision: "a plain update; it cannot change this journey", explanation: "It is a plain update with no stage, date or ending, in a journey that already stands on confidently read messages from the same sender or thread; whatever kind of update it is, it advances nothing.", evidence: solid.slice(0, 3).map((x) => ({ kind: "confident-message", ref: id8(x) })) };
+}
+
+const RESOLVERS = [programEvidenceRouted, typeByFacts, staleGoodbye, employerByCorroboration, membershipByThread, ownProcessStatement, companyByMessage, programLooksLike, companyAlias, assessmentByVendor, updateInThread, immaterialUpdate];
 
 /** Resolve what the evidence already held can resolve. A person's correction or confirmation is never overridden, and an event with competing flags is resolved only if EVERY stored reason is covered. */
 export function investigate(opportunities: Opportunity[]): Map<string, Resolution> {
@@ -181,5 +196,6 @@ const explains = (resolver: string, reason: string): boolean =>
   (resolver === "program-evidence-routed" && /^type: |^membership: |^company: /i.test(reason)) ||
   (resolver === "company-alias" && /conflicting candidate|could be .+ or |^company: /i.test(reason)) ||
   (resolver === "assessment-by-vendor" && /^membership: /i.test(reason)) ||
+  (resolver === "immaterial-update" && /^type: |^membership: /i.test(reason)) ||
   (resolver === "update-in-thread" && /^type: |^membership: /i.test(reason)) ||
   (resolver === "identity-by-journey" && /^identity: |could not tell which of your applications|may belong to another/i.test(reason));

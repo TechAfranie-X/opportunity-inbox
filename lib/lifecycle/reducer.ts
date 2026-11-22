@@ -55,6 +55,8 @@ export function reduceLifecycle(events: EffectiveEvent[], policy: Policy = DEFAU
       continue;
     }
     if (!NOT_CANDIDACY.has(e.type) && STAGE_OF[e.type]) candidacy = true;
+    // the person's own reply declines or withdraws ("I have already made a commitment ..."): the application is over, by them. A later stage event from the employer reopens it as usual.
+    if (e.outbound && e.signals.includes("student:declines") && !ended && STAGE_RANK[stage] >= 0 && events.some((x) => !x.outbound && x.occurredAt.getTime() < e.occurredAt.getTime())) { ended = "withdrawn"; endedProposed = false; outcome = "withdrawn"; expired = false; proposed = null; continue; }
     if (!usable(e)) continue;
     if (e.signals.includes("retraction (fact)") && ended && !e.outbound) { ended = null; endedProposed = false; outcome = null; expired = false; continue; } // the employer took the ending back
     const s = STAGE_OF[e.type];

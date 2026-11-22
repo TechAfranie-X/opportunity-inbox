@@ -23,19 +23,22 @@ if (rb) {
 const refresh = process.argv.includes("--refresh"); // targeted: re-derive the ending signals of rows that have them (and any listed message-id prefixes), removing the ones the text no longer supports
 const extra = refresh && process.argv[process.argv.indexOf("--refresh") + 1]?.match(/^[0-9a-f,]+$/) ? process.argv[process.argv.indexOf("--refresh") + 1].split(",") : [];
 const isStale = (x: string) => STALE.includes(x) || x.startsWith("role:named:") || x.startsWith("employer:named:") || x.startsWith("program:") || x.startsWith("class:");
-const STALE = ["ending:own", "withdrawal:ack", "ending:wording", "own:receipt"];
+const STALE = ["ending:own", "withdrawal:ack", "ending:wording", "own:receipt", "awaiting:them"];
 const modeled = process.argv.includes("--modeled-unclassed"); // targeted: only model-found or near-miss events that carry no message class yet (the mail the class facts exist for)
 const bulk = process.argv.includes("--bulk-senders"); // targeted: uncorrected inbound events of senders that wrote 10+ stored messages and carry no message class yet (hosts, job boards, programme operators: campaign mail hides here)
 const roleLess = process.argv.includes("--role-less"); // targeted: events whose stored role is empty or a bare word, where the message may name its position itself
 const backfill = process.argv.includes("--backfill-v2"); // targeted: the rows where the new facts (employer named, programme stage, borrowed-role receipts) can matter: unknown/sender-only employers, classed or near-miss mail, borrowed roles
-const rows = rowsOf(await db.execute(backfill
-  ? sql`select e.id::text, e.gmail_message_id, e.type, e.signals, e.company from recruiting_events e where e.user_google_sub = ${sub} and e.outbound = false and e.correction is null and e.signals::text not like '%program:%' and (e.company is null or e.company ilike 'unknown%' or e.signals::text like '%employer:sender-only%' or e.signals::text like '%near-miss%' or e.signals::text like '%class:%' or e.signals::text like '%entry:%' or e.signals::text like '%role-inherited%' or e.signals::text like '%known-contact-continuity%' or e.signals::text like '%own:receipt%')`
+const outboundMode = process.argv.includes("--outbound"); // targeted: the reader's OWN sent replies (their stated decline / withdrawal)
+const rows = rowsOf(await db.execute(outboundMode
+  ? sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = true and correction is null and signals::text not like '%student:declines%'`
+  : backfill
+  ? sql`select e.id::text, e.gmail_message_id, e.type, e.signals, e.company from recruiting_events e where e.user_google_sub = ${sub} and e.outbound = false and e.correction is null and e.signals::text not like '%program:%' and (e.company is null or e.company ilike 'unknown%' or e.signals::text like '%employer:sender-only%' or e.signals::text like '%near-miss%' or e.signals::text like '%"class:%' or e.signals::text like '%entry:%' or e.signals::text like '%role-inherited%' or e.signals::text like '%known-contact-continuity%' or e.signals::text like '%own:receipt%')`
   : bulk
-  ? sql`select e.id::text, e.gmail_message_id, e.type, e.signals, e.company from recruiting_events e where e.user_google_sub = ${sub} and e.outbound = false and e.correction is null and e.signals::text not like '%class:%' and e.sender_domain in (select sender_domain from recruiting_events where user_google_sub = ${sub} and outbound = false group by sender_domain having count(*) >= 10)`
+  ? sql`select e.id::text, e.gmail_message_id, e.type, e.signals, e.company from recruiting_events e where e.user_google_sub = ${sub} and e.outbound = false and e.correction is null and e.signals::text not like '%"class:%' and e.sender_domain in (select sender_domain from recruiting_events where user_google_sub = ${sub} and outbound = false group by sender_domain having count(*) >= 10)`
   : roleLess
   ? sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and signals::text not like '%role:named:%' and (role is null or length(role) < 14 or lower(role) in ('internship', 'intern', 'position')) and type not in ('user_reply')`
   : modeled
-  ? sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and signals::text not like '%class:%' and (signals::text like '%semantic:event%' or signals::text like '%near-miss%')`
+  ? sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and signals::text not like '%"class:%' and (signals::text like '%semantic:event%' or signals::text like '%near-miss%')`
   : refresh
   ? sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and (signals::text like '%role:named:%' or signals::text like '%employer:named:%' or signals::text like '%program:%' or signals::text like '%own:receipt%' or signals::text like '%ending:own%' or signals::text like '%withdrawal:ack%' or signals::text like '%ending:wording%' or signals::text like '%terminal:proposed%' or type = 'rejection' or left(gmail_message_id, 8) = any(string_to_array(${extra.join(",")}, ',')))`
   : sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null`));
@@ -50,7 +53,7 @@ const plan: Record<string, string[]> = {}; const removals: Record<string, string
 for (const r of rows) {
   const m = by.get(r.gmail_message_id as string); if (!m) continue;
   const have = r.signals as string[];
-  const add = evidenceSignals(m, { type: r.type as never, signals: refresh ? have.filter((x) => !isStale(x)) : have, outbound: false }).filter((x) => !have.includes(x));
+  const add = evidenceSignals(m, { type: r.type as never, signals: refresh ? have.filter((x) => !isStale(x)) : have, outbound: outboundMode }).filter((x) => !have.includes(x));
   if (refresh) { const fresh = evidenceSignals(m, { type: r.type as never, signals: have.filter((x) => !isStale(x)), outbound: false }); const stale = have.filter((x) => isStale(x) && !fresh.includes(x)); if (stale.length) removals[r.id as string] = stale; }
   if (add.length === 0) continue;
   plan[r.id as string] = add; for (const a of add) { tally[a] = (tally[a] ?? 0) + 1; (names[a] ??= new Set()).add(String(r.company).slice(0, 18)); }

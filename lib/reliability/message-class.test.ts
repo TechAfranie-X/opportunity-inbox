@@ -145,7 +145,7 @@ test("an employer named after 'position with', 'application status with' is foun
 
 test("finishing one level and being invited to the next is programme evidence, not a job message", () => {
   const m = { subject: "Congratulations, you're invited to CRE Fundamentals Level 2!", bodyText: "Congratulations on your successful completion of CRE Fundamentals Level I. We are thrilled to invite you to continue your journey with us in Level II: Valuation." };
-  assert.equal(programStage(m), "completed");
+  assert.equal(programStage(m), "accepted"); // advancement inside the programme, not its end
   assert.equal(messageClass(m), "program-acceptance");
 });
 
@@ -170,4 +170,54 @@ test("platform names are never the employer, and a registration outcome is not a
 
 test("an employer's reminder of the reader's own interview is not an event", () => {
   assert.equal(messageClass({ subject: "Reminder: You have an upcoming interview with Acme", bodyText: "This is a reminder that you have an upcoming interview with Acme tomorrow at 10:00 AM." }), null);
+});
+
+test("programme completion means the programme itself: a reminder or a next-level invitation that mentions finished work is not a completion", () => {
+  assert.equal(programStage({ subject: "Friendly Reminder Before Our First Section", bodyText: "You've completed onboarding. Your first section starts tomorrow." }), "enrolled");
+  assert.equal(programStage({ subject: "Congratulations, you're invited to CRE Fundamentals Level 2!", bodyText: "You've successfully completed Level 1. We are thrilled to invite you to continue to Level 2." }), "accepted");
+  assert.equal(programStage({ subject: "Your certificate", bodyText: "Congratulations on completing the Fellowship. Your certificate of completion is attached." }), "completed");
+});
+
+test("the reader's own decline is recognised in their words, and a question or condition is not", async () => {
+  const { studentDeclines } = await import("./evidence.ts");
+  assert.equal(studentDeclines({ subject: "Re: Internship Opportunity", bodyText: "Thank you for reaching out. I've already made a commitment for a 2027 internship, so I'm not currently in a position to pursue another internship opportunity for that term." }), true);
+  assert.equal(studentDeclines({ subject: "Re: Interview", bodyText: "Could you tell me if I would have to decline another offer before the start date?" }), false);
+  assert.equal(studentDeclines({ subject: "Re: Interview", bodyText: "Thanks! I'm available on Tuesday at 2pm." }), false);
+});
+
+test("a follow-up about an application names its programme in the subject", () => {
+  assert.equal(namedRole({ subject: "Re: Follow-Up on PayPal Career Academy Application", bodyText: "I see your application and assessment were received." }), "PayPal Career Academy");
+});
+
+test("'You're in the X Academy' is a programme acceptance", () => {
+  const m = { subject: "You're in the LILO Summer Academy. 1 thing to do before June 15", bodyText: "Your Summer Academy spot is confirmed. You're officially in, and the LILO Summer Academy kicks off Monday." };
+  assert.equal(programStage(m), "accepted");
+  assert.equal(messageClass(m), "program-acceptance");
+});
+
+test("a subject that is a call to apply is a campaign, not the reader's own application", () => {
+  assert.equal(campaignFact({ subject: "Apply by June 6: AI Fellowship Opportunity at CBRE + $5,000 Hackathon", bodyText: "Applications are open. Learn more." }), true);
+  assert.equal(campaignFact({ subject: "⏳4 Days Left: Real Estate Program with the World's Largest Business Tax Firm", bodyText: "Apply today." }), true);
+  assert.equal(campaignFact({ subject: "Your application: reminder", bodyText: "Thank you for submitting your application. We received it." }), false);
+});
+
+test("a waitlist acceptance names its programme in the body", () => {
+  assert.equal(namedRole({ subject: "Congratulations — You've Been Accepted from the Waitlist", bodyText: "Congratulations! A spot has just opened in the *ICSC Retail Real Estate Bridge Program, powered by Project Destined*, and you have been accepted." }), "ICSC Retail Real Estate Bridge Program");
+});
+
+test("a sender who will act next and asks nothing of the reader is awaited, not waiting on the reader", async () => {
+  const { awaitingThem } = await import("./evidence.ts");
+  assert.equal(awaitingThem({ subject: "Re: Next Steps", bodyText: "Thanks for sending your availability. I will look for a Tuesday time and send you an update." }), true);
+  assert.equal(awaitingThem({ subject: "Re: Next Steps", bodyText: "I will send an update soon. Could you also share your phone number?" }), false);
+  assert.equal(awaitingThem({ subject: "Interview", bodyText: "Please reply with your availability so we can schedule." }), false);
+});
+
+test("a hackathon registration update and a Forage job simulation are not applications", () => {
+  assert.equal(messageClass({ subject: "Adobe University Hackathon North America: Update on Your Adobe University Hackathon Registration", bodyText: "Unfortunately we are unable to confirm your registration at this time." }), "event");
+  assert.equal(messageClass({ subject: "Welcome to the Electronic Arts Software Engineering Job Simulation", bodyText: "This virtual experience program on Forage lets you try the work of an engineer." }), "community");
+});
+
+test("thanking the reader for finishing the week or the programme marks completion; thanking for a session does not", () => {
+  assert.equal(programStage({ subject: "Thank You for an Incredible Week: 2026 Alcon Innovation Externship", bodyText: "It was a pleasure having you." }), "completed");
+  assert.equal(programStage({ subject: "Thank you for Attending the CRE Fundamentals Level 3 session! Here's what's Next.", bodyText: "Thank you for attending the session." }), null);
 });

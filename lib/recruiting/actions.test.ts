@@ -65,3 +65,14 @@ test("quiet-application nudges are bounded to the 14-45 day window and ranked ar
   assert.deepEqual(a.filter((x) => !x.dormant).map((x) => x.company), ["B", "C"]);
   assert.deepEqual(a.filter((x) => x.dormant).map((x) => x.company), ["D"], "70 silent days is the 60-day dormant suggestion, not a nudge");
 });
+
+test("when the employer says it will send the next update, the reader is not asked to reply again", () => {
+  const invite = ev("interview_invite", 2);
+  const mine = ev("user_reply", 1, { outbound: true });
+  // the employer's later message carries the 'awaiting:them' fact (they will act next, asking nothing): never a request to the reader
+  const waiting = ev("interview_invite", 0, { signals: ["awaiting:them"] });
+  assert.ok(!run([invite, mine, waiting]).some((x) => x.kind === "schedule_interview"));
+  assert.ok(!run([ev("interview_invite", 1), waiting]).some((x) => x.kind === "schedule_interview"));
+  // without the fact, an unanswered invitation is still an action
+  assert.ok(run([ev("interview_invite", 1)]).some((x) => x.kind === "schedule_interview"));
+});

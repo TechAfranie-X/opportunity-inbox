@@ -1,3 +1,4 @@
+import { programLifecycle } from "../lifecycle/program.ts";
 import { detectContradictions } from "../lifecycle/contradictions.ts";
 import { groupEventsV2, groupRole, type IdentityContext } from "../lifecycle/identity.ts";
 import { groupEventsLegacyV2 } from "../lifecycle/identity-v2.ts";
@@ -115,7 +116,13 @@ export function buildOpportunities(
     const override = overrides.get(key) ?? legacy[i].map((k) => overrides.get(k)).find(Boolean);
     const closedByUser = override?.status === "closed";
     const reopened = override?.status === "active";
-    const status = (derived === "closed" && !reopened) || closedByUser ? "closed" : "active";
+    const kind = opportunityKind(group.events, group.company);
+    const prog = kind && kind !== "job" ? programLifecycle(group.events) : null;
+    // a programme that was completed is done, not "active"; a person's explicit reopening still wins
+    // an externship the person accepted and then finished (the host thanks them for the week / the programme) is over, not an open "accepted offer"
+    const externshipDone = kind === "job" && derived === "active" && (outcome === "accepted" || outcome === "offer") && group.events.some((e) => !e.outbound && e.signals.includes("program:completed")) && group.events.some((e) => /externship/i.test(`${e.role ?? ""} ${e.subject ?? ""}`));
+    const programDone = (prog?.state === "completed" && derived === "active") || externshipDone;
+    const status = (derived === "closed" && !reopened) || closedByUser || (programDone && !reopened) ? "closed" : "active";
     return {
       key,
       company: group.company ?? "Unknown company",
@@ -123,14 +130,15 @@ export function buildOpportunities(
       stage,
       outcome,
       status,
-      closedBy: status === "closed" ? (closedBy ?? "rejected") : null,
+      closedBy: status === "closed" ? (programDone && !closedByUser ? "completed" : (closedBy ?? "rejected")) : null,
       ...(closureProposed && status === "closed" && !closedByUser ? { closureProposed: true } : {}),
       ...(proposedEnding && status === "active" ? { proposedEnding } : {}),
       legacyKeys: legacy[i],
       firstActivityAt: group.events[0].occurredAt,
       lastActivityAt: group.events[group.events.length - 1].occurredAt,
       events: group.events,
-      kind: opportunityKind(group.events, group.company),
+      kind,
+      ...(prog ? { programState: prog.state } : {}),
       contradictions: detectContradictions(group.events),
       needsReview: !group.company || group.events.some((e) => eventNeedsReview(e, policy)) || closedBy === "not_recruiting",
     };

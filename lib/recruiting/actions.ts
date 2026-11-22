@@ -150,7 +150,9 @@ export function buildActions(
     // 3. Interview invite waiting on you
     const invite = lastOf("interview_invite");
     if (invite && !invite.outbound) {
-      const answered = laterThan(invite).some((e) => e.outbound || e.type === "interview_scheduled" || e.type === "rejection" || e.type === "offer");
+      // the ball is with them: a later message from the employer that says THEY will act next and asks the reader for nothing (the reader already sent their availability), or the invite itself says so
+      const awaiting = invite.signals.includes("awaiting:them") || laterThan(invite).some((e) => !e.outbound && e.signals.includes("awaiting:them"));
+      const answered = awaiting || laterThan(invite).some((e) => e.outbound || e.type === "interview_scheduled" || e.type === "rejection" || e.type === "offer");
       const age = ageDays(invite);
       if (!answered && age <= 30) {
         const stale = age > INVITE_OVERDUE_MAX_DAYS;
@@ -165,7 +167,7 @@ export function buildActions(
     // 4. Recruiter outreach not answered
     const outreach = lastOf("recruiter_outreach");
     if (outreach && !outreach.outbound) {
-      const answered = laterThan(outreach).some((e) => e.outbound || (stageRank(e) > 1));
+      const answered = outreach.signals.includes("awaiting:them") || laterThan(outreach).some((e) => (e.outbound || (stageRank(e) > 1) || (!e.outbound && e.signals.includes("awaiting:them"))));
       const age = ageDays(outreach);
       if (!answered && age <= 21) {
         add(opp, outreach, "respond_recruiter", "Respond to recruiter",
@@ -196,7 +198,9 @@ export function buildActions(
     // 6. Waiting on them: gentle follow-up nudges
     const quiet = Math.floor((today - dayStart(last.occurredAt)) / DAY);
     const alreadyActed = items.some((i) => i.opportunityKey === opp.key);
-    if (!alreadyActed) {
+    // a programme the person was accepted into, joined or finished is not an application waiting for an answer
+    const programMoved = !!opp.programState && opp.programState !== "applied";
+    if (!alreadyActed && !programMoved) {
       if (opp.stage === "applied" && !last.outbound && quiet >= 14 && quiet <= 45) {
         add(opp, last, "follow_up", "No response yet", `Applied ${quiet} days ago with no update — consider a follow-up.`, { bucket: "worth_a_look" });
         // Rank quiet applications: around three weeks of silence is the most useful moment to nudge.

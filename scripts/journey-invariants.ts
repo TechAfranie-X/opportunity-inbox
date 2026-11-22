@@ -57,5 +57,42 @@ for (const [id, label] of restored) { const f = find(id); check(`restored: ${lab
 // no program-evidence event creates a job stage anywhere
 const bad = opps.filter((o) => o.kind === "job").flatMap((o) => o.events.filter((e) => e.signals.some((s) => s.startsWith("program:evidence:")) && ["interview_invite", "interview_scheduled", "assessment", "offer"].includes(e.type)));
 check("no programme-evidence message advances a job stage", bad.length === 0, `${bad.length}`);
+
+// ---- Journey correctness milestone (audit of 1089df4): lifecycle, identity constraints, false-active, Today ----
+// programme lifecycle: no programme journey is shown at a job stage; acceptance/participation are represented
+const progs = opps.filter((o) => o.kind && o.kind !== "job");
+check("programme journeys carry a programme state (never only a job stage)", progs.every((o) => !!o.programState), progs.filter((o) => !o.programState).map((o) => o.company).join(","));
+const cipJ = opps.filter((o) => o.kind !== "job" && has(o, /code in place/i));
+check("Code in Place: accepted/participating (not Applied)", cipJ.some((o) => ["accepted", "enrolled", "participating", "completed"].includes(o.programState ?? "")), cipJ.map((o) => o.programState).join(","));
+const cre = opps.filter((o) => o.kind !== "job" && has(o, /cre fundamentals/i));
+check("CRE Fundamentals: one programme journey in an accepted-or-later state, not 'Unknown company Interview'", cre.length >= 1 && cre.every((o) => ["accepted", "enrolled", "participating", "completed"].includes(o.programState ?? "")), cre.map((o) => `${o.company}:${o.programState}`).join(","));
+const lilo = opps.filter((o) => has(o, /lilo summer academy/i));
+check("LILO Summer Academy: a programme journey (not a job interview)", lilo.length > 0 && lilo.every((o) => o.kind !== "job"), lilo.map((o) => `${o.kind}`).join(","));
+const icsc = opps.filter((o) => /icsc/i.test(o.role ?? ""));
+check("ICSC Bridge: participating, with no other programme's campaign inside", icsc.length === 1 && icsc[0].programState === "participating" && !icsc[0].events.some((e) => /tax firm|sports|marquee|spurs|apply by|days left/i.test(e.subject ?? "")), icsc.map((o) => `${o.programState}:${o.events.length}`).join(","));
+const lm = opps.filter((o) => /last mile/i.test(o.company));
+check("Last Mile award/grant is not a job", lm.length > 0 && lm.every((o) => o.kind === "scholarship"), lm.map((o) => o.kind).join(","));
+// false-active
+const alcInt = opps.filter((o) => /^alcon$/i.test(o.company) && has(o, /internship opportunity/i));
+check("Alcon 2027 cyber opportunity: declined by the student, closed (one journey, not an active fragment)", alcInt.length === 1 && alcInt[0].closedBy === "withdrawn", alcInt.map((o) => `${o.status}:${o.closedBy}:${o.events.length}`).join(","));
+const alcExt = opps.filter((o) => /^alcon$/i.test(o.company) && /externship/i.test(o.role ?? ""));
+check("Alcon 2026 externship: completed, not an open accepted offer", alcExt.length === 1 && alcExt[0].status === "closed", alcExt.map((o) => `${o.status}:${o.closedBy}`).join(","));
+// identity constraints
+const tm = opps.filter((o) => /thurgood|tmcf/i.test(o.company) && has(o, /career academy/i));
+check("PayPal Career Academy is not inside the TMCF Leadership Institute journey", tm.every((o) => !/leadership institute/i.test(o.role ?? "")) && tm.length >= 1, tm.map((o) => o.role).join("|"));
+const tmI = opps.filter((o) => /leadership institute/i.test(o.role ?? "") && o.kind === "job" && o.status === "active");
+// (three of the fragments hold events the OWNER corrected: those are authoritative and never moved, so the floor is 4, down from 7)
+check("TMCF Leadership Institute: at most 4 active fragments (was 7; owner-corrected events stay where they are)", tmI.length <= 4, `${tmI.length}`);
+const nl = opps.filter((o) => /neuralink/i.test(o.company)), cc2 = opps.filter((o) => /^claude$/i.test(o.company));
+check("Neuralink portal code attaches nowhere (administrative mail creates and merges nothing)", !opps.some((o) => o.kind === "scholarship" && o.events.some((e) => /security code for your application/i.test(e.subject ?? ""))) && nl.length >= 1 && cc2.every((o) => o.events.every((e) => !/security code/i.test(e.subject ?? ""))));
+const sfJ = opps.filter((o) => /^salesforce$/i.test(o.company));
+check("Salesforce: the 2027 job holds its whole interview/offer thread; the Futureforce accelerator is its own programme", sfJ.filter((o) => o.kind === "job" && /2027/.test(o.role ?? "")).length === 1 && sfJ.some((o) => o.kind !== "job" && /accelerator/i.test(o.role ?? "")) && !sfJ.some((o) => o.kind === "job" && /2026/.test(o.role ?? "") && o.events.some((e) => /futureforce tech accelerator/i.test(e.subject ?? ""))), sfJ.map((o) => `${o.kind}:${o.role}:${o.events.length}`).join(" | "));
+check("SLAC/LCLS is ONE journey (no Stanford/Unknown active fragments)", slac.filter((o) => o.status === "active").length === 0, `${slac.length}`);
+// Today: Harvey's latest thread leaves the recruiter owing the next step
+const hvToday = ws.actions.filter((a) => /^harvey$/i.test(a.company) && (a.kind === "schedule_interview" || a.kind === "respond_recruiter"));
+check("Today: no request that the student reply again to Harvey", hvToday.length === 0, hvToday.map((a) => a.title).join("|"));
+// admin never advances or creates journeys
+const adminInJobs = opps.filter((o) => o.events.length === 1 && o.events[0].signals.includes("class:admin"));
+check("administrative mail never forms a journey of its own", adminInJobs.length === 0, `${adminInJobs.length}`);
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(0);
