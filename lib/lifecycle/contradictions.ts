@@ -27,7 +27,9 @@ export function detectContradictions(events: EffectiveEvent[]): Contradiction[] 
       continue;
     }
     if (ENDING.has(e.type)) {
-      if (lastOffer && !lastEnd) out.push({ kind: "offer_ended", eventIds: [lastOffer.id, e.id], text: "An offer was followed by a message that ends the process. Check what happened." });
+      // an ending the message itself STATES (the employer's own words, an acknowledged withdrawal, the programme removing the person) settles what happened: nothing to check
+      const stated = e.signals.some((x) => x === "ending:own" || x === "withdrawal:ack" || x === "program:removed" || x === "closure (fact)");
+      if (lastOffer && !lastEnd && !stated) out.push({ kind: "offer_ended", eventIds: [lastOffer.id, e.id], text: "An offer was followed by a message that ends the process. Check what happened." });
       lastEnd = e;
     } else if (PROGRESS.has(e.type) && lastEnd) {
       out.push({ kind: "reopened", eventIds: [lastEnd.id, e.id], text: "A rejection or withdrawal was followed by new progress. Check whether the process was reopened or this is a different application." });

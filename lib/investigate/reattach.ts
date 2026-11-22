@@ -89,7 +89,8 @@ export function fragmentMoves(opportunities: Opportunity[], alias: (a: string, b
   const moves: Move[] = [];
   const years = (o: Opportunity) => new Set((o.role ?? "").match(/\b20\d\d\b/g) ?? []);
   const reqs = (o: Opportunity) => new Set(o.events.map((y) => y.signals.find((q) => q.startsWith("req:"))).filter(Boolean));
-  const weak = (name: string, roleTokens: Set<string>) => /^unknown/i.test(name) || [...normTokens(name, new Set())].every((t) => roleTokens.has(t));
+  // an employer that is only the role's own name ("Leadership Institute") says nothing against a merge; "Unknown company" says nothing either way and needs the exact same long role (below)
+  const weak = (name: string, roleTokens: Set<string>) => !/^unknown/i.test(name) && [...normTokens(name, new Set())].every((t) => roleTokens.has(t));
   const sorted = [...opportunities].sort((a, b) => b.events.length - a.events.length || a.firstActivityAt.getTime() - b.firstActivityAt.getTime());
   // the distinctive role words: the employer's own name is removed unless nothing distinctive would be left
   const coreOf = (o: Opportunity) => { const full = normTokens(o.role, new Set()); const less = normTokens(o.role, normTokens(o.company, new Set())); return less.size >= 2 ? less : full; };
@@ -97,20 +98,26 @@ export function fragmentMoves(opportunities: Opportunity[], alias: (a: string, b
   const acronymOf = (x: Opportunity, y: Opportunity) => { const t = [...normTokens(x.company, new Set())]; const i = initials(y.company); return i.length >= 3 && t.includes(i); };
   const taken = new Set<string>();
   for (const b of sorted) {
-    if (b.events.length > 8 || b.events.some((e) => e.corrected || e.confirmed || e.linkedTo) || taken.has(b.key)) continue;
+    // an event the person CORRECTED or CONFIRMED may be regrouped: a correction fixes the event's fields (kept as they are), not which journey it sits in. A link the person MADE (`linkedTo`) never moves.
+    if (b.events.length > 8 || b.events.some((e) => e.linkedTo) || taken.has(b.key)) continue;
     const bw = coreOf(b);
-    if ([...bw].filter((t) => !GENERIC_ROLE.has(t)).length < 2) continue;
+    const exactRole = (o: Opportunity) => (o.role ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const bDistinct = [...bw].filter((t) => !GENERIC_ROLE.has(t)).length >= 2;
+    if (!bDistinct && exactRole(b).length < 25) continue;
     for (const a of sorted) {
       if (a === b || a.events.length < b.events.length || a.kind !== b.kind || taken.has(a.key) || moves.some((m) => m.from === a.key)) continue;
       const aw = coreOf(a);
-      if ([...aw].filter((t) => !GENERIC_ROLE.has(t)).length < 2 || [...bw].some((t) => !aw.has(t)) || [...aw].some((t) => !bw.has(t))) continue;
+      if (([...aw].filter((t) => !GENERIC_ROLE.has(t)).length < 2 && !(exactRole(a) === exactRole(b) && exactRole(a).length >= 25)) || [...bw].some((t) => !aw.has(t)) || [...aw].some((t) => !bw.has(t))) continue;
       const [ya, yb] = [years(a), years(b)];
       if (ya.size > 0 && yb.size > 0 && ![...yb].some((y) => ya.has(y))) continue;
       const ra = reqs(a), rb = reqs(b);
       if (ra.size > 0 && rb.size > 0 && ![...rb].some((q) => ra.has(q))) continue;
-      if (a.events.some((e) => e.type === "applied" && e.signals.includes("own:receipt")) && b.events.some((e) => e.type === "applied" && e.signals.includes("own:receipt"))) continue;
+      // two receipts from different Gmail threads are two applications (one receipt is sent per application): never one journey, whatever else they share
+      const receipts = (o: Opportunity) => o.events.filter((e) => !e.outbound && e.type === "applied");
+      if (receipts(a).length > 0 && receipts(b).length > 0 && !receipts(b).every((r) => receipts(a).some((x) => x.gmailThreadId === r.gmailThreadId))) continue;
       const roleTokens = new Set([...aw, ...bw]);
-      const employersOk = a.company === b.company || alias(a.company, b.company) || acronymOf(a, b) || acronymOf(b, a) || weak(a.company, roleTokens) || weak(b.company, roleTokens);
+      const exactLong = exactRole(a) === exactRole(b) && exactRole(a).length >= 25;
+      const employersOk = a.company === b.company || (exactLong && (/^unknown/i.test(a.company) || /^unknown/i.test(b.company))) || alias(a.company, b.company) || acronymOf(a, b) || acronymOf(b, a) || weak(a.company, roleTokens) || weak(b.company, roleTokens);
       if (!employersOk) continue;
       const gap = Math.max(0, Math.max(a.firstActivityAt.getTime(), b.firstActivityAt.getTime()) - Math.min(a.lastActivityAt.getTime(), b.lastActivityAt.getTime()));
       if (gap > 120 * DAY) continue;
@@ -123,6 +130,34 @@ export function fragmentMoves(opportunities: Opportunity[], alias: (a: string, b
   }
   return moves;
 }
+
+/**
+ * A terminal message that names no position ("BlackRock | Application update", an unsigned rejection) is the last word of an application the student has at that employer. When exactly ONE open job
+ * journey at the same employer is compatible (no conflicting requisition, no conflicting cycle, the message is later than the journey's first message, and the message's role, if it has one, matches), the
+ * terminal message belongs to it: it is moved there and the reducer closes it. More than one compatible open journey, or none: nothing moves (it is never guessed, and nothing is closed by age).
+ */
+export function openSiblingTerminalMoves(opportunities: Opportunity[], alias: (a: string, b: string) => boolean): Move[] {
+  const moves: Move[] = [];
+  const key = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const reqs = (o: Opportunity) => new Set(o.events.map((y) => y.signals.find((q) => q.startsWith("req:"))).filter(Boolean));
+  const yearsOf = (x: string | null) => new Set((x ?? "").match(/\b20\d\d\b/g) ?? []);
+  for (const b of opportunities) {
+    if (b.events.length !== 1 || b.status !== "closed" || (b.kind ?? "job") !== "job") continue;
+    const e = b.events[0];
+    if ((e.type !== "rejection" && e.type !== "withdrawn") || e.outbound || e.corrected || e.confirmed || e.linkedTo || e.signals.includes("terminal:proposed")) continue;
+    const open = opportunities.filter((a) => a !== b && a.status === "active" && (a.kind ?? "job") === "job" && (key(a.company) === key(b.company) || alias(a.company, b.company))
+      && a.events.some((x) => !x.outbound && x.occurredAt.getTime() <= e.occurredAt.getTime())
+      && !(reqs(a).size > 0 && reqs(b).size > 0 && ![...reqs(b)].some((q) => reqs(a).has(q)))
+      && (() => { const ya = yearsOf(a.role), yb = yearsOf(b.role); return !(ya.size > 0 && yb.size > 0 && ![...yb].some((y) => ya.has(y))); })()
+      && (!b.role || !a.role || roleCompatible(a.role, b.role)));
+    if (open.length !== 1) continue;
+    const a = open[0];
+    const anchor = [...a.events].reverse().find((x) => !x.outbound && x.occurredAt.getTime() <= e.occurredAt.getTime());
+    if (anchor) moves.push({ eventId: e.id, anchorId: anchor.id, from: b.key, to: a.key, reason: "the one open application at this employer ends here" });
+  }
+  return moves;
+}
+const roleCompatible = (x: string, y: string) => { const t = (z: string) => new Set(z.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !["intern", "internship", "summer", "the", "and", "program", "programme"].includes(w) && !/^20\d\d$/.test(w))); const A = t(x), B = t(y); if (A.size === 0 || B.size === 0) return true; const shared = [...A].filter((w) => B.has(w)).length; return shared / Math.min(A.size, B.size) >= 0.5; };
 
 export function applyMoves(events: EffectiveEvent[], moves: Move[]): EffectiveEvent[] {
   const by = new Map(moves.map((m) => [m.eventId, m]));

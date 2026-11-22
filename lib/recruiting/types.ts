@@ -143,6 +143,7 @@ export type Opportunity = {
 export type OpportunityKind = "job" | "scholarship" | "mentorship" | "event";
 
 export type ActionKind =
+  | "program_deadline"
   | "assessment_deadline"
   | "upcoming_interview"
   | "schedule_interview"

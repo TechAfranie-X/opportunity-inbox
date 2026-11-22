@@ -1,4 +1,4 @@
-import { campaignFact, marketingFact, ownApplicationStatement, programStage, unquoted } from "./evidence.ts";
+import { campaignFact, marketingFact, ownApplicationStatement, ownEnding, programStage, unquoted } from "./evidence.ts";
 import { explicitOffer } from "./facts.ts";
 import type { RecruitingEmail } from "../recruiting/types.ts";
 
@@ -12,11 +12,11 @@ import type { RecruitingEmail } from "../recruiting/types.ts";
  *   program-acceptance  acceptance INTO a programme (a cohort, academy, bootcamp, accelerator, career journey) that is not a job offer: no employment wording, no explicit offer
  */
 export type MessageClass = "event" | "survey" | "notice" | "community" | "admin" | "logistics" | "marketing" | "program-acceptance";
-const EVENT = /\b(?:(?:hackathon|webinar|workshop|conference|summit|symposium|career fair|event) registration|registration (?:update|status|decision)|your registration for|webinar|info(?:rmation)? session|session (?:confirmation|reminder)|you(?:'|’)re registered|registration (?:confirm|reminder)|rsvp\b|wait\s?list|irl event|office hours|(?:this|our) event\b|joining us at|capacity restrictions|(?:your|first|next|upcoming) (?:section|class|lesson|lecture)|section (?:leader|reminder)|course (?:starts|begins|reminder)|study group|deep work session|virtual (?:event|session|series)|career fair|open evening|meet-?up|tech talk|tech stories|launch your career|ama\b|showcase|(?:event|session) (?:reminder|confirmation|is happening)|your .{0,40}\bevent\b)/i;
+const EVENT = /(?:^\s*(?:confirmed|reminder|canceled|cancelled|rescheduled)\s*:[^.\n]{0,140}\b(?:on|at)\s+(?:mon|tues|wednes|thurs|fri|satur|sun)day\b)|\b(?:(?:hackathon|webinar|workshop|conference|summit|symposium|career fair|event) registration|registration (?:update|status|decision)|your registration for|webinar|info(?:rmation)? session|session (?:confirmation|reminder)|you(?:'|’)re registered|registration (?:confirm|reminder)|rsvp\b|wait\s?list|irl event|office hours|(?:this|our) event\b|joining us at|capacity restrictions|(?:your|first|next|upcoming) (?:section|class|lesson|lecture)|section (?:leader|reminder)|course (?:starts|begins|reminder)|study group|deep work session|virtual (?:event|session|series)|career fair|open evening|meet-?up|tech talk|tech stories|launch your career|ama\b|showcase|(?:event|session) (?:reminder|confirmation|is happening)|your .{0,40}\bevent\b)/i;
 const SURVEY = /\b(?:survey|your feedback matters|rate your experience|tell us about your experience)\b/i;
-const NOTICE = /\b(?:the following contact .{0,60} has reached out|viewed your profile|jobs? (?:matching|for you)|new (?:job )?matches|recommended jobs|job alert|new roles? at)\b/i;
+const NOTICE = /\b(?:reacted to this post|talent community|stay (?:connected|in touch)|(?:candidate|talent) profile|you have \d+ (?:new )?(?:job )?matches|job matches|you matched|internship alert|the following contact .{0,60} has reached out|viewed your profile|jobs? (?:matching|for you)|new (?:job )?matches|recommended jobs|job alert|new roles? at)\b/i;
 const COMMUNITY = /\b(?:virtual (?:job |work )?experience program|job simulation|(?:forage|theforage)\b[^.\n]{0,60}(?:simulation|experience)|officially connected with|joined the .{0,40} community|welcome to the .{0,40} community|has invited you to (?:work|join)|(?:visit|tour) (?:has been|is) scheduled|thanks for registering for your .{0,30} visit)\b/i;
-const ADMIN = /\b(?:identity verification|verify (?:your )?identity|security code|verification code|access code|one[- ]time (?:pass)?code|verify your (?:email|e-mail|account|identity)|password (?:reset|change)|sign-?in (?:link|code)|log-?in (?:link|code)|candidate verification|confirm your (?:email|e-mail)(?: address)?|(?:communication|email|e-mail|notification) preferences|manage your preferences)\b/i;
+const ADMIN = /\b(?:email verification|verify your (?:email|account)|password (?:has been )?(?:reset|changed)|your password|confirm your identity|test report is available|w-?8ben|eligibility profile|identity verification|verify (?:your )?identity|security code|verification code|access code|one[- ]time (?:pass)?code|verify your (?:email|e-mail|account|identity)|password (?:reset|change)|sign-?in (?:link|code)|log-?in (?:link|code)|candidate verification|confirm your (?:email|e-mail)(?: address)?|(?:communication|email|e-mail|notification) preferences|manage your preferences)\b/i;
 const LOGISTICS = /\b(?:background (?:check|investigation|verification)|travel (?:itinerary|booking|arrangements?|confirmation)|reimbursement|expense (?:report|form)|immigration|visa (?:sponsorship|support)|headshot|direct deposit|onboarding (?:documents|checklist|tasks?))\b/i;
 const IMMIGRATION_LEAD = /\b(?:immigration|work authori[sz]ation|visa (?:sponsorship|petition|application)|h-?1b|cpt|opt\b|i-?9|petition (?:forms?|documents?))\b/i;
 const INVITED_PROGRAM = /\b(?:invitation to join|invited to join|invite you to join) (?:our|the) [^.]{0,90}\b(?:program(?:me)?|cohort|academy|bootcamp|certificate|fellowship)\b/i;
@@ -46,7 +46,8 @@ export function messageClass(m: Pick<RecruitingEmail, "subject" | "bodyText">): 
   if ((LOGISTICS.test(m.subject) || IMMIGRATION_LEAD.test(m.bodyText.slice(0, 400))) && explicitOffer(m as RecruitingEmail) === null) return "logistics";
   if (campaignFact(m)) return "marketing";
   if (SURVEY.test(m.subject) || SURVEY.test(m.bodyText.slice(0, 400))) return "survey";
-  if (NOTICE.test(lead)) return "notice";
+  // (a platform notice never swallows the employer saying the reader's own application ended: "stay in touch" in a rejection's closing line is not a notice)
+  if (NOTICE.test(lead) && !ownEnding(m)) return "notice";
   if (COMMUNITY.test(lead)) return "community";
   if (EVENT.test(m.subject) || EVENT.test(lead.slice(0, 500))) return "event";
   if (marketingFact(m)) return "marketing";

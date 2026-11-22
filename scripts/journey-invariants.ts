@@ -63,7 +63,7 @@ check("no programme-evidence message advances a job stage", bad.length === 0, `$
 const progs = opps.filter((o) => o.kind && o.kind !== "job");
 check("programme journeys carry a programme state (never only a job stage)", progs.every((o) => !!o.programState), progs.filter((o) => !o.programState).map((o) => o.company).join(","));
 const cipJ = opps.filter((o) => o.kind !== "job" && has(o, /code in place/i));
-check("Code in Place: accepted/participating (not Applied)", cipJ.some((o) => ["accepted", "enrolled", "participating", "completed"].includes(o.programState ?? "")), cipJ.map((o) => o.programState).join(","));
+check("Code in Place: accepted/participating (not Applied)", cipJ.some((o) => ["accepted", "enrolled", "participating", "completed", "removed"].includes(o.programState ?? "")), cipJ.map((o) => o.programState).join(","));
 const cre = opps.filter((o) => o.kind !== "job" && has(o, /cre fundamentals/i));
 check("CRE Fundamentals: one programme journey in an accepted-or-later state, not 'Unknown company Interview'", cre.length >= 1 && cre.every((o) => ["accepted", "enrolled", "participating", "completed"].includes(o.programState ?? "")), cre.map((o) => `${o.company}:${o.programState}`).join(","));
 const lilo = opps.filter((o) => has(o, /lilo summer academy/i));
@@ -94,5 +94,33 @@ check("Today: no request that the student reply again to Harvey", hvToday.length
 // admin never advances or creates journeys
 const adminInJobs = opps.filter((o) => o.events.length === 1 && o.events[0].signals.includes("class:admin"));
 check("administrative mail never forms a journey of its own", adminInJobs.length === 0, `${adminInJobs.length}`);
+
+// ---- Journey trust milestone (independent audit of 8a6c6d0): hard identity, reconciliation, evidence, Today ----
+const eachOwn = (re: RegExp) => opps.filter((o) => re.test(o.company));
+const roles = (os: Opportunity[]) => os.map((o) => o.role ?? "-").join(" | ");
+const wm = eachOwn(/^waymo$/i).filter((o) => o.events.some((e) => e.type === "applied" && /2027/.test(e.role ?? "")));
+check("Waymo 2027: two explicit receipts for different roles are two journeys, each with one receipt", wm.length === 2 && wm.every((o) => o.events.filter((e) => e.type === "applied").length === 1), roles(wm));
+const rp = eachOwn(/^rippling$/i);
+check("Rippling: Backend and Full Stack receipts are two journeys", rp.length === 2 && rp.some((o) => /backend/i.test(o.role ?? "")) && rp.some((o) => /full stack/i.test(o.role ?? "")), roles(rp));
+const four = ["sigma computing", "tenstorrent", "arcesium", "capstone"].map((n) => opps.filter((o) => o.company.toLowerCase().includes(n)));
+check("Sigma / Tenstorrent / Arcesium / Capstone: four employers, four journeys, none holding another's receipt", four.every((l) => l.length >= 1) && opps.every((o) => new Set(o.events.filter((e) => e.type === "applied").map((e) => /sigma computing|tenstorrent|arcesium|capstone/i.exec(e.subject ?? "")?.[0]?.toLowerCase()).filter(Boolean)).size <= 1), four.map((l) => l.length).join(","));
+const arc = opps.filter((o) => /arcesium/i.test(o.company)), sig = opps.filter((o) => /^sigma computing$/i.test(o.company));
+check("Arcesium and Sigma Computing: each rejection closed WITH its receipt in one journey", [arc, sig].every((l) => l.some((o) => o.closedBy === "rejected" && o.events.some((e) => e.type === "applied"))), "");
+const fid = opps.filter((o) => /fidelity|^actuary$/i.test(o.company));
+check("Fidelity Actuary: one closed journey holding receipt and rejection, no active receipt-only sibling", fid.length === 1 && fid[0].closedBy === "rejected" && fid[0].events.some((e) => e.type === "applied"), fid.map((o) => `${o.company}:${o.status}:${o.events.length}`).join(","));
+const br = opps.filter((o) => /^blackrock$/i.test(o.company) && /infrastructure/i.test(o.role ?? ""));
+check("BlackRock: the role-less rejection closes the one open application", br.length === 1 && br[0].closedBy === "rejected" && !opps.some((o) => /^blackrock$/i.test(o.company) && o.status === "active"), br.map((o) => `${o.status}:${o.closedBy}`).join(","));
+const jpm = opps.filter((o) => /jpmorgan/i.test(o.company) && has(o, /namr software engineer/i));
+check("JPMorgan NAMR: the HackerRank completion sits in the journey (not Weak)", jpm.length === 1 && jpm[0].events.some((e) => e.type === "assessment_completed"), jpm.map((o) => o.events.length).join(","));
+const lmA = opps.filter((o) => /last mile/i.test(o.company));
+check("Last Mile: awarded (approval and payment), not Applied", lmA.length === 1 && lmA[0].programState === "awarded", lmA.map((o) => o.programState).join(","));
+const cipR = opps.filter((o) => o.kind !== "job" && has(o, /code in place/i));
+check("Code in Place: removed from the section", cipR.length === 1 && cipR[0].programState === "removed", cipR.map((o) => o.programState).join(","));
+const vd = opps.filter((o) => /vanderbilt/i.test(o.company));
+check("Vanderbilt ISIS: receipt and rejection in one journey", vd.length === 1 && vd[0].events.length >= 2 && vd[0].events.some((e) => e.type === "applied" || /webform submission/i.test(e.subject ?? "")), vd.map((o) => o.events.length).join(","));
+// Today
+const elapsed = ws.actions.filter((a) => a.kind === "follow_up" || a.kind === "check_in");
+check("Today: no follow-up or check-in generated from elapsed time", elapsed.length === 0, `${elapsed.length}`);
+check("Today: the programme coursework deadline is an action", ws.actions.some((a) => a.kind === "program_deadline"), ws.actions.map((a) => a.kind).join(","));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(0);

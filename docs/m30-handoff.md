@@ -108,3 +108,6 @@ Gates green: types, lint, 797 tests, eval gate, lifecycle benchmark, build, e2e 
 
 ## Checkpoint 8: journey-correctness milestone (see docs/m30-journey-correctness.md)
 Programme lifecycle (`lib/lifecycle/program.ts`), hard identity constraints and fragment consolidation (`lib/lifecycle/identity.ts`, `lib/investigate/reattach.ts`), student-decline and awaiting-them facts, immaterial-update resolver, scorer repair and absolute promotion floors. Invariants 41/41; Today clean; Review 0 / 38 / 136. Remaining: Susquehanna programmes, 38 housekeeping items, TMCF owner-corrected fragments, independent labels for the scorer.
+
+## Checkpoint 9: journey trust and correctness (see docs/m30-journey-trust.md)
+Hard identity vetoes, terminal-to-open-sibling reconciliation, corrected-event regrouping (fields untouched), programme states removed/awarded/completed externship, no elapsed-time actions (+ programme deadline action), programme evidence recovery and history deepening scripts (insert-only, reversible), vendor evidence recovery, wording families for hard negatives. Invariants 53/53; Today 2 supported actions; Review 0/40/89. Remaining: Susquehanna, TMCF corrected fragments, 40 housekeeping, CRE session confirmations. Next: fresh independent validation.

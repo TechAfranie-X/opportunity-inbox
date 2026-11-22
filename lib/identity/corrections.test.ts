@@ -4,6 +4,8 @@ import { buildActions } from "../recruiting/actions.ts";
 import { buildOpportunities } from "../recruiting/opportunity.ts";
 import type { EffectiveEvent, EventType } from "../recruiting/types.ts";
 import { groupEventsV2, type IdentityContext } from "../lifecycle/identity.ts";
+// covers the elapsed-time nudges (OFF by default; ELAPSED_NUDGES=on is the rollback mode)
+process.env.ELAPSED_NUDGES = "on";
 import { rolePairKey, type RoleVerdicts } from "./role-equivalence.ts";
 
 /**

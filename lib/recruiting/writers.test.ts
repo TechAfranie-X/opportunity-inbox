@@ -10,6 +10,8 @@ import { test } from "node:test";
  */
 const REVIEWED: Record<string, { count: number; why: string }> = {
   "lib/recruiting/store.ts": { count: 9, why: "upsert (setWhere correction is null), prune (correction is null), inheritStoredRoles (correction is null, plus corrected rows skipped), and the person's own setEventCorrection / editEvent / ignore / confirm / reset, and delete-my-data" },
+  "scripts/recover-programme-evidence.ts": { count: 2, why: "INSERT-only of NEW rows (onConflictDoNothing: an existing row, corrected or not, is never touched); its rollback deletes only the ids it inserted and only where correction is null" },
+  "scripts/deepen-history.ts": { count: 2, why: "INSERT-only of NEW rows (onConflictDoNothing); its rollback deletes only the ids it inserted and only where correction is null" },
 };
 const WRITE = /\.(?:update|delete|insert)\(\s*recruitingEvents\s*\)/g;
 const walk = (dir: string, out: string[] = []): string[] => {

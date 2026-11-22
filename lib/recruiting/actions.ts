@@ -20,6 +20,7 @@ const BASE: Record<ActionKind, number> = {
   offer_decision: 90,
   upcoming_interview: 85,
   assessment_deadline: 80,
+  program_deadline: 78,
   schedule_interview: 75,
   respond_recruiter: 60,
   follow_up: 40,
@@ -63,6 +64,8 @@ export function buildActions(
   dismissed: Set<string> = new Set(),
   policy: Policy = DEFAULT_POLICY,
 ): ActionItem[] {
+  // Elapsed time alone never creates a task: a follow-up, a check-in or a "quiet" suggestion is not asked for by anything in the conversation. ELAPSED_NUDGES=on restores them (rollback only).
+  const elapsed = process.env.ELAPSED_NUDGES === "on";
   const today = dayStart(now);
   const items: ActionItem[] = [];
 
@@ -141,9 +144,18 @@ export function buildActions(
           { due: interview.eventDate, dueHasTime: interview.eventDateHasTime, daysUntil: d });
       } else if (d < 0 && d >= -2 && !after.some((e) => e.outbound || e.type === "rejection" || e.type === "offer")) {
         add(opp, interview, "follow_up", "Send a thank-you note", `Your interview was ${when(d)}.`, { bucket: "today" });
-      } else if (d <= -7 && d >= -30 && !after.some((e) => e.type === "rejection" || e.type === "offer" || e.type === "interview_scheduled" || e.type === "interview_invite")) {
+      } else if (elapsed && d <= -7 && d >= -30 && !after.some((e) => e.type === "rejection" || e.type === "offer" || e.type === "interview_scheduled" || e.type === "interview_invite")) {
         add(opp, interview, "follow_up", "No word since your interview",
           `Interview was ${-d} days ago with no update — consider following up.`, { bucket: "worth_a_look" });
+      }
+    }
+
+    // 2b. A programme the person is in asks for something by a date (coursework, quizzes, a form): the programme's own message states the deadline
+    if ((opp.kind ?? "job") !== "job" && opp.status === "active") {
+      const ask = [...events].reverse().find((e) => !e.outbound && e.dateKind === "deadline" && !!e.eventDate && (e.signals.some((x) => x.startsWith("program:evidence:")) || e.signals.includes("class:program-acceptance") || opp.programState !== undefined));
+      if (ask?.eventDate) {
+        const d = Math.round((dayStart(ask.eventDate) - today) / DAY);
+        if (d >= -1 && d <= 14) add(opp, ask, "program_deadline", "Programme deadline", `Due ${when(d)}.`, { due: ask.eventDate, dueHasTime: ask.eventDateHasTime, daysUntil: d, bucket: d < 0 ? "overdue" : d <= 1 ? "today" : "soon" });
       }
     }
 
@@ -200,7 +212,7 @@ export function buildActions(
     const alreadyActed = items.some((i) => i.opportunityKey === opp.key);
     // a programme the person was accepted into, joined or finished is not an application waiting for an answer
     const programMoved = !!opp.programState && opp.programState !== "applied";
-    if (!alreadyActed && !programMoved) {
+    if (elapsed && !alreadyActed && !programMoved) {
       if (opp.stage === "applied" && !last.outbound && quiet >= 14 && quiet <= 45) {
         add(opp, last, "follow_up", "No response yet", `Applied ${quiet} days ago with no update — consider a follow-up.`, { bucket: "worth_a_look" });
         // Rank quiet applications: around three weeks of silence is the most useful moment to nudge.
@@ -215,7 +227,7 @@ export function buildActions(
     // 7. Dormancy: after DORMANT_AFTER_DAYS of silence an open application is only a low-priority "worth a look" suggestion, in its own collapsed group. It is never a
     // status (nothing is closed by silence), and it is never shown for: an offer (open until resolved), a known upcoming interview, a deadline that has not passed, or
     // anything newer than the quiet period (any message, including the person's own reply, resets the clock).
-    if (!items.some((i) => i.opportunityKey === opp.key) && opp.stage !== "offer" && quiet >= DORMANT_AFTER_DAYS && quiet <= DORMANT_UNTIL_DAYS) {
+    if (elapsed && !items.some((i) => i.opportunityKey === opp.key) && opp.stage !== "offer" && quiet >= DORMANT_AFTER_DAYS && quiet <= DORMANT_UNTIL_DAYS) {
       const upcoming = events.some((e) => e.eventDate && dayStart(e.eventDate) >= today);
       if (!upcoming) {
         add(opp, last, "check_in", `Quiet for ${quiet} days`, `Last news ${quiet} days ago. Still open; nothing was closed. Worth a look if it still matters.`, { bucket: "worth_a_look" });

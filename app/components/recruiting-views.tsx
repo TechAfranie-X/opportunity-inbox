@@ -111,6 +111,7 @@ const PILL: Record<ActionKind, { label: string; tone: "accent" | "ok" | "plain" 
   upcoming_interview: { label: "Interview", tone: "accent" },
   schedule_interview: { label: "Interview", tone: "accent" },
   assessment_deadline: { label: "Assessment", tone: "plain" },
+  program_deadline: { label: "Programme", tone: "plain" },
   offer_decision: { label: "Offer", tone: "ok" },
   respond_recruiter: { label: "Recruiter", tone: "plain" },
   follow_up: { label: "Follow up", tone: "plain" },
@@ -125,6 +126,7 @@ function summaryLine(item: ActionItem, now: Date): string {
   switch (item.kind) {
     case "upcoming_interview": return `Interview ${when ?? ""}`.trim();
     case "assessment_deadline": return c.critical && item.bucket === "overdue" ? `Assessment was due ${day}` : `Assessment due ${day ?? ""}`.trim();
+    case "program_deadline": return `Programme task due ${day ?? ""}`.trim();
     case "offer_decision": return day ? `Offer decision by ${day}` : "Offer decision";
     case "schedule_interview": return "Reply to book your interview";
     case "respond_recruiter": return "Reply to the recruiter";

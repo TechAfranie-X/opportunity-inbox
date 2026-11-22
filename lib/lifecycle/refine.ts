@@ -250,13 +250,15 @@ export function opportunityKind(events: (Pick<EffectiveEvent, "subject" | "role"
   // ...but only when nothing in the journey is a job application: a job that ALSO received a programme invitation stays a job
   if (events.some((e) => e.signals?.includes("class:program-acceptance")) && !events.some((e) => e.signals && e.type === "applied" && !e.signals.includes("semantic:event") && !e.signals.some((x) => x.startsWith("class:")))) return "mentorship";
   // a journey of programme evidence (a programme's own sessions, assignments, welcome, acceptance) with no employer stage in it is a programme
-  if (events.some((e) => e.signals?.some((x) => x.startsWith("program:evidence:") || x === "program:own-journey" || x === "program:named")) && !events.some((e) => e.signals && ["interview_invite", "interview_scheduled", "assessment", "offer", "rejection"].includes(e.type ?? "") && !e.signals.some((x) => x.startsWith("class:") || x.startsWith("program:evidence:")))) return "mentorship";
+  if (events.some((e) => e.signals?.some((x) => x.startsWith("program:evidence:") || x === "program:own-journey" || x === "program:named")) && !events.some((e) => e.signals && ["interview_invite", "interview_scheduled", "assessment", "offer", "rejection"].includes(e.type ?? "") && !e.signals.some((x) => x.startsWith("class:") || x.startsWith("program:evidence:")))) return SCHOLARSHIP.test(events.map((e) => `${e.subject ?? ""} ${e.role ?? ""} ${company ?? ""}`).join(" ")) || events.some((e) => e.signals?.includes("program:awarded")) ? "scholarship" : "mentorship";
   const roles = events.map((e) => e.role ?? "").join(" ");
   const text = events.map((e) => `${e.subject ?? ""} ${e.role ?? ""}`).join(" ");
   // a title noun in the ROLE keeps it a job ("Workshop Facilitator Intern", "Conference Coordinator"); an event word in the role/company/subject with no title noun is an event
   if (!TITLE_WORDS.test(roles) && (EVENT_WORDS.test(roles) || EVENT_WORDS.test(company ?? "") || (events.length > 0 && events.every((e) => EVENT_WORDS.test(e.subject ?? "")) && !SCHOLARSHIP.test(text)))) return "event";
   if (/\b(?:intern(?:ship)?|software engineer|analyst|developer)\b/i.test(roles) && !SCHOLARSHIP.test(roles)) return "job";
   if (SCHOLARSHIP.test(text)) return "scholarship";
+  // a role that names a programme (Explore X program, an academy, a bootcamp, a cohort) with no job title in it is a programme, not a job
+  if (!TITLE_WORDS.test(roles) && /\b(?:program(?:me)?|academy|bootcamp|cohort|institute|accelerator)\b/i.test(roles)) return "mentorship";
   if (MENTORSHIP.test(text)) return "mentorship";
   return "job";
 }

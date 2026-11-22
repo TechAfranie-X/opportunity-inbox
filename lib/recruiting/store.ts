@@ -5,8 +5,8 @@ import { getDb } from "@/lib/db";
 import { refineEvents } from "@/lib/lifecycle/refine";
 import { deleteEvidenceLedgers } from "@/lib/ledger/store";
 import { employerAlias } from "@/lib/lifecycle/identity";
-import { applyMoves, fragmentMoves, plannedMoves, terminalFragmentMoves } from "@/lib/investigate/reattach";
-import { applyEntryPolicy, applyNamedEmployer, applyNamedRoles, attachProgramEvidence, attachVendorMail, demoteCampaigns, demoteNonReceipts, promoteDecisiveNearMisses, neutralizeClassed, proposeMissedEndings, retypeAssessmentPlatforms, retypeAwaitingThem, retypeIncompleteApplications, retypeUnverifiedClaims } from "@/lib/recruiting/entry-policy";
+import { applyMoves, fragmentMoves, openSiblingTerminalMoves, plannedMoves, terminalFragmentMoves } from "@/lib/investigate/reattach";
+import { applyEntryPolicy, applyNamedEmployer, recoverVendorEvidence, applyNamedRoles, attachProgramEvidence, attachVendorMail, demoteCampaigns, demoteNonReceipts, promoteDecisiveNearMisses, neutralizeClassed, proposeMissedEndings, retypeAssessmentPlatforms, retypeAwaitingThem, retypeIncompleteApplications, retypeUnverifiedClaims } from "@/lib/recruiting/entry-policy";
 import { entryPolicyOn, identityContext } from "@/lib/recruiting/product-config";
 import { withConfirmationConflicts, type LatestReading } from "@/lib/recruiting/confirmation-conflicts";
 import {
@@ -113,7 +113,7 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
     // uncorroborated model-only "applied" waits as possible BEFORE class neutralisation retypes it (a security code typed applied must not survive as a status update)
     if (process.env.NAMED_ROLES !== "off") events = applyNamedEmployer(applyNamedRoles(events));
     if (process.env.PROGRAM_EVIDENCE !== "off") { const pe = attachProgramEvidence(events, possible); events = pe.events; possible.length = 0; possible.push(...pe.possible); }
-    if (process.env.VENDOR_RELATIONS !== "off") events = attachVendorMail(events);
+    if (process.env.VENDOR_RELATIONS !== "off") { events = attachVendorMail(events); const rv = recoverVendorEvidence(events, possible); events = rv.events; possible.length = 0; possible.push(...rv.possible); }
     const campaigns = demoteCampaigns(events);
     events = campaigns.kept;
     possible.push(...campaigns.demoted);
@@ -136,7 +136,7 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
   let opportunities = buildOpportunities(events, overrides, policy, ident);
   // the investigator corrects what the product itself contradicts (INVESTIGATE_REATTACH=off to roll back): one more grouping pass with the moved events linked to the application they belong to
   if (entryPolicyOn() && ident && process.env.INVESTIGATE_REATTACH !== "off") {
-    const base = [...plannedMoves(opportunities), ...terminalFragmentMoves(opportunities)];
+    const base = [...plannedMoves(opportunities), ...terminalFragmentMoves(opportunities), ...openSiblingTerminalMoves(opportunities, employerAlias)];
     const taken = new Set(base.map((m) => m.eventId));
     const moves = [...base, ...fragmentMoves(opportunities, employerAlias).filter((m) => !taken.has(m.eventId))];
     if (process.env.DEBUG_MOVES) for (const m of moves) console.log("MOVE", m.from.slice(0, 40), "->", m.to.slice(0, 40), m.reason);

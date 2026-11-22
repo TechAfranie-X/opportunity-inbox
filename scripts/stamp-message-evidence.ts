@@ -22,7 +22,7 @@ if (rb) {
 }
 const refresh = process.argv.includes("--refresh"); // targeted: re-derive the ending signals of rows that have them (and any listed message-id prefixes), removing the ones the text no longer supports
 const extra = refresh && process.argv[process.argv.indexOf("--refresh") + 1]?.match(/^[0-9a-f,]+$/) ? process.argv[process.argv.indexOf("--refresh") + 1].split(",") : [];
-const isStale = (x: string) => STALE.includes(x) || x.startsWith("role:named:") || x.startsWith("employer:named:") || x.startsWith("program:") || x.startsWith("class:");
+const isStale = (x: string) => STALE.includes(x) || x.startsWith("role:named:") || x.startsWith("employer:named:") || (x.startsWith("program:") && !x.startsWith("program:evidence:")) || x.startsWith("class:");
 const STALE = ["ending:own", "withdrawal:ack", "ending:wording", "own:receipt", "awaiting:them"];
 const modeled = process.argv.includes("--modeled-unclassed"); // targeted: only model-found or near-miss events that carry no message class yet (the mail the class facts exist for)
 const bulk = process.argv.includes("--bulk-senders"); // targeted: uncorrected inbound events of senders that wrote 10+ stored messages and carry no message class yet (hosts, job boards, programme operators: campaign mail hides here)

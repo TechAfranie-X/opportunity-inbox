@@ -41,7 +41,7 @@ test("an employer's interview invitation or assessment request is never classed 
   assert.equal(messageClass(m("Next step", "Please complete the online assessment within 7 days. This virtual event series is optional.")), null);
 });
 
-import { ownEnding, withdrawalAcknowledged } from "./evidence.ts";
+import { ownApplicationStatement, ownEnding, withdrawalAcknowledged } from "./evidence.ts";
 test("an employer's plain ending about the reader's own application is recognised, hypotheticals and quoted history are not", () => {
   assert.equal(ownEnding({ subject: "Thanks for your interest", bodyText: "We appreciate the time you took to apply for the position: Software Engineer Intern. We are no longer reviewing applicants for this particular position." }), true);
   assert.equal(ownEnding({ subject: "Information regarding your job application", bodyText: "Unfortunately, we have to inform you that this time we have decided to move on with other candidates." }), true);
@@ -220,4 +220,36 @@ test("a hackathon registration update and a Forage job simulation are not applic
 test("thanking the reader for finishing the week or the programme marks completion; thanking for a session does not", () => {
   assert.equal(programStage({ subject: "Thank You for an Incredible Week: 2026 Alcon Innovation Externship", bodyText: "It was a pleasure having you." }), "completed");
   assert.equal(programStage({ subject: "Thank you for Attending the CRE Fundamentals Level 3 session! Here's what's Next.", bodyText: "Thank you for attending the session." }), null);
+});
+
+test("the programme removing the person is a removal; a warning is not", () => {
+  assert.equal(programStage({ subject: "Removal From Your Code in Place Section", bodyText: "You have not attended or submitted assignments." }), "removed");
+  assert.equal(programStage({ subject: "‼️ Your admission to the 2026-2027 AI Program has been withdrawn.", bodyText: "We are sorry." }), "removed");
+  assert.notEqual(programStage({ subject: "Attendance reminder", bodyText: "Failing to attend will result in removal from your section." }), "removed");
+});
+
+test("a fund approving the application and sending payment is an award; a job application 'approved' for an interview is not", () => {
+  assert.equal(programStage({ subject: "Congratulations! Your Financial Support Application Has Been Approved", bodyText: "We are thrilled to share that your application for financial support has been approved." }), "awarded");
+  assert.equal(programStage({ subject: "Your Payment Has Been Sent", bodyText: "Your payment has been sent." }), "awarded");
+  assert.notEqual(programStage({ subject: "Your application has been approved for an interview", bodyText: "Please schedule your interview." }), "awarded");
+});
+
+test("submission confirmations and entity-glued receipts state the reader's own application", () => {
+  assert.equal(ownApplicationStatement({ subject: "Webform submission from: 2026 Summer Internship Application", bodyText: "Thanks for your submission! You will hear back from us with a decision by March 27th, 2026." }), true);
+  assert.equal(ownApplicationStatement({ subject: "Submission successful", bodyText: "Your application is now complete. You can still edit it." }), true);
+  assert.equal(ownApplicationStatement({ subject: "Your Cisco Journey Begins Here", bodyText: "Thank you for taking&nbsp;the&nbsp;first step towards&nbsp;a&nbsp;career at&nbsp;Cisco&nbsp;by applying!" }), true);
+  assert.equal(ownApplicationStatement({ subject: "New roles", bodyText: "Apply now to roles that match your profile." }), false);
+});
+
+test("job-match notices, talent-community mail and account verification are not applications", () => {
+  assert.equal(messageClass({ subject: "DraftKings: You have 3 job matches!", bodyText: "See your matches." }), "notice");
+  assert.equal(messageClass({ subject: "Morgan Stanley Email Verification", bodyText: "Your code is 123456." }), "admin");
+  assert.equal(messageClass({ subject: "Your Password at Group One Trading Has Been Reset", bodyText: "Your password was changed." }), "admin");
+  assert.equal(campaignFact({ subject: "Duolingo Software Engineering Internships are Live!", bodyText: "Apply today." }), true);
+  assert.equal(messageClass({ subject: "Interview with Acme tomorrow", bodyText: "Your interview is at 10am." }), null);
+});
+
+test("a programme's dated session confirmation or reminder is an event; an interview confirmation is not", () => {
+  assert.equal(messageClass({ subject: "Confirmed: CRE Fundamentals Level I with Project Destined on Saturday, February 7, 2026", bodyText: "Please view the board." }), "event");
+  assert.equal(messageClass({ subject: "Confirmed: Interview with Acme on Tuesday", bodyText: "Your interview with Acme is on Tuesday at 10am." }), null);
 });

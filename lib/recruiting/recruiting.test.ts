@@ -4,6 +4,8 @@ import { buildActions } from "./actions.ts";
 import { extractAll, extractEvent } from "./extract.ts";
 import { buildDemoMailbox } from "./fixtures.ts";
 import { applyCorrection, buildOpportunities } from "./opportunity.ts";
+// these tests cover the elapsed-time nudges, which are OFF by default (ELAPSED_NUDGES=on is the rollback mode); lib/recruiting/actions-no-elapsed.test.ts covers the default
+process.env.ELAPSED_NUDGES = "on";
 import type { EffectiveEvent } from "./types.ts";
 
 const NOW = new Date(Date.UTC(2026, 10, 1, 9, 0)); // Sun Nov 1 2026 09:00 floating

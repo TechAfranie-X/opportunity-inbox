@@ -6,6 +6,7 @@ import { useWorkspace } from "@/app/components/workspace";
 import { eventNeedsReview } from "@/lib/recruiting/opportunity";
 import { STAGE_LABEL, compactWhen, relativeDay, roleLine, isJob } from "@/lib/recruiting/format";
 import { lastMeaningful, nextMoment } from "@/lib/recruiting/history";
+import { PROGRAM_STATE_LABEL } from "@/lib/lifecycle/program";
 import type { Opportunity, Stage } from "@/lib/recruiting/types";
 
 type View = "all" | Stage | "closed";
@@ -159,7 +160,7 @@ function OppCard({ opp, now, active, onOpen }: { opp: Opportunity; now: Date; ac
   const last = lastMeaningful(opp);
   const next = nextMoment(opp, now);
   const unsure = opp.events.some((e) => !e.outbound && eventNeedsReview(e));
-  const closedNote = opp.outcome === "accepted" && opp.status !== "closed" ? "Accepted" : opp.status === "closed" ? (opp.closedBy === "completed" ? "Completed" : opp.closedBy === "expired" ? "Expired" : opp.closedBy === "not_recruiting" ? "Not recruiting" : opp.outcome === "rejected" ? "Rejected" : opp.outcome === "offer" ? "Offer" : opp.outcome === "withdrawn" ? "Withdrawn" : "Closed") : null;
+  const closedNote = opp.outcome === "accepted" && opp.status !== "closed" ? "Accepted" : opp.status === "closed" && opp.programState && !["applied", "rejected"].includes(opp.programState) ? PROGRAM_STATE_LABEL[opp.programState] : opp.status === "closed" ? (opp.closedBy === "completed" ? "Completed" : opp.closedBy === "expired" ? "Expired" : opp.closedBy === "not_recruiting" ? "Not recruiting" : opp.outcome === "rejected" ? "Rejected" : opp.outcome === "offer" ? "Offer" : opp.outcome === "withdrawn" ? "Withdrawn" : "Closed") : null;
   return (
     <button
       type="button"

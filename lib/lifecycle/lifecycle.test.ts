@@ -8,6 +8,8 @@ import type { EffectiveEvent, EventType } from "../recruiting/types.ts";
 import { cycleOf, cyclesConflict, isRoleFragment, programsOf, roleRelationV2 } from "./cycle.ts";
 import { groupEventsV2 } from "./identity.ts";
 import { reduceLifecycle } from "./reducer.ts";
+// these tests cover the elapsed-time nudges, which are OFF by default (ELAPSED_NUDGES=on is the rollback mode); lib/recruiting/actions-no-elapsed.test.ts covers the default
+process.env.ELAPSED_NUDGES = "on";
 import { repairText } from "./text.ts";
 
 let n = 0;

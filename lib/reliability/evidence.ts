@@ -27,6 +27,7 @@ export const QUOTE_START = [
 
 /** The text the sender wrote in THIS message, without quoted history. */
 export function unquoted(text: string): string {
+  text = text.replace(/&nbsp;|&#160;|\u00a0/gi, " ").replace(/&amp;/gi, "&"); // (a mailer's literal entities must not glue words together)
   let cut = text.length;
   for (const re of QUOTE_START) { const m = re.exec(text); if (m && m.index < cut) cut = m.index; }
   return text.slice(0, cut);
@@ -109,6 +110,7 @@ export function endingWording(email: Pick<RecruitingEmail, "subject" | "bodyText
  * Does not hold for "apply now" calls to action, job recommendations or newsletters.
  */
 const OWN_APPLICATION = new RegExp([
+  String.raw`\b(?:thanks for your submission|your (?:[\w&'’.-]+ ){0,3}application is (?:now )?(?:complete|submitted|received|in)\b|thank you for taking the first step[^.]{0,60}\bby applying|you will hear back from us with a decision)`,
   String.raw`\b(?:we(?:'|’)?(?:ve| have)? (?:received|got) your (?:[\w&'’.-]+ ){0,5}application|(?:thank(?:s| you)|thanks) (?:you )?for (?:applying|your application|submitting your application|your interest in applying)|your (?:[\w&'’.-]+ ){0,5}application (?:has been|was|is) (?:successfully )?(?:received|submitted|complete[d]?|under review|being reviewed|in review)|(?:you(?:'|’)?ve|you have) (?:successfully )?(?:applied|submitted your application)|application (?:received|confirmation|submitted)|(?:we(?:'|’)re|we are) (?:currently )?reviewing your application|thank you for your application)`,
   String.raw`\b(?:we (?:would|'d) like to invite you to (?:interview|complete|schedule|take|a (?:call|chat|phone|video))|invite you to (?:interview|complete (?:an?|our|the) (?:online )?(?:assessment|test|challenge)|schedule (?:an?|your) (?:interview|call))|(?:schedule|book|confirm) your (?:interview|assessment)|your (?:interview|assessment|coding challenge) (?:is|has been) (?:scheduled|confirmed|booked)|(?:complete|finish) (?:your|the) (?:online )?(?:assessment|coding challenge) (?:for|to continue))`,
 ].join("|"), "i");
@@ -246,7 +248,7 @@ export function namedRole(email: Pick<RecruitingEmail, "subject" | "bodyText">):
 const BULK_PLATFORM = /(?:utm_source=email%20campaign|utm_medium=xxxxx|list-manage\.com|mailchi\.mp|campaign-archive\.com|mcusercontent\.com|constantcontact\.com|hubspotlinks\.com|view this email in your browser|view in browser)/i;
 const APPLY_CTA = /\b(?:(?:invite|inviting|encourage|invited) you to apply|(?:we(?:'|’)re|we are) opening applications|click here to apply|apply here|apply now|learn more and apply|apply today|sign up (?:now|here)|applications? (?:are )?(?:now )?open)\b/i;
 // a SUBJECT that is itself a call to apply to something the reader has not applied to ("Apply by June 6: ...", "4 Days Left: ...", "Applications Open: ...", "Last Call to Apply")
-const CALL_TO_APPLY_SUBJECT = /^\W*(?:(?:re|fwd?)\s*:\s*)*(?:reminder\s*:\s*)?(?:apply (?:by|now|today|here)|applications? (?:open|close|due|closing)|last call to apply|\d+ days? left|final (?:call|days?)|invitation to apply|invites? you to apply|now accepting applications)\b|\b\d+ days? left\b/i;
+const CALL_TO_APPLY_SUBJECT = /^\W*(?:(?:re|fwd?)\s*:\s*)*(?:reminder\s*:\s*)?(?:apply (?:by|now|today|here)|applications? (?:open|close|due|closing)|last call to apply|\d+ days? left|final (?:call|days?)|invitation to apply|invites? you to apply|now accepting applications)\b|\b\d+ days? left\b|\b(?:internships?|roles?|positions?) (?:are )?(?:now )?(?:live|open)\b|\b(?:applications?|internships?) opening soon\b|\bdon(?:'|’)?t miss out\b|\bis hiring\b|\bnew roles? at\b/i;
 export function campaignFact(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
   const text = unquoted(`${email.subject}\n${email.bodyText}`);
   return ((BULK_PLATFORM.test(text) && APPLY_CTA.test(text)) || CALL_TO_APPLY_SUBJECT.test(email.subject)) && !ownApplicationStatement(email);
@@ -284,12 +286,19 @@ const P_COMPLETED = /\b(?:thank you for (?:an? )?(?:incredible|amazing|wonderful
 const P_ACCEPTED = /\b(?:you(?:'|’)re (?:officially )?in (?:the )?[A-Z][\w &'’-]{2,50}\b(?:Academy|Program|Programme|Cohort|Fellowship|Bootcamp|Institute|Course)\b|your (?:\w+ ){0,3}spot is confirmed|formal(?:ly)? invit(?:ation|ed)|we (?:reviewed|received) [^.]{0,40}applications and[^.]{0,60}(?:impressed|pleased|excited)|you(?:'|’)ve been (?:accepted|selected|admitted)|you have been (?:accepted|selected|admitted)|congratulations[^.]{0,60}(?:accepted|selected|admitted)|formally invited|we are pleased to (?:accept|admit))\b/i;
 const P_INVITED = /\b(?:(?:thrilled|pleased|excited) to invite you to (?:continue|join|take part)|invitation to join|invited to join|invite you to join|you(?:'|’)re invited to (?:join|apply))\b/i;
 const P_ENROLLED = /\b(?:welcome to|section reminder|first section|assignment graded|deep work session|kick-?off|cohort (?:call|session)|your (?:cohort|section|session))\b/i;
-export type ProgramStage = "invited" | "accepted" | "enrolled" | "completed";
+/** The programme itself ended the person's participation ("Removal from your section", "your admission has been withdrawn"): past tense or a notice headline, never a warning. */
+const P_REMOVED = /(?:^\W*removal from your\b|\b(?:you(?:'|’)?ve|you have|you were|you are) (?:been )?(?:removed|dropped|dismissed) from\b|\byour (?:\w+ ){0,3}(?:admission|enrollment|enrolment|acceptance|spot|place|participation)(?: [^.]{0,60})? (?:has been|was|have been) (?:withdrawn|revoked|rescinded|cancell?ed|removed)\b)/i;
+/** A scholarship, grant or fund tells the person the award is theirs (approved, awarded, payment on its way or sent). */
+const P_AWARDED = /(?:\byour (?:\w+ ){0,3}application(?: for [^.]{0,60})? has been approved\b|\bcongratulations\b[^.]{0,100}\b(?:approved|awarded|selected as an? (?:recipient|awardee))\b|\byour payment (?:has been sent|is being processed)\b|\bpayment has been (?:sent|issued)\b|\bprompt acceptance of the award\b|\byour award is currently being processed\b)/i;
+const PROCESS_ROLE = /\b(?:interview|assessment|internship|software engineer|position|job offer|hiring)\b/i;
+export type ProgramStage = "invited" | "accepted" | "enrolled" | "completed" | "removed" | "awarded";
 export function programStage(email: Pick<RecruitingEmail, "subject" | "bodyText">): ProgramStage | null {
   // sentence by sentence, never a condition ("in the case you have been selected to move forward" is not an acceptance)
   const COND = /\b(?:if|in the case|in case|should|whether|unless|when)\b/i;
   const sentences = sentencesOf({ subject: email.subject, bodyText: email.bodyText.slice(0, 2200) }).filter((x) => !COND.test(x));
   const any = (re: RegExp) => sentences.some((x) => re.test(x));
+  if (any(P_REMOVED)) return "removed";
+  if (any(P_AWARDED) && !PROCESS_ROLE.test(`${email.subject} ${sentences.join(" ")}`)) return "awarded";
   // completion of the PROGRAMME itself: not an earlier level, an onboarding step, a form, or the reminder/invitation that mentions what the person already did
   const NOT_THE_END = /\b(?:onboarding|application|form|profile|registration|survey|level|step|prerequisite|reminder|section|invit\w*|before|prior)\b/i;
   if (sentences.some((x) => P_COMPLETED.test(x) && !NOT_THE_END.test(`${email.subject} ${x}`))) return "completed";

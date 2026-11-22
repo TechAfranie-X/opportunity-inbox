@@ -121,7 +121,7 @@ export function buildOpportunities(
     // a programme that was completed is done, not "active"; a person's explicit reopening still wins
     // an externship the person accepted and then finished (the host thanks them for the week / the programme) is over, not an open "accepted offer"
     const externshipDone = kind === "job" && derived === "active" && (outcome === "accepted" || outcome === "offer") && group.events.some((e) => !e.outbound && e.signals.includes("program:completed")) && group.events.some((e) => /externship/i.test(`${e.role ?? ""} ${e.subject ?? ""}`));
-    const programDone = (prog?.state === "completed" && derived === "active") || externshipDone;
+    const programDone = ((prog?.state === "completed" || prog?.state === "awarded" || prog?.state === "removed") && derived === "active") || externshipDone;
     const status = (derived === "closed" && !reopened) || closedByUser || (programDone && !reopened) ? "closed" : "active";
     return {
       key,
@@ -130,7 +130,7 @@ export function buildOpportunities(
       stage,
       outcome,
       status,
-      closedBy: status === "closed" ? (programDone && !closedByUser ? "completed" : (closedBy ?? "rejected")) : null,
+      closedBy: status === "closed" ? (programDone && !closedByUser ? (prog?.state === "removed" ? "withdrawn" : "completed") : (closedBy ?? "rejected")) : null,
       ...(closureProposed && status === "closed" && !closedByUser ? { closureProposed: true } : {}),
       ...(proposedEnding && status === "active" ? { proposedEnding } : {}),
       legacyKeys: legacy[i],

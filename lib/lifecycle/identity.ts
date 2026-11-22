@@ -143,10 +143,35 @@ const unitsOf = (g: Group): Set<string> => new Set(g.events.map(unitOf).filter((
 const unitsMatch = (a: string, b: string) => a === b || a.includes(b) || b.includes(a);
 
 export type Relation = "match" | "generic" | "conflict";
+/** The names an event or a group states in its own words (employer named by the message, or a confident stored company). */
+const statedEmployers = (xs: EffectiveEvent[]) => new Set(xs.flatMap((x) => (x.signals.filter((q) => q.startsWith("employer:named:")).map((q) => companyKey(q.slice(15))))));
+/** Both sides name an employer in their own words and the names are different organisations (not an alias, not an acronym): a hard identity conflict. */
+function namesOtherEmployer(g: Group, e: EffectiveEvent): boolean {
+  const mine = statedEmployers([e]); const theirs = statedEmployers(g.events);
+  if (mine.size === 0 || theirs.size === 0) return false;
+  const fullName = (k: string) => g.events.map((x) => x.signals.find((q) => q.startsWith("employer:named:") && companyKey(q.slice(15)) === k)?.slice(15)).find(Boolean) ?? k;
+  return [...mine].every((m) => ![...theirs].some((t) => t === m || employerAlias(fullName(t), e.signals.find((q) => q.startsWith("employer:named:"))?.slice(15) ?? m)));
+}
+const receiptRoleOf = (x: EffectiveEvent) => (x.type === "applied" && x.signals.includes("own:receipt") ? x.signals.find((q) => q.startsWith("role:named:"))?.slice(11) ?? null : null);
+/** Two explicit receipts name two different positions: two applications, however much wording or thread they share ("one receipt is sent per application"). Same position = equal core words, or one core inside the other with at most one extra word. */
+function differentReceiptRoles(g: Group, e: EffectiveEvent): boolean {
+  const mine = receiptRoleOf(e); if (!mine) return false;
+  const a = new Set(roleCore(mine));
+  if (a.size === 0) return false;
+  return g.events.some((x) => {
+    const theirs = receiptRoleOf(x); if (!theirs) return false;
+    const b = new Set(roleCore(theirs)); if (b.size === 0) return false;
+    const [small, big] = a.size <= b.size ? [a, b] : [b, a];
+    const inside = [...small].every((t) => big.has(t));
+    return !(inside && big.size - small.size <= 1);
+  });
+}
 /** How an event relates to an established opportunity, from role, cycle and program alone (time and thread are weighed by the caller). */
 export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, corroborated = false): Relation {
   const ec = eventCycle(e, ctx);
   if (cyclesConflict(groupCycle(g), ec)) return "conflict";
+  // hard identity vetoes that no thread, sender or generic wording can override: different organisations named in the messages' own words, or two explicit receipts for different positions
+  if (ctx?.attribution && (namesOtherEmployer(g, e) || differentReceiptRoles(g, e))) return "conflict";
   // programme journeys: the programme's own name (stamped from its own words) is its identity; two messages that carry the same programme name are one programme even when every word of it is generic
   const progName = (x: EffectiveEvent) => x.signals.some((q) => q === "program:named" || q.startsWith("program:evidence:"));
   if (ctx?.attribution && progName(e) && e.role && g.events.some((x) => progName(x) && x.role && x.role.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === e.role!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim())) return "match";
@@ -188,7 +213,7 @@ const isClassed = (x: EffectiveEvent) => x.signals.some((q) => /^class:(?:event|
 export function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean, ctx?: IdentityContext): boolean {
   if (rel === "conflict") return false;
   // event, survey, notice and community messages (message-class signals) cluster with each other, never with an application's own mail, unless the same Gmail thread ties them to it
-  if (ctx?.attribution && !viaThread && !e.linkedTo && !e.confirmed && !e.signals.some((q) => q.startsWith("program:evidence:") || q === "program:named") && !g.events.some((x) => x.signals.some((q) => q === "program:named" || q.startsWith("program:evidence:"))) && isClassed(e) !== g.events.every(isClassed)) return false;
+  if (ctx?.attribution && !viaThread && !e.linkedTo && !e.confirmed && !e.signals.some((q) => q.startsWith("program:evidence:") || q === "program:named" || /^program:(?:completed|removed|awarded|accepted|enrolled)$/.test(q)) && !g.events.some((x) => x.signals.some((q) => q === "program:named" || q.startsWith("program:evidence:"))) && isClassed(e) !== g.events.every(isClassed)) return false;
   // a programme acceptance is a programme journey of its own: it never joins a job application's group (and a job's events never join a group of programme acceptances) unless the same Gmail thread ties them
   if (ctx?.attribution && !viaThread && !e.linkedTo && !e.confirmed && isProgAcc(e) !== g.events.every(isProgAcc) && !e.signals.some((q) => q === "program:named" || q.startsWith("program:evidence:")) && !g.events.some((x) => x.signals.some((q) => q === "program:named" || q.startsWith("program:evidence:")))) return false;
   // a new application after a rejection is a new opportunity; but progress (an assessment, an interview, an offer) in the SAME thread for a compatible role is
@@ -280,7 +305,7 @@ function sharesDistinctiveRole(g: Group, e: EffectiveEvent, ctx?: IdentityContex
   return Math.abs(e.occurredAt.getTime() - lastAt(g)) <= 14 * DAY;
 }
 /** Hosts that many unrelated organisations share: a platform, a mail service or a scheduler says nothing about WHO is writing. */
-const SHARED_HOST = /\.(?:greenhouse|lever|myworkday|workday|smartrecruiters|icims|ashbyhq|taleo|gmail|googlemail|outlook|google|zoom|calendly|linkedin|handshake|ripplematch|slack|eventbrite|luma|mailchimp|hubspot|typeform|substack|notion|discord|meetup|salesforce|forage)\./i;
+const SHARED_HOST = /\.(?:greenhouse(?:-mail)?|lever|hire\.lever|myworkday(?:jobs)?|workday|smartrecruiters|icims|ashbyhq|ashby|taleo|jobvite|successfactors|brassring|avature|dayforce|paylocity|oraclecloud|eightfold|phenom|recruitee|breezy|workable|bamboohr|hirevue|codesignal|hackerrank|gmail|googlemail|outlook|google|zoom|calendly|linkedin|handshake|ripplematch|slack|eventbrite|luma|mailchimp|hubspot|typeform|substack|notion|discord|meetup|salesforce|forage)\./i;
 export type Attribution = { link: Group | null; suggest: Group | null; score: number; reasons: string[] };
 /**
  * Evidence-scored attribution of a message to one of several candidate applications (Phase 2). Each candidate is scored on independent kinds of evidence; a hard conflict (a different cycle,
@@ -302,7 +327,7 @@ export function attribute(groups: Group[], e: EffectiveEvent, ctx?: IdentityCont
     else if (e.company && employerAlias(g.company, e.company)) add("employer", weakEmployer(e) || g.events.every((x) => !x.company || weakEmployer(x)) ? 2 : 1, "employer name is a form of the same name");
     else if (e.company && sharesDistinctiveRole(g, e, ctx)) { add("program-token", 2, "the same distinctive programme/role word under two employer names"); if (Math.abs(e.occurredAt.getTime() - lastAt(g)) <= 7 * DAY) add("timing", 1, "within a week"); }
     // an application receipt with no stated role of its own, from the same institutional host that wrote the group's receipt within days: one application receipted twice under two names of one organisation
-    else if (e.company && ctx?.attribution && e.type === "applied" && e.signals.includes("own:receipt") && e.senderDomain && !SHARED_HOST.test(`.${e.senderDomain}`) && Math.abs(e.occurredAt.getTime() - lastAt(g)) <= 3 * DAY
+    else if (e.company && ctx?.attribution && e.type === "applied" && e.signals.includes("own:receipt") && !namesOtherEmployer(g, e) && e.senderDomain && !SHARED_HOST.test(`.${e.senderDomain}`) && Math.abs(e.occurredAt.getTime() - lastAt(g)) <= 3 * DAY
       && g.events.some((x) => !x.outbound && x.type === "applied" && x.senderDomain === e.senderDomain)) { add("host", 2, "the same institutional host receipted the same application within days"); add("timing", 1, "within days"); }
     else if (!weakEmployer(e) && e.company && !g.events.every((x) => !x.company || weakEmployer(x))) continue; // two confident, different employers
     // a message that states the LONGER form of the employer name ("Claude Corps" in a receipt for "Claude", whose rejection comes from "Claude Corps Fellowship") is evidence for the alias
