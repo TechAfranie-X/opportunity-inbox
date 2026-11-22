@@ -32,3 +32,30 @@ test("with nothing contradicting the grouping, the pass changes nothing", () => 
   const a = ev("applied", 1, 1, { gmailThreadId: "A" }), b = ev("assessment", 1, 5, { gmailThreadId: "A" });
   assert.equal(plannedMoves(buildOpportunities([a, b], undefined, undefined, ctx)).length, 0);
 });
+
+test("the whole conversation moves: a sent reply in the same thread travels with the late incoming message", () => {
+  const a26 = ev("applied", 1, 1, { role: "Software Engineering Intern (Summer 2026)", gmailThreadId: "OLD" });
+  const rej = ev("rejection", 3, 3, { role: "Software Engineering Intern (Summer 2026)", gmailThreadId: "OLD" });
+  const a27 = ev("applied", 9, 5, { role: "Software Engineer, Intern (Winter 2027)", gmailThreadId: "NEW" });
+  const asmt = ev("assessment", 9, 14, { role: "Software Engineer, Intern (Winter 2027)", gmailThreadId: "NEW" });
+  const lateIn = ev("status_update", 10, 4, { role: "Software Engineering Intern (Summer 2026)", gmailThreadId: "OLD", signals: ["role-inherited", "reply-in-recruiting-thread"] });
+  const lateOut = ev("user_reply", 10, 5, { outbound: true, role: "Software Engineering Intern (Summer 2026)", gmailThreadId: "OLD" });
+  const all = [a26, rej, a27, asmt, lateIn, lateOut];
+  const moves = plannedMoves(buildOpportunities(all, undefined, undefined, ctx));
+  assert.deepEqual(moves.map((m) => m.eventId).sort(), [lateIn.id, lateOut.id].sort());
+  const after = buildOpportunities(applyMoves(all, moves), undefined, undefined, ctx);
+  const home = after.find((o) => o.events.some((e) => e.id === a27.id))!;
+  assert.ok(home.events.some((e) => e.id === lateIn.id) && home.events.some((e) => e.id === lateOut.id));
+  assert.ok(!after.find((o) => o.events.some((e) => e.id === a26.id))!.events.some((e) => e.id === lateOut.id), "no antecedent left behind in the rejected 2026 application");
+});
+
+import { terminalFragmentMoves } from "./reattach.ts";
+test("a lone terminal message confirming an ended sibling is attached to it; a distinct application is not", () => {
+  const a = ev("applied", 1, 1, { role: "Fellowship Alpha", gmailThreadId: "A" }), rej1 = ev("rejection", 1, 20, { role: "Fellowship Alpha", gmailThreadId: "A" });
+  const rej2 = ev("rejection", 2, 3, { role: "Fellowship Alpha", gmailThreadId: "B" }); // 14 days after: the same ending, said again
+  const far = ev("rejection", 6, 3, { role: "Fellowship Alpha", gmailThreadId: "C" }); // months later: a new cycle
+  const opps = buildOpportunities([a, rej1, rej2, far]);
+  const moves = terminalFragmentMoves(opps);
+  assert.equal(moves.length, 1);
+  assert.equal(moves[0].eventId, opps.flatMap((o) => o.events).find((e) => e.gmailMessageId === rej2.gmailMessageId)!.id);
+});

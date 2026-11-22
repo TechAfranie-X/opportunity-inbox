@@ -144,6 +144,9 @@ export type Relation = "match" | "generic" | "conflict";
 export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, corroborated = false): Relation {
   const ec = eventCycle(e, ctx);
   if (cyclesConflict(groupCycle(g), ec)) return "conflict";
+  // programme journeys: the programme's own name (stamped from its own words) is its identity; two messages that carry the same programme name are one programme even when every word of it is generic
+  const progName = (x: EffectiveEvent) => x.signals.some((q) => q === "program:named" || q.startsWith("program:evidence:"));
+  if (ctx?.attribution && progName(e) && e.role && g.events.some((x) => progName(x) && x.role && x.role.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === e.role!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim())) return "match";
   if (programConflictWithGroup(g, e) && !(ctx?.attribution && subjectProgramAgrees(g, e))) return "conflict";
   if (ctx?.attribution && subjectProgramConflict(g, e)) return "conflict";
   if (ctx?.attribution && ((isHack(e) && g.events.every((x) => !isHack(x))) || (!isHack(e) && g.events.every(isHack)))) return "conflict"; // a hackathon application is not the employer's job application
@@ -172,12 +175,15 @@ export function relation(g: Group, e: EffectiveEvent, ctx?: IdentityContext, cor
 /** Two receipts that state the SAME requisition, or the same specific role within half a day, are one application's confirmations (a portal and a mailbox both write), not two applications. */
 const repeatDelivery = (x: EffectiveEvent, e: EffectiveEvent) => (!!reqOf(e) && reqOf(e) === reqOf(x)) || (specific(e.role) && specific(x.role) && Math.abs(e.occurredAt.getTime() - x.occurredAt.getTime()) < DAY / 2 && roleRelationV2(x.role!, e.role!) === "match");
 
+const isProgAcc = (x: EffectiveEvent) => x.signals.includes("class:program-acceptance");
 const isClassed = (x: EffectiveEvent) => x.signals.some((q) => /^class:(?:event|survey|notice|community|marketing)$/.test(q));
 
 export function allowed(g: Group, e: EffectiveEvent, rel: Relation, viaThread: boolean, ctx?: IdentityContext): boolean {
   if (rel === "conflict") return false;
   // event, survey, notice and community messages (message-class signals) cluster with each other, never with an application's own mail, unless the same Gmail thread ties them to it
-  if (ctx?.attribution && !viaThread && !e.linkedTo && !e.confirmed && isClassed(e) !== g.events.every(isClassed)) return false;
+  if (ctx?.attribution && !viaThread && !e.linkedTo && !e.confirmed && !e.signals.some((q) => q.startsWith("program:evidence:") || q === "program:named") && !g.events.some((x) => x.signals.some((q) => q === "program:named" || q.startsWith("program:evidence:"))) && isClassed(e) !== g.events.every(isClassed)) return false;
+  // a programme acceptance is a programme journey of its own: it never joins a job application's group (and a job's events never join a group of programme acceptances) unless the same Gmail thread ties them
+  if (ctx?.attribution && !viaThread && !e.linkedTo && !e.confirmed && isProgAcc(e) !== g.events.every(isProgAcc) && !e.signals.some((q) => q === "program:named" || q.startsWith("program:evidence:")) && !g.events.some((x) => x.signals.some((q) => q === "program:named" || q.startsWith("program:evidence:")))) return false;
   // a new application after a rejection is a new opportunity; but progress (an assessment, an interview, an offer) in the SAME thread for a compatible role is
   // far more often the same process continuing than a new one, so it joins and the contradiction is surfaced for a person (lib/lifecycle/contradictions.ts)
   // a message that takes the employer's own ending back ("please disregard our previous message") continues that process whatever type it was read as
@@ -249,6 +255,23 @@ const breakTie = <T extends { g: Group }>(candidates: T[], e: EffectiveEvent): T
 const reqOf = (e: EffectiveEvent): string | null => e.signals.find((x) => x.startsWith("req:"))?.slice(4) ?? (e.subject ? requisitionOf(e.subject) : null); // the subject is stored; a number it states needs no stamp
 const strongRole = (r: string | null | undefined) => specific(r) && roleCore(r).length >= 2;
 const companyKeyEq = (g: Group, e: EffectiveEvent) => !!g.company && !!e.company && companyKey(g.company) === companyKey(e.company);
+const COMMON_ROLE_WORDS = new Set(["intern", "internship", "summer", "winter", "spring", "fall", "autumn", "software", "engineer", "engineering", "program", "programme", "student", "research", "analyst", "developer", "data", "science", "scientist", "associate", "undergraduate", "graduate", "technology", "technical", "product", "design", "business", "digital", "global", "early", "career", "campus", "junior", "senior", "applied", "general", "operations", "finance", "marketing", "opportunity", "opportunities", "position", "role", "full", "time", "part"]);
+const COMMON_ACRONYMS = new Set(["swe", "sde", "sre", "usa", "api", "aws", "php", "sql", "ios", "nyc", "bay", "hbcu", "stem", "gpa", "cpt", "opt", "remote", "hybrid"]);
+/** Distinctive = an ACRONYM in the role as written ("LCLS", "REU", "KPCB"): a name of a programme, not a title word, not an ordinary English word, and not a common role acronym. */
+const distinctiveWords = (role: string | null | undefined) => new Set(((role ?? "").match(/\b[A-Z][A-Z0-9]{2,}\b/g) ?? []).map((w) => w.toLowerCase()).filter((w) => !COMMON_ACRONYMS.has(w) && !COMMON_ROLE_WORDS.has(w)));
+/** Two employer NAMES (a university and its laboratory) over one programme: they share a distinctive role word (not a title word), the same recruiting cycle, and no conflicting requisition. */
+function sharesDistinctiveRole(g: Group, e: EffectiveEvent, ctx?: IdentityContext): boolean {
+  if (!ctx?.attribution || !specific(e.role)) return false;
+  const mine = distinctiveWords(e.role);
+  if (mine.size === 0) return false;
+  const groupWords = distinctiveWords(groupRole(g));
+  const shared = [...mine].filter((w) => groupWords.has(w));
+  if (shared.length === 0) return false;
+  if (cyclesConflict(groupCycle(g), cycleOf(e.role))) return false;
+  const er = reqOf(e), gr = new Set(g.events.map(reqOf).filter((x): x is string => !!x));
+  if (er && gr.size > 0 && !gr.has(er)) return false;
+  return Math.abs(e.occurredAt.getTime() - lastAt(g)) <= 14 * DAY;
+}
 export type Attribution = { link: Group | null; suggest: Group | null; score: number; reasons: string[] };
 /**
  * Evidence-scored attribution of a message to one of several candidate applications (Phase 2). Each candidate is scored on independent kinds of evidence; a hard conflict (a different cycle,
@@ -268,6 +291,7 @@ export function attribute(groups: Group[], e: EffectiveEvent, ctx?: IdentityCont
     if (er && reqs.has(er)) add("requisition", 3, "same requisition");
     if (e.company && companyKey(g.company) === companyKey(e.company)) add("employer", 2, "same employer");
     else if (e.company && employerAlias(g.company, e.company)) add("employer", weakEmployer(e) || g.events.every((x) => !x.company || weakEmployer(x)) ? 2 : 1, "employer name is a form of the same name");
+    else if (e.company && sharesDistinctiveRole(g, e, ctx)) { add("program-token", 2, "the same distinctive programme/role word under two employer names"); if (Math.abs(e.occurredAt.getTime() - lastAt(g)) <= 7 * DAY) add("timing", 1, "within a week"); }
     else if (!weakEmployer(e) && e.company && !g.events.every((x) => !x.company || weakEmployer(x))) continue; // two confident, different employers
     // a message that states the LONGER form of the employer name ("Claude Corps" in a receipt for "Claude", whose rejection comes from "Claude Corps Fellowship") is evidence for the alias
     if (e.company && employerAlias(g.company, e.company)) {
@@ -312,7 +336,13 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
     return e;
   });
   const restore = (g: Group[]) => { for (const x of g) x.events = x.events.map((e) => (original.get(e.id) ? { ...e, role: original.get(e.id)!.role } : e)); return g; };
-  const sorted = [...events].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.id.localeCompare(b.id));
+  // An event the investigation attached to a specific application (`identity:attach:<anchor event id>`) is placed AFTER the groups exist, in the group that holds its anchor, whatever the dates say
+  // (a reply that preceded the application's first message still belongs to it). With no such group it falls back to the ordinary pass.
+  const attachOf = (e: EffectiveEvent) => e.signals.find((x) => x.startsWith("identity:attach:"))?.slice(16);
+  const anchorIds = new Set(events.map((e) => e.id));
+  const deferred = events.filter((e) => { const a = attachOf(e); return !!a && anchorIds.has(a) && a !== e.id; });
+  const deferredIds = new Set(deferred.map((e) => e.id));
+  const sorted = events.filter((e) => !deferredIds.has(e.id)).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.id.localeCompare(b.id));
   // a person's "belongs with" constraints form components; an event in a component whose group exists joins it directly
   const parent = new Map<string, string>();
   const find = (x: string): string => { const p = parent.get(x) ?? x; return p === x ? x : (parent.set(x, find(p)), parent.get(x)!); };
@@ -404,6 +434,11 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
     byThread.set(e.gmailThreadId, target);
     componentGroup.set(find(e.id), target);
     if (e.company && (!target.company || (!!ctx?.weakEmployerThreads && target.events.every((x) => !x.company || weakEmployer(x)) && !weakEmployer(e)))) target.company = e.company; // a name the message itself writes replaces one that only named the sender
+  }
+  for (const e of deferred) {
+    const g = groups.find((x) => x.events.some((y) => y.id === attachOf(e)));
+    if (!g) { groups.push({ company: e.company, events: [e], threads: new Set([e.gmailThreadId]) }); continue; }
+    g.events.push(e); g.events.sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.id.localeCompare(b.id)); g.threads.add(e.gmailThreadId);
   }
   return restore(groups);
 }

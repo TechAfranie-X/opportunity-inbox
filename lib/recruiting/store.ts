@@ -4,8 +4,8 @@ import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-or
 import { getDb } from "@/lib/db";
 import { refineEvents } from "@/lib/lifecycle/refine";
 import { deleteEvidenceLedgers } from "@/lib/ledger/store";
-import { applyMoves, plannedMoves } from "@/lib/investigate/reattach";
-import { applyEntryPolicy, applyNamedRoles, attachVendorMail, demoteNonReceipts, promoteDecisiveNearMisses, neutralizeClassed, proposeMissedEndings, retypeAssessmentPlatforms, retypeUnverifiedClaims } from "@/lib/recruiting/entry-policy";
+import { applyMoves, plannedMoves, terminalFragmentMoves } from "@/lib/investigate/reattach";
+import { applyEntryPolicy, applyNamedEmployer, applyNamedRoles, attachProgramEvidence, attachVendorMail, demoteCampaigns, demoteNonReceipts, promoteDecisiveNearMisses, neutralizeClassed, proposeMissedEndings, retypeAssessmentPlatforms, retypeUnverifiedClaims } from "@/lib/recruiting/entry-policy";
 import { entryPolicyOn, identityContext } from "@/lib/recruiting/product-config";
 import { withConfirmationConflicts, type LatestReading } from "@/lib/recruiting/confirmation-conflicts";
 import {
@@ -110,8 +110,12 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
   // Entry policy (ENTRY_POLICY=off to roll back): a model-only reading cannot create an application; those events wait as "possible" until a person confirms them.
   if (entryPolicyOn()) {
     // uncorroborated model-only "applied" waits as possible BEFORE class neutralisation retypes it (a security code typed applied must not survive as a status update)
-    if (process.env.NAMED_ROLES !== "off") events = applyNamedRoles(events);
+    if (process.env.NAMED_ROLES !== "off") events = applyNamedEmployer(applyNamedRoles(events));
+    if (process.env.PROGRAM_EVIDENCE !== "off") { const pe = attachProgramEvidence(events, possible); events = pe.events; possible.length = 0; possible.push(...pe.possible); }
     if (process.env.VENDOR_RELATIONS !== "off") events = attachVendorMail(events);
+    const campaigns = demoteCampaigns(events);
+    events = campaigns.kept;
+    possible.push(...campaigns.demoted);
     const nonReceipts = demoteNonReceipts(events);
     events = retypeAssessmentPlatforms(neutralizeClassed(proposeMissedEndings(retypeUnverifiedClaims(nonReceipts.kept))));
     possible.push(...nonReceipts.demoted);
@@ -131,7 +135,7 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
   let opportunities = buildOpportunities(events, overrides, policy, ident);
   // the investigator corrects what the product itself contradicts (INVESTIGATE_REATTACH=off to roll back): one more grouping pass with the moved events linked to the application they belong to
   if (entryPolicyOn() && ident && process.env.INVESTIGATE_REATTACH !== "off") {
-    const moves = plannedMoves(opportunities);
+    const moves = [...plannedMoves(opportunities), ...terminalFragmentMoves(opportunities)];
     if (moves.length > 0) { events = applyMoves(events, moves); opportunities = buildOpportunities(events, overrides, policy, ident); }
   }
   // OFF by default (CONFIRMATION_CONFLICTS=on): ask about a plain "Looks right" that the latest reading of the same message disagrees with. Nothing is rewritten.

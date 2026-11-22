@@ -38,8 +38,10 @@ export type ReviewOptions = { prioritize?: boolean; /** Resolve doubts that the 
 
 /** The doubts the investigator resolved, with the evidence and the reason: shown to the person, never silently dropped. */
 export const autoResolved = (opportunities: Opportunity[]): { resolution: Resolution; company: string; role: string | null; event: EffectiveEvent }[] => {
+  // only the doubts that WOULD have been asked about (the investigator's decisions about messages nobody doubted are not shown)
   const res = investigate(opportunities);
-  return opportunities.flatMap((o) => o.events.filter((e) => res.has(e.id)).map((e) => ({ resolution: res.get(e.id)!, company: o.company, role: o.role, event: e })));
+  const asked = buildReviewQueue(opportunities, undefined, [], new Date(), { investigate: false }).filter((i) => (i.kind === "doubt" || i.kind === "ambiguous" || i.kind === "suggestion") && res.has(i.event.id));
+  return asked.map((i) => ({ resolution: res.get(i.event.id)!, company: i.company, role: i.role, event: i.event }));
 };
 
 const DAY_MS = 86_400_000;

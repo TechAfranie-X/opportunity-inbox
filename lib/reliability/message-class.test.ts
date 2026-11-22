@@ -115,3 +115,59 @@ test("markdown emphasis does not hide a named programme; an invitation to join a
   assert.equal(namedRole({ subject: "Thanks", bodyText: "Thank you for applying to the Crescent Communities Investments & Development Internship Opportunities via Acme Programs. This note confirms your submission." }), "Crescent Communities Investments & Development Internship Opportunities via Acme Programs");
   assert.equal(messageClass({ subject: "Congratulations you're invited to CRE Fundamentals Level 1!", bodyText: "We are thrilled to extend an invitation to join our Commercial Real Estate Fundamentals Certificate Program delivered via Zoom. Graduates are considered for internship pathways." }), "program-acceptance");
 });
+
+import { employerNamed, programStage } from "./evidence.ts";
+test("the employer a message names, and the programme stage it speaks from", () => {
+  assert.equal(employerNamed({ subject: "An update", bodyText: "Thank you for your interest in The Coca-Cola Company. The position has been filled." }), "The Coca-Cola Company");
+  assert.equal(employerNamed({ subject: "Update", bodyText: "Thanks for your application to Texas Instruments. We have decided to move forward with other candidates." }), "Texas Instruments");
+  assert.equal(employerNamed({ subject: "Update", bodyText: "Thank you for your interest in this opportunity. The role is closed." }), null);
+  assert.equal(employerNamed({ subject: "Update", bodyText: "Thank you for your interest in the Software Engineer Intern role." }), null);
+  assert.equal(programStage({ subject: "Welcome to Code in Place 2026!", bodyText: "You have been formally invited after we reviewed 66,000 applications." }), "accepted");
+  assert.equal(programStage({ subject: "Section Reminder!", bodyText: "Your first section starts tomorrow." }), "enrolled");
+  assert.equal(programStage({ subject: "Workshop", bodyText: "Congratulations on completing the workshop. Your certificate of completion is attached." }), "completed");
+  assert.equal(programStage({ subject: "You're invited", bodyText: "We are thrilled to extend an invitation to join our Certificate Program." }), "invited");
+});
+
+test("names are matched sentence by sentence: a subject and a greeting never fuse, and a role stops at its clause", () => {
+  assert.equal(employerNamed({ subject: "Thank you for your interest in Meta", bodyText: "Hi Afrane Owusu,\nWe received it." }), "Meta");
+  assert.equal(employerNamed({ subject: "Code for Good Hackathon", bodyText: "Thanks for joining Code for Good." }), null);
+  assert.equal(namedRole({ subject: "Application received", bodyText: "Thank you for applying to Full Stack Software Engineer Intern - Summer 2027 and we will review it promptly." }), "Full Stack Software Engineer Intern - Summer 2027");
+});
+
+test("a conditional 'if you have been selected' in a receipt is not a programme acceptance; a wrapped long programme name is still named", () => {
+  assert.equal(programStage({ subject: "Thanks for Submitting Your Application", bodyText: "This note confirms your submission and you will be contacted in the case you have been selected to move forward." }), null);
+  assert.equal(namedRole({ subject: "Thanks", bodyText: "Thank you for applying to the Crescent Communities Investments & Development Internship Opportunities via Project Destined.\nThis note confirms your submission." }), "Crescent Communities Investments & Development Internship Opportunities via Project Destined");
+});
+
+test("an employer named after 'position with', 'application status with' is found", () => {
+  assert.equal(employerNamed({ subject: "Application Status on with The Coca-Cola Company: Start Your Legacy HBCU Externship", bodyText: "Thank you for taking the time to apply for the Start Your Legacy HBCU Externship - Digital & Technology position with The Coca-Cola Company. We have filled this role." }), "The Coca-Cola Company");
+});
+
+test("finishing one level and being invited to the next is programme evidence, not a job message", () => {
+  const m = { subject: "Congratulations, you're invited to CRE Fundamentals Level 2!", bodyText: "Congratulations on your successful completion of CRE Fundamentals Level I. We are thrilled to invite you to continue your journey with us in Level II: Valuation." };
+  assert.equal(programStage(m), "completed");
+  assert.equal(messageClass(m), "program-acceptance");
+});
+
+test("an employer inviting the reader to take its assessment is not a programme acceptance", () => {
+  assert.equal(messageClass({ subject: "Action Needed: Acme is inviting you to take the Acme Pre-Screening Assessment", bodyText: "We are excited to invite you to take part in the next phase of our hiring process: an online assessment." }), null);
+});
+
+test("'Congratulations! You have been selected to move forward with the pre-screen assessment' is a job assessment, not a programme acceptance", () => {
+  assert.equal(messageClass({ subject: "Action Needed: Acme is inviting you to take the Acme Pre-Screen", bodyText: "Congratulations! You have been selected by Acme to move forward with the Acme Pre-Screen (General Coding Assessment), administered by CodeSignal." }), null);
+});
+
+test("a stated consequence is not a withdrawal: 'failing to attend will result in the withdrawal of your application'", () => {
+  assert.equal(withdrawalAcknowledged({ subject: "Thanks for filling out this form", bodyText: "Attendance is required. Failing to attend will result in the withdrawal of your application." }), false);
+  assert.equal(withdrawalAcknowledged({ subject: "Re: Program", bodyText: "Thank you for the update. We completely understand why you are unable to join us this summer." }), true);
+});
+
+test("platform names are never the employer, and a registration outcome is not an application outcome", () => {
+  assert.equal(employerNamed({ subject: "Thanks for your interest in ZipRecruiter!", bodyText: "We received your application." }), null);
+  assert.equal(ownEnding({ subject: "Your FGIT Resume Hub Registration", bodyText: "Unfortunately we are unable to confirm your registration for the hub at this time." }), false);
+  assert.equal(messageClass({ subject: "Action Required: Complete Identity Verification", bodyText: "Please complete your identity verification to continue." }), "admin");
+});
+
+test("an employer's reminder of the reader's own interview is not an event", () => {
+  assert.equal(messageClass({ subject: "Reminder: You have an upcoming interview with Acme", bodyText: "This is a reminder that you have an upcoming interview with Acme tomorrow at 10:00 AM." }), null);
+});

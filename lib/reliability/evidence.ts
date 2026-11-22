@@ -200,13 +200,17 @@ export function ownEnding(email: Pick<RecruitingEmail, "subject" | "bodyText">):
   const sentence = endingSentence(email);
   if (!sentence || FIRST_PERSON.test(sentence) || !EMPLOYER_VOICE.test(sentence)) return false; // a sentence with no we / you is about someone else ("WEB101 applicants are not eligible")
   const lead = unquoted(`${email.subject}\n${email.bodyText}`).slice(0, 900);
+  // the outcome of an event REGISTRATION (a session, a webinar, a workshop, a hub) is not the outcome of an application
+  if (/\b(?:registration|register(?:ed)?|webinar|workshop|conference|summit|hackathon|career fair|info(?:rmation)? session)\b/i.test(`${email.subject} ${sentence}`) && !/\b(?:application|candidacy|position|role|internship|externship|fellowship|program(?:me)?)\b/i.test(`${email.subject} ${sentence}`)) return false;
   return OWN_REF.test(sentence) || OWN_REF.test(lead);
 }
 
 /** The employer ACKNOWLEDGES that the candidate withdrew or cannot take part ("we understand why you are unable to join us", "we have received your withdrawal"). */
-const WITHDRAWAL_ACK = /\b(?:(?:understand|sorry to hear)(?: why| that)? you(?:'re|’re| are| will be|'ll be|’ll be| cannot| can(?:no|')t| won't be| won’t be)? ?(?:not able to|unable to|able to not|cannot|can't|won't be able to) (?:join|attend|participate|accept|continue|take part)|(?:accept|acknowledge|received|confirm)\w*[^.!?]{0,30}your (?:withdrawal|decision to withdraw|request to withdraw)|(?:we have|we've|we’ve|i have|i’ve|i've) withdrawn your (?:application|candidacy)|withdrawal of your (?:application|candidacy)|your (?:application|candidacy) (?:has|have) been withdrawn)\b/i;
+const WITHDRAWAL_ACK = /\b(?:(?:understand|sorry to hear)(?: why| that)? you(?:'re|’re| are| will be|'ll be|’ll be| cannot| can(?:no|')t| won't be| won’t be)? ?(?:not able to|unable to|able to not|cannot|can't|won't be able to) (?:join|attend|participate|accept|continue|take part)|(?:accept|acknowledge|received|confirm)\w*[^.!?]{0,30}your (?:withdrawal|decision to withdraw|request to withdraw)|(?:we have|we've|we’ve|i have|i’ve|i've) withdrawn your (?:application|candidacy)|your (?:application|candidacy) (?:has|have) been withdrawn)\b/i;
 export function withdrawalAcknowledged(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
-  return WITHDRAWAL_ACK.test(unquoted(`${email.subject}\n${email.bodyText}`));
+  // sentence by sentence, never a consequence or a condition ("failing to attend will result in the withdrawal of your application")
+  const COND = /\b(?:if|will|would|may|might|could|should|failing|unless|in case|when|must|cannot be)\b/i;
+  return sentencesOf(email).filter((x) => !COND.test(x) || /understand|sorry to hear/i.test(x)).some((x) => WITHDRAWAL_ACK.test(x));
 }
 
 
@@ -215,17 +219,18 @@ export function withdrawalAcknowledged(email: Pick<RecruitingEmail, "subject" | 
  * or null. Identity evidence for a message whose stored role is generic. Wording families, current text only.
  */
 const NAMED_ROLE = [
+  /\b(?:selected|invited|accepted|admitted|chosen) (?:to|for|into) (?:attend |join |participate in |be part of )?(?:the |our )?([A-Z][^.!?]{6,80}?\b(?:Accelerator|Program|Programme|Lab|Fellowship|Academy|Series|Cohort|Institute|Bootcamp|Workshop|Summit|Course)\b)/,
+  /\b(?:join|joining|accepted (?:in|into|to)|admitted (?:in|into|to)|invited to) (?:our |the )?([A-Z][^.]{6,90}?\b(?:Program|Programme|Fellowship|Academy|Cohort|Bootcamp|Institute|Course|Workshop|Certificate)\b[^.,(]{0,30}?)(?=[.,(]| delivered| via|$)/,
   /\b(?:for|to|regarding) (?:the |our )?([A-Z0-9][\w ,&/()'’+.-]{6,100}?) (?:position|role|opportunity)\b/,
   /\b(?:your )?application (?:for|to) (?:the )?([A-Z0-9][\w ,&/()'’+.-]{6,100}?)(?: position| role|\.|,| at | with |\n|$)/,
   /\bapply(?:ing)? (?:for|to) (?:the )?([A-Z0-9][\w ,&/()'’+.-]{6,100}?)(?: position| role|\.|,| at |\n|$)/,
 ];
 const NOT_A_ROLE = /^(?:the |our |this |that |your |a |an |next |another |other |any |each |more |new |similar |future |exciting |great |various |these |those )|\b(?:next step|next round|team|company|process|openings|thank you|thanks|dear|hello|hi)\b/i;
 export function namedRole(email: Pick<RecruitingEmail, "subject" | "bodyText">): string | null {
-  const text = unquoted(`${email.subject}\n${email.bodyText}`).replace(/\r/g, "").replace(/[*_]{1,3}/g, "").replace(/\s+/g, " "); // (markdown emphasis around a name is not part of it)
-  for (const re of NAMED_ROLE) {
-    const m = re.exec(text);
-    const role = m?.[1]?.trim().replace(/[ ,.-]+$/, "");
-    if (role && role.length >= 8 && role.length <= 90 && !/[.!?]\s/.test(role) && !NOT_A_ROLE.test(role) && /\b(?:intern(?:ship)?|engineer|developer|analyst|scientist|designer|manager|associate|fellow|apprentice|co-?op|extern(?:ship)?|researcher|program|programme|ux|design|data|software|product)\b/i.test(role)) return role;
+  for (const sentence of sentencesOf(email)) for (const re of NAMED_ROLE) {
+    const m = re.exec(sentence);
+    const role = m?.[1]?.trim().replace(/[ ,.-]+$/, "").replace(/\s+(?:and|which|that|will|has|is|was|where|when|so)\b.*$/i, "").trim();
+    if (role && role.length >= 8 && role.length <= 100 && !/[.!?]\s/.test(role) && !NOT_A_ROLE.test(role) && /\b(?:intern(?:ship)?|engineer|developer|analyst|scientist|designer|manager|associate|fellow|apprentice|co-?op|extern(?:ship)?|researcher|program|programme|ux|design|data|software|product)\b/i.test(role)) return role;
   }
   return null;
 }
@@ -241,4 +246,49 @@ const APPLY_CTA = /\b(?:click here to apply|apply here|apply now|learn more and 
 export function campaignFact(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
   const text = unquoted(`${email.subject}\n${email.bodyText}`);
   return BULK_PLATFORM.test(text) && APPLY_CTA.test(text) && !ownApplicationStatement(email);
+}
+
+
+/**
+ * The employer a message NAMES in its own words, for a message whose stored company is unknown: "Thank you for your interest in The Coca-Cola Company", "your application to Texas Instruments".
+ * A capitalised name after an own-application phrase; names that are really titles, programmes or generic nouns are rejected. Wording families, not any employer.
+ */
+const EMPLOYER_NAMED = /\b(?:(?:thank you for|thanks for) your (?:interest|application) (?:in|to|with|at)|(?:interest|applying|applied|application) (?:to|at|with|in)|position (?:at|with)|opportunity (?:at|with)|career at|(?:role|position|internship|externship) with|status (?:on|for) (?:your application )?with) (?:the )?([A-Z][\w&'’-]*(?: (?:[A-Z][\w&'’-]*|of|and|&|the|de|la)){0,4}?)(?=[.,!:;)]|\s+(?:for|as|and|we|is|has|was|will|team|role|position|opportunity|internship|program)\b|$)/;
+const NOT_AN_EMPLOYER = /\b(?:ziprecruiter|linkedin|indeed|glassdoor|handshake|ripplematch|forage|workday|greenhouse|lever|smartrecruiters|icims|taleo|ashby|hirevue|codesignal|hackerrank|monster|simplyhired|wellfound|builtin|intern(?:ship)?|engineer(?:ing)?|developer|analyst|manager|position|role|program(?:me)?|fellowship|opportunit(?:y|ies)|application|team|career|careers|job|jobs|company|us|our|your|this|that|summer|spring|fall|winter)\b/i;
+/** The sentences of what THIS message says, with soft-wrapped lines joined (a single newline inside a sentence is a wrap, not a boundary); the subject is its own sentence. */
+function sentencesOf(email: Pick<RecruitingEmail, "subject" | "bodyText">): string[] {
+  const body = unquoted(email.bodyText).replace(/\r/g, "").replace(/(?<![.!?:\n])\n(?![\n\-*•])/g, " ");
+  return [email.subject, ...body.split(/(?<=[.!?])\s+|\n+/)].map((x) => x.replace(/[*_]{1,3}/g, "").replace(/\s+/g, " ").trim()).filter(Boolean);
+}
+export function employerNamed(email: Pick<RecruitingEmail, "subject" | "bodyText">): string | null {
+  // sentence by sentence (a subject and a greeting are not one sentence: "...interest in Meta" + "Hi Afrane" must not become "Meta Hi Afrane")
+  for (const sentence of sentencesOf(email)) {
+    const m = EMPLOYER_NAMED.exec(sentence);
+    const name = m?.[1]?.trim().replace(/[ ,.-]+$/, "");
+    if (!name || name.length < 3 || name.length > 50) continue;
+    const core = name.replace(/^The /, "").replace(/\b(?:Company|Inc\.?|LLC|Corporation|Corp\.?|Ltd\.?|Group)\b/g, "").trim();
+    if (core && !NOT_AN_EMPLOYER.test(core) && !/\b(?:Hi|Hello|Dear|Hey)\b/.test(name)) return name;
+  }
+  return null;
+}
+
+/**
+ * Where a PROGRAMME message sits in its own lifecycle, when the source says so: invited (an invitation to join), accepted (accepted / selected into it), enrolled (welcome / confirmed participation /
+ * a session, assignment or section of it), completed (completion certificate). Wording families; the product uses it to keep programme evidence in the programme's journey.
+ */
+const P_COMPLETED = /\b(?:certificate of (?:completion|participation)|congratulations on your (?:successful )?completion of|congratulations on (?:completing|finishing|graduating)|you(?:'|’)ve (?:successfully )?(?:completed|graduated)|you have (?:successfully )?completed|completion certificate)\b/i;
+const P_ACCEPTED = /\b(?:formal(?:ly)? invit(?:ation|ed)|we (?:reviewed|received) [^.]{0,40}applications and[^.]{0,60}(?:impressed|pleased|excited)|you(?:'|’)ve been (?:accepted|selected|admitted)|you have been (?:accepted|selected|admitted)|congratulations[^.]{0,60}(?:accepted|selected|admitted)|formally invited|we are pleased to (?:accept|admit))\b/i;
+const P_INVITED = /\b(?:(?:thrilled|pleased|excited) to invite you to (?:continue|join|take part)|invitation to join|invited to join|invite you to join|you(?:'|’)re invited to (?:join|apply))\b/i;
+const P_ENROLLED = /\b(?:welcome to|section reminder|first section|assignment graded|deep work session|kick-?off|cohort (?:call|session)|your (?:cohort|section|session))\b/i;
+export type ProgramStage = "invited" | "accepted" | "enrolled" | "completed";
+export function programStage(email: Pick<RecruitingEmail, "subject" | "bodyText">): ProgramStage | null {
+  // sentence by sentence, never a condition ("in the case you have been selected to move forward" is not an acceptance)
+  const COND = /\b(?:if|in the case|in case|should|whether|unless|when)\b/i;
+  const sentences = sentencesOf({ subject: email.subject, bodyText: email.bodyText.slice(0, 2200) }).filter((x) => !COND.test(x));
+  const any = (re: RegExp) => sentences.some((x) => re.test(x));
+  if (any(P_COMPLETED)) return "completed";
+  if (any(P_ACCEPTED)) return "accepted";
+  if (any(P_INVITED)) return "invited";
+  if (any(P_ENROLLED)) return "enrolled";
+  return null;
 }

@@ -6,6 +6,7 @@
  * (event, survey, notice, community, admin, logistics) advances a job stage; a Gmail message is asked about twice.
  */
 import { writeFileSync } from "node:fs";
+import { disposeOutside } from "../lib/recruiting/disposition.ts";
 import { loadWorkspace } from "../lib/recruiting/store.ts";
 import { reviewOptions } from "../lib/recruiting/product-config.ts";
 import { attentionCount, autoResolved, buildReviewQueue } from "../lib/recruiting/review.ts";
@@ -37,6 +38,9 @@ console.log(`rows built ${queue.length} for ${perMsg.size} unique Gmail messages
 console.log(`weak suggestions that repeat an earlier subject: ${repeated}; asked although a message class explains them: ${classedAsked}; resolved by class and not asked: ${suppressedByClass}`);
 const resolvedBy = new Map<string, number>(); for (const r of autoResolved(ws.opportunities)) resolvedBy.set(r.resolution.resolver, (resolvedBy.get(r.resolution.resolver) ?? 0) + 1);
 console.log(`investigator: resolved with stated evidence (listed on the Review screen, not hidden): ${[...resolvedBy.values()].reduce((a, c) => a + c, 0)} ${JSON.stringify(Object.fromEntries(resolvedBy))}`);
+const disp = new Map<string, number>(); const violations: string[] = []; for (const e of ws.possible.filter((x) => !x.outbound)) { const d = disposeOutside(e); disp.set(d.kind, (disp.get(d.kind) ?? 0) + 1); if (d.kind === "violation") violations.push(`${e.gmailMessageId.slice(0, 8)} ${e.company ?? ""} | ${d.why}`); }
+console.log(`--- Disposition of messages outside any journey: ${JSON.stringify(Object.fromEntries(disp))} (journeys hold ${ws.opportunities.reduce((a, o) => a + o.events.filter((x) => !x.outbound).length, 0)} inbound messages; violations = a message whose own facts put it in a journey but waits outside one, target 0)`);
+if (details) for (const v of violations.slice(0, 30)) console.log(`   ${v}`);
 console.log(`--- Invariants (target 0)`);
 list("explicit ending text but the application is still open", endedButOpen);
 list("open applications resting on an unsettled (proposed) ending", proposedOpen);

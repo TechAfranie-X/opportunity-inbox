@@ -194,3 +194,31 @@ test("a message-named role replaces a copied or contradicted stored role before 
   assert.equal(out[2].role, "Alpha Internship Program", "a person's confirmation is never overridden");
   assert.equal(buildOpportunities([out[0], out[1]]).length, 2, "two named programmes are two applications");
 });
+
+import { applyNamedEmployer, attachProgramEvidence } from "./entry-policy.ts";
+test("programme evidence finds its programme: sessions, cohort invitations and a welcome attach to the receipt's journey as a plain update, never as a job stage", () => {
+  const anchor = ev("applied", 1, { company: "Host Org", role: "ICSC Retail Real Estate Bridge Program", subject: "ICSC Retail Real Estate Bridge Program: Thank you for submitting", signals: ["own:receipt"], senderDomain: "host.example" });
+  const invite = ev("interview_invite", 9, { company: "Host Org", role: null, subject: "Invitation: ICSC Retail Real Estate Bridge Program Cohort Call", senderDomain: "host.example", signals: ["semantic:event", "near-miss", "entry:uncorroborated"] });
+  const unrelated = ev("interview_invite", 9, { company: "Host Org", role: null, subject: "Weekly newsletter of opportunities", senderDomain: "host.example", signals: ["semantic:event", "near-miss"] });
+  const other = ev("interview_invite", 9, { company: "Elsewhere", role: null, subject: "ICSC Retail Real Estate Bridge Program Cohort Call", senderDomain: "else.example", signals: ["semantic:event", "near-miss"] });
+  const r = attachProgramEvidence([anchor], [invite, unrelated, other]);
+  const attached = r.events.find((e) => e.id === invite.id)!;
+  assert.ok(attached, "the cohort invitation joined the pipeline");
+  assert.equal(attached.type, "status_update");
+  assert.equal(attached.role, "ICSC Retail Real Estate Bridge Program");
+  assert.ok(attached.signals.some((s) => s.startsWith("program:evidence:")));
+  assert.deepEqual(r.possible.map((e) => e.id).sort(), [other.id, unrelated.id].sort(), "different host or unrelated words: it stays where it was");
+  const opp = buildOpportunities([anchor, attached]);
+  assert.equal(opp.length, 1);
+  assert.equal(opp[0].kind, "mentorship");
+  assert.equal(opp[0].stage, "applied", "no job stage was added");
+});
+test("an acceptance into a programme becomes its own programme journey instead of vanishing; a named employer replaces an unknown one", () => {
+  const acc = ev("interview_invite", 3, { company: "Unknown company", role: null, subject: "Congratulations you're invited to a Certificate Program", signals: ["semantic:event", "near-miss", "class:program-acceptance"] });
+  const r = attachProgramEvidence([], [acc]);
+  assert.equal(r.possible.length, 0);
+  assert.equal(buildOpportunities(r.events)[0].kind, "mentorship");
+  const e = applyNamedEmployer([ev("rejection", 2, { company: "Unknown company", signals: ["employer:named:The Coca-Cola Company"] }), ev("rejection", 2, { company: "Real Co", signals: ["employer:named:Other Co"] })]);
+  assert.equal(e[0].company, "The Coca-Cola Company");
+  assert.equal(e[1].company, "Real Co", "a known employer is not replaced");
+});

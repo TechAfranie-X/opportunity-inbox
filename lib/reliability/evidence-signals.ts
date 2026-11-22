@@ -1,7 +1,7 @@
 import { requisitionOf } from "../identity/represented-employer.ts";
 import { notAProcess } from "../semantic/assist.ts";
 import type { ExtractedEvent, RecruitingEmail } from "../recruiting/types.ts";
-import { endingWording, namedRole, marketingFact, ownApplicationStatement, ownEnding, withdrawalAcknowledged } from "./evidence.ts";
+import { employerNamed, endingWording, namedRole, programStage, marketingFact, ownApplicationStatement, ownEnding, withdrawalAcknowledged } from "./evidence.ts";
 import { messageClass } from "./message-class.ts";
 
 /**
@@ -20,9 +20,15 @@ export function evidenceSignals(m: RecruitingEmail, e: Pick<ExtractedEvent, "typ
   // (an "applied" receipt that mentions an ending in passing is still a receipt)
   if (!c && ownEnding(m) && !marketingFact(m) && !notAProcess(m) && !(e.type === "applied" && ownApplicationStatement(m))) out.push("ending:own");
   if (!c && withdrawalAcknowledged(m)) out.push("withdrawal:ack");
+  // the employer the message names in its own words, and where a programme message sits in its programme's lifecycle
+  const en = c ? null : employerNamed(m);
+  if (en) out.push(`employer:named:${en}`);
+  const ps = programStage(m);
+  if (ps) out.push(`program:${ps}`);
   // a position the message itself names (identity evidence for a message whose stored role is generic)
-  const named = c ? null : namedRole(m);
-  if (named) out.push(`role:named:${named}`);
+  const named = c && c !== "program-acceptance" ? null : namedRole(m);
+  const welcome = !named && c === "program-acceptance" ? /^\s*welcome to (?:the |our )?(.{3,60}?)[!.]?\s*$/i.exec(m.subject)?.[1]?.trim() : null; // (an acceptance that names its programme only in its welcome subject)
+  if (named ?? welcome) out.push(`role:named:${named ?? welcome}`);
   // the message states the reader's own application (a receipt) and contains no ending sentence: a rule-typed "rejection" on it is a mistake
   if (!c && ownApplicationStatement(m) && !endingWording(m) && !withdrawalAcknowledged(m)) out.push("own:receipt");
   // a requisition / job number the message states is identity evidence (only the id is kept, never text)

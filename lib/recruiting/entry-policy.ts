@@ -13,7 +13,8 @@ import type { EffectiveEvent, Opportunity } from "./types.ts";
  * unconfirmed, uncorroborated model-only events does not enter the pipeline (a model-found application IS corroborated when the message itself states the student's own application and is not marketing: signal `entry:corroborated`): its events wait, collapsed, as "possible" (one click, "Looks right", brings them in; the person's word always wins).
  * Nothing is deleted or rewritten; this is a view over stored events. `build` is the grouping function.
  */
-const modelOnly = (e: EffectiveEvent) => e.signals.includes("semantic:event") && !e.signals.includes("entry:corroborated") && !e.corrected && !e.confirmed;
+// (a model reading whose own message states the reader's own application, its ending or its withdrawal is corroborated by the message: ownApplicationStatement / ownEnding / withdrawalAcknowledged)
+const modelOnly = (e: EffectiveEvent) => e.signals.includes("semantic:event") && !e.signals.includes("entry:corroborated") && !e.signals.some((x) => x === "own:receipt" || x === "ending:own" || x === "withdrawal:ack") && !e.corrected && !e.confirmed;
 export const ENTRY_REASON = "possible: this looks like it could be one of your applications, but nothing in your mail confirms it (no application receipt or reply). Is it?";
 
 export function applyEntryPolicy(events: EffectiveEvent[], build: (events: EffectiveEvent[]) => Opportunity[]): { kept: EffectiveEvent[]; demoted: EffectiveEvent[] } {
@@ -23,9 +24,10 @@ export function applyEntryPolicy(events: EffectiveEvent[], build: (events: Effec
     const inbound = o.events.filter((e) => !e.outbound);
     // (a) built only from uncorroborated model readings, or (b) one message that names no employer at all: neither is evidence of an application the person made (all six such cases checked against the real mailbox were junk)
     // (c) every message is an event, survey, platform notice or community message (the message-class signals): attending or answering, not applying
-    const classOnly = inbound.length > 0 && inbound.every((e) => !e.corrected && !e.confirmed && e.signals.some((x) => /^class:(?:event|survey|notice|community|admin|logistics|marketing)$/.test(x)));
-    const noEmployer = o.company === "Unknown company" && inbound.length === 1 && !inbound[0].corrected && !inbound[0].confirmed;
-    if (inbound.length === 0 || !(inbound.every(modelOnly) || noEmployer || classOnly)) continue;
+    const programJourney = inbound.some((e) => e.signals.includes("class:program-acceptance") || e.signals.some((x) => x.startsWith("program:evidence:")));
+    const classOnly = !programJourney && inbound.length > 0 && inbound.every((e) => !e.corrected && !e.confirmed && e.signals.some((x) => /^class:(?:event|survey|notice|community|admin|logistics|marketing)$/.test(x)));
+    const noEmployer = !programJourney && o.company === "Unknown company" && inbound.length === 1 && !inbound[0].corrected && !inbound[0].confirmed;
+    if (inbound.length === 0 || programJourney || !(inbound.every(modelOnly) || noEmployer || classOnly)) continue;
     for (const e of o.events) drop.add(e.id);
     for (const e of inbound) demoted.push({ ...e, signals: [...e.signals, NEAR_MISS, NEAR_MISS_WEAK, "entry:uncorroborated"], reviewReasons: [ENTRY_REASON] });
   }
@@ -72,8 +74,13 @@ export function proposeMissedEndings(events: EffectiveEvent[]): EffectiveEvent[]
 
 /** A near miss whose own text ends or withdraws the application of a known employer is not "possible": it is a decided outcome of a real application and enters the pipeline (typed by proposeMissedEndings). */
 export function promoteDecisiveNearMisses(possible: EffectiveEvent[]): { promoted: EffectiveEvent[]; rest: EffectiveEvent[] } {
-  const decisive = (e: EffectiveEvent) => !!e.company && !/^unknown/i.test(e.company) && !e.outbound && (e.signals.includes("ending:own") || e.signals.includes("withdrawal:ack")) && !e.signals.some((s) => s.startsWith("class:"));
-  return { promoted: possible.filter(decisive).map((e) => ({ ...e, signals: [...e.signals.filter((s) => !s.startsWith("near-miss")), "entry:corroborated", "entry:decisive-ending"] })), rest: possible.filter((e) => !decisive(e)) };
+  const namedOf = (e: EffectiveEvent) => e.signals.find((x) => x.startsWith("employer:named:"))?.slice(15);
+  const PLATFORM = /\b(?:ziprecruiter|linkedin|indeed|glassdoor|handshake|ripplematch|forage|workday|greenhouse|lever|smartrecruiters|icims|taleo|ashby|hirevue|codesignal|hackerrank|monster|simplyhired|wellfound|builtin)\b/i;
+  const known = (e: EffectiveEvent) => ((!!e.company && !/^unknown/i.test(e.company)) || !!namedOf(e)) && !PLATFORM.test(`${e.company ?? ""} ${namedOf(e) ?? ""}`);
+  const decisive = (e: EffectiveEvent) => known(e) && !e.outbound && (e.signals.includes("ending:own") || e.signals.includes("withdrawal:ack") || e.signals.includes("own:receipt")) && !e.signals.some((s) => s.startsWith("class:"));
+  // (an employer the message itself names replaces an unknown one: "Thank you for your interest in The Coca-Cola Company")
+  const named = (e: EffectiveEvent) => (e.company && !/^unknown/i.test(e.company) ? e : { ...e, company: namedOf(e) ?? e.company, signals: [...e.signals, "employer:from-message"] });
+  return { promoted: possible.filter(decisive).map((e) => named({ ...e, signals: [...e.signals.filter((s) => !s.startsWith("near-miss")), "entry:corroborated", "entry:decisive-ending"] })), rest: possible.filter((e) => !decisive(e)) };
 }
 
 /**
@@ -147,4 +154,105 @@ export function applyNamedRoles(events: EffectiveEvent[]): EffectiveEvent[] {
     const contradicted = e.signals.includes("own:receipt") && !!e.role && roleRelationV2(e.role, named) !== "match";
     return generic || borrowed || contradicted ? { ...e, role: named, signals: [...e.signals, "role:from-message"] } : e;
   });
+}
+
+
+/** An employer the message names replaces an unknown or sender-only one (never a person's correction): "Thank you for your interest in Texas Instruments" is a Texas Instruments message even when it came through a job board. */
+export function applyNamedEmployer(events: EffectiveEvent[]): EffectiveEvent[] {
+  return events.map((e) => {
+    if (e.outbound || e.corrected || e.confirmed) return e;
+    const named = e.signals.find((x) => x.startsWith("employer:named:"))?.slice(15);
+    if (!named) return e;
+    const unknown = !e.company || /^unknown/i.test(e.company);
+    const weak = e.signals.includes("employer:sender-only") && (e.fieldConfidence?.company ?? 1) < 0.5;
+    const channel = e.signals.some((x) => /sender is (?:job_board|ats)|not the employer/i.test(x)) || (e.reviewReasons ?? []).some((r) => /not the employer|sender is (?:job_board|ats)/i.test(r));
+    return unknown || weak || channel ? { ...e, company: named, signals: [...e.signals, "employer:from-message"] } : e;
+  });
+}
+
+const PROGRAM_NOUN = /\b(?:program(?:me)?|fellowship|academy|cohort|boot ?camp|institute|certificate|course|workshop|bridge|training|student application|launch)\b/i;
+const GENERIC = new Set(["program", "programme", "fellowship", "application", "applications", "update", "confirmed", "confirmation", "invitation", "invited", "thank", "thanks", "your", "reminder", "session", "sessions", "welcome", "congratulations", "powered", "project", "important", "action", "required", "this", "that", "with", "from", "have", "will", "next", "step", "steps", "email", "message", "week", "today", "tonight", "tomorrow", "event", "events", "info", "last", "chance", "join", "student", "students", "spring", "summer", "fall", "winter", "2025", "2026", "2027"]);
+const toks = (x: string | null | undefined) => new Set((x ?? "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !GENERIC.has(w)));
+
+/**
+ * Programme evidence finds its programme. A receipt naming a programme (or an acceptance into one, or a fellowship's own correspondence) is an ANCHOR; messages that are about the same programme (its
+ * sessions, cohort calendar invitations, assignments, section reminders, "welcome", "interview confirmation" for it) share its distinctive words in their subject and come from its host. They are
+ * attached to the anchor's journey as programme EVIDENCE: never a job stage (their interview/assessment/offer type becomes a plain update), never demoted to "possible" because a model read them,
+ * and never a job application of their own. A message with no anchor stays where it was. Distinctive words, not any programme's name.
+ */
+export function attachProgramEvidence(events: EffectiveEvent[], possible: EffectiveEvent[]): { events: EffectiveEvent[]; possible: EffectiveEvent[] } {
+  type Anchor = { e: EffectiveEvent; tokens: Set<string>; nameTokens: Set<string>; key: string };
+  // an internship / engineering role is a JOB even when its name says "Program"; a programme anchor must not be one (a fellowship is a programme, a "Fellow" is not a job title here)
+  const JOB_TITLE = /\b(?:intern(?:ship)?s?|engineer(?:ing)?|developer|analyst|associate|scientist|researcher|coordinator|manager|designer|technician|consultant|co-?op|apprentice(?:ship)?|trainee|officer|specialist)\b/i;
+  const isAnchor = (e: EffectiveEvent) => !e.outbound && !!e.company && !/^unknown/i.test(e.company) && (e.signals.includes("class:program-acceptance") || !JOB_TITLE.test(`${e.signals.find((x) => x.startsWith("role:named:"))?.slice(11) ?? e.role ?? ""} ${e.subject ?? ""}`)) && (e.signals.includes("class:program-acceptance") || ((e.signals.includes("program:enrolled") || e.signals.includes("program:accepted")) && PROGRAM_NOUN.test(`${e.company} ${e.role ?? ""} ${e.subject ?? ""}`) && !e.signals.some((x) => x === "class:marketing" || x === "class:notice")) || ((e.signals.includes("own:receipt") || e.signals.includes("ending:own")) && (PROGRAM_NOUN.test(e.role ?? "") || PROGRAM_NOUN.test(e.company ?? "") || PROGRAM_NOUN.test(e.subject ?? ""))));
+  // the programme's NAME: the position the message names, else its own stored role when that is a programme name, else (a course, a cohort) its host's name. An acceptance never lends the role of a JOB
+  // the student also applied for (that is how a programme's mail ended up inside a job's journey).
+  const programName = (e: EffectiveEvent): string | null => e.signals.find((x) => x.startsWith("role:named:"))?.slice(11) ?? (e.role && PROGRAM_NOUN.test(e.role) && !e.signals.some((x) => ["role-inherited", "known-contact-continuity", "reply-in-recruiting-thread"].includes(x)) ? e.role : (e.company && !/^unknown/i.test(e.company) ? e.company : null));
+  const anchorRaw = events.filter(isAnchor);
+  const nameOf = new Map(anchorRaw.map((e) => [e.id, programName(e)] as const));
+  // a company the student applied to for JOBS (a job receipt with a title role) is an employer, not a programme host: its programme anchors must carry their own programme name (never the company's),
+  // and match other mail only on that programme name, never on the company's words
+  const employerKeys = new Set(events.filter((e) => !e.outbound && !!e.company && e.signals.includes("own:receipt") && JOB_TITLE.test(e.signals.find((x) => x.startsWith("role:named:"))?.slice(11) ?? e.role ?? "")).map((e) => companyKey(e.company!)));
+  const isEmployer = (e: EffectiveEvent) => !!e.company && employerKeys.has(companyKey(e.company));
+  const anchors: Anchor[] = anchorRaw.filter((e) => !!nameOf.get(e.id) && !(isEmployer(e) && nameOf.get(e.id) === e.company)).map((e) => ({ e: { ...e, role: nameOf.get(e.id)! }, tokens: new Set([...toks(nameOf.get(e.id)), ...(isEmployer(e) ? [] : toks(e.company)), ...(isEmployer(e) ? [] : toks(e.subject))].filter((t) => !isEmployer(e) || !toks(e.company).has(t))), nameTokens: new Set([...toks(nameOf.get(e.id))].filter((t) => !isEmployer(e) || !toks(e.company).has(t))), key: companyKey(e.company!) }));
+  const anchorRole = new Map(anchors.map((a) => [a.e.id, a.e.role!] as const));
+  // an acceptance with no company or role of its own becomes its own anchor (a programme journey) once it is promoted below
+  const promotedAcceptances = possible.filter((e) => !e.outbound && e.signals.includes("class:program-acceptance") && !e.corrected);
+  const used = new Set<string>();
+  const attach = (e: EffectiveEvent, crossHost = false): EffectiveEvent | null => {
+    if (e.outbound || e.corrected || e.confirmed || anchors.length === 0) return null;
+    if (e.signals.some((x) => x === "class:marketing" || x === "class:notice" || x === "entry:not-a-receipt")) return null; // campaigns, platform notices and promotions that only look like receipts are not the programme's own mail
+    // a rule-read employer-process message (an assessment, an interview, an offer, a rejection the RULE reader found) is that application's evidence, never a programme's
+    if (["assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer", "rejection", "withdrawn"].includes(e.type) && !e.signals.includes("semantic:event") && !e.signals.some((x) => x.startsWith("class:"))) return null;
+    // a message that is a receipt, or that names its OWN opportunity, is that opportunity's evidence, never another programme's
+    if (e.signals.includes("own:receipt") || (e.signals.some((x) => x.startsWith("role:named:")) && !e.signals.includes("class:program-acceptance"))) return null;
+    const mine = toks(e.subject);
+    if (mine.size === 0) return null;
+    let best: { a: Anchor; score: number } | null = null, tie = false;
+    for (const a of anchors) {
+      if (a.e.id === e.id) continue;
+      const shared = [...mine].filter((t) => a.tokens.has(t));
+      const sameHost = (e.company && companyKey(e.company) === a.key) || (e.senderDomain && e.senderDomain === a.e.senderDomain);
+      const score = shared.length >= 2 || (shared.length === 1 && shared[0].length >= 7) ? shared.length + (sameHost ? 1 : 0) : 0;
+      // an event the grouping could not place (flagged ambiguous) may join a programme of ANOTHER host when its subject names that programme and none of its own employer's words
+      const ownWords = toks(e.company);
+      // (the programme's own name words must be MOSTLY present: a message that merely shares two words with a programme is not about it)
+      const nameShared = [...a.nameTokens].filter((t) => mine.has(t)).length;
+      const crossOk = crossHost && shared.length >= 2 && a.nameTokens.size > 0 && nameShared / a.nameTokens.size >= 0.6 && ![...ownWords].some((w) => mine.has(w));
+      if (score === 0 || (!sameHost && !crossOk)) continue;
+      if (!best || score > best.score) { best = { a, score }; tie = false; } else if (score === best.score && companyKey(a.e.company ?? "") !== companyKey(best.a.e.company ?? "") && [...a.tokens].filter((t) => best!.a.tokens.has(t)).length < 2) tie = true; // (two anchors that are the same programme under two host spellings do not tie)
+    }
+    if (!best || tie) {
+      // a single-programme HOST: sessions, progress and calendar mail from the programme's own sender, inside its active window, belong to it even when the subject shares no words
+      const sessionLike = e.signals.some((x) => /^class:(?:event|admin|community|survey)$/.test(x));
+      const GENERIC_HOST = /(?:^|\.)(?:slack|zoom|calendly|google|gmail|luma|lu\.ma|eventbrite|mailchimp|hubspot|microsoft|outlook|teams|discord|notion|typeform|substack|linkedin|facebook|meetup)\./i;
+      const hostAnchors = anchors.filter((a) => !!e.senderDomain && a.e.senderDomain === e.senderDomain && !GENERIC_HOST.test(`${e.senderDomain}.`));
+      const names = new Set(hostAnchors.map((a) => [...a.nameTokens].sort().join(" ")));
+      if (!sessionLike || hostAnchors.length === 0 || names.size !== 1) return null;
+      const t = e.occurredAt.getTime(), first = Math.min(...hostAnchors.map((a) => a.e.occurredAt.getTime())), last = Math.max(...hostAnchors.map((a) => a.e.occurredAt.getTime()));
+      if (t < first - 14 * 86_400_000 || t > last + 120 * 86_400_000) return null;
+      best = { a: hostAnchors[0], score: 1 }; tie = false;
+    }
+    if (!best || tie) return null;
+    const STAGE = new Set(["applied", "recruiter_outreach", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer"]);
+    used.add(e.id);
+    return { ...e, company: best.a.e.company, role: best.a.e.role ?? e.role, type: STAGE.has(e.type) && !e.signals.includes("class:program-acceptance") ? "status_update" : e.type,
+      signals: [...e.signals.filter((x) => !x.startsWith("near-miss") && x !== "entry:uncorroborated"), "entry:corroborated", `program:evidence:${best.a.e.gmailMessageId.slice(0, 8)}`], reviewReasons: [] };
+  };
+  const rename = (e: EffectiveEvent): EffectiveEvent => (anchorRole.has(e.id) && e.role !== anchorRole.get(e.id) && !e.corrected && !e.confirmed ? { ...e, role: anchorRole.get(e.id)!, signals: [...e.signals, "program:named"] } : e);
+  const outEvents = events.map(rename).map((e) => (e.signals.some((x) => /^class:(?:event|admin|logistics|community|survey)$/.test(x)) || e.signals.includes("class:program-acceptance") || (!e.signals.includes("program:named") && !e.signals.some((x) => x.startsWith("program:evidence:"))) ? attach(e, !isAnchor(e)) ?? e : e));
+  const moved: EffectiveEvent[] = [], stay: EffectiveEvent[] = [];
+  for (const e of possible) { const a = attach(e); if (a) moved.push(a); else if (promotedAcceptances.includes(e)) moved.push({ ...e, signals: [...e.signals.filter((x) => !x.startsWith("near-miss") && x !== "entry:uncorroborated"), "entry:corroborated", "program:own-journey"], reviewReasons: [] }); else stay.push(e); }
+  return { events: [...outEvents, ...moved], possible: stay };
+}
+
+
+/**
+ * Mass-mailing campaigns and platform notices (message classes marketing / notice) are never part of a journey: an application, a programme or an event keeps its own mail, and a host's weekly
+ * "apply here" campaign is prospecting. They are removed from the pipeline one by one (they wait in the possible list, resolved by their class), whatever journey the grouping would have put them in.
+ * A person's confirmation or correction keeps one in.
+ */
+export function demoteCampaigns(events: EffectiveEvent[]): { kept: EffectiveEvent[]; demoted: EffectiveEvent[] } {
+  const out = (e: EffectiveEvent) => !e.outbound && !e.corrected && !e.confirmed && e.signals.some((x) => x === "class:marketing" || x === "class:notice");
+  return { kept: events.filter((e) => !out(e)), demoted: events.filter(out).map((e) => ({ ...e, signals: [...e.signals, "near-miss", "near-miss:weak", "entry:campaign"], reviewReasons: [] })) };
 }

@@ -87,7 +87,7 @@ export function reconstructJourney(seedMessageId: string, input: JourneyInput): 
     // chronology: the seed cannot precede the application it continues, and cannot continue one that ended before it (unless the ending is retracted)
     const first = g.events.find((e) => e !== seed);
     const ended = [...gm].reverse().find((e) => ENDING.has(e.type) && e.occurredAt.getTime() < seed.occurredAt.getTime() && !e.signals.includes("terminal:proposed"));
-    if (o !== home && first && first.occurredAt.getTime() > seed.occurredAt.getTime() + 2 * DAY && seed.type !== "applied") vetoes.push("the seed precedes this application's first message");
+    if (o !== home && first && first.occurredAt.getTime() > seed.occurredAt.getTime() + ((seed.type === "status_update" || seed.type === "follow_up" || seed.type === "user_reply") ? 21 : 2) * DAY && seed.type !== "applied") vetoes.push("the seed precedes this application's first message");
     if (o !== home && ended && ["assessment", "interview_invite", "interview_scheduled", "offer", "applied"].includes(seed.type) && !gm.some((e) => e.gmailThreadId === seed.gmailThreadId)) vetoes.push("this application had already ended before the message");
     // one receipt is sent per application: a receipt cannot continue an application that already has its own receipt from another thread (unless the same requisition ties them)
     if (o !== home && seed.type === "applied" && receiptLike(seed) && !seed.signals.includes("semantic:event") && gm.some((e) => e.type === "applied" && !e.signals.includes("semantic:event") && e.gmailThreadId !== seed.gmailThreadId && !(seedReq && reqOf(e) === seedReq))) vetoes.push("this application already has its own receipt");
@@ -105,6 +105,10 @@ export function reconstructJourney(seedMessageId: string, input: JourneyInput): 
     const anchor = lastEnd ? lastEnd : before[before.length - 1];
     const lastGap = anchor ? seed.occurredAt.getTime() - anchor.occurredAt.getTime() : Infinity;
     if (lastGap >= 0 && lastGap <= 14 * DAY) { score += 1; reasons.push("the application's latest message is within two weeks"); if (lastGap <= 3 * DAY) { score += DIRECT_FOLLOW; reasons.push("it directly follows the application's latest message"); } }
+    // the message names a programme TYPE (externship, fellowship, ...) that this application's role is
+    const PT = /\b(externship|fellowship|apprenticeship|hackathon|symposium|bootcamp|academy|cohort)\b/i;
+    const spt = PT.exec(seed.subject ?? "")?.[1]?.toLowerCase();
+    if (spt && gr && new RegExp(`\\b${spt}`, "i").test(gr)) { score += 2; reasons.push(`the message names this programme type (${spt})`); }
     const near = gm.some((e) => Math.abs(e.occurredAt.getTime() - seed.occurredAt.getTime()) <= 21 * DAY);
     if (near) { score += 0.5; reasons.push("close in time"); }
     if (gm.some((e) => e.senderDomain === seed.senderDomain && e.senderName === seed.senderName)) { score += 1; reasons.push("same sender"); }
@@ -119,7 +123,9 @@ export function reconstructJourney(seedMessageId: string, input: JourneyInput): 
   const second = candidates.slice(1).find((c) => !c.reasons.includes("no other message in this application") || c.vetoes.length > 0);
   // the product's own grouping stands unless the evidence clearly favours another application; a small lead for the incumbent over an equally plausible sibling is "the grouping stands", not a new decision
   const incumbentBest = !!best && !!home && best.key === home.key && best.vetoes.length === 0;
-  const chosen = best && best.vetoes.length === 0 && (!second || best.score - second.score >= MARGIN || second.vetoes.length > 0 || incumbentBest) ? best : null;
+  // a role-less group of a few follow-ups is an orphan, not an application the grouping built from evidence: a smaller lead is enough to leave it
+  const homeOrphan = !!home && !home.role && home.events.length <= 3;
+  const chosen = best && best.vetoes.length === 0 && (!second || best.score - second.score >= (homeOrphan ? 1 : MARGIN) || second.vetoes.length > 0 || incumbentBest) ? best : null;
   const decision: Journey["decision"] = candidates.length === 0 ? "no-candidate" : chosen ? "resolved" : "ambiguous";
   const opp = chosen ? candKeys.get(chosen.key)! : null;
   const questions: string[] = [];
