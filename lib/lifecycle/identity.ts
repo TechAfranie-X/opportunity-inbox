@@ -56,7 +56,7 @@ const eventCycle = (e: EffectiveEvent, ctx?: IdentityContext): Cycle => {
 };
 /** An APPLIED event is a receipt only when its subject says so; an availability confirmation, a portal code or a kickoff message typed "applied" is not another application. */
 const RECEIPT_WORDS = /(appl|candidat|solicitud|bewerbung|postulaci|received|recib|recebid|eingang|bestätig|confirm|thank|danke|gracias|obrigad|merci|grazie)/i;
-const NOT_RECEIPT = /\b(?:communication|preferences?|subscri\w*|newsletter|availability|interview|assessment|reminder|portal|access code|security code|verif\w*|survey|kick-?off|welcome|onboarding|orientation|agenda|schedule[d]?)\b/i;
+const NOT_RECEIPT = /\b(?:important information|information about your application|communication|preferences?|subscri\w*|newsletter|availability|interview|assessment|reminder|portal|access code|security code|verif\w*|survey|kick-?off|welcome|onboarding|orientation|agenda|schedule[d]?)\b/i;
 export const receiptLike = (e: EffectiveEvent) => !e.subject || (RECEIPT_WORDS.test(e.subject) && !NOT_RECEIPT.test(e.subject));
 const SEASON_END: Record<string, [number, number]> = { spring: [5, 30], summer: [7, 31], fall: [11, 31], winter: [2, 31] }; // [month index, day]
 const PROCESS_TYPES = new Set<EventType>(["applied", "assessment", "assessment_completed", "interview_invite", "interview_scheduled", "offer"]);
@@ -67,7 +67,7 @@ const cycleOver = (g: Group, e: EffectiveEvent): boolean => {
   return e.occurredAt.getTime() > Math.max(...ends) + 30 * DAY;
 };
 const isHack = (e: EffectiveEvent) => /hackathon/i.test(e.subject ?? "");
-const specific = (role: string | null | undefined) => !!role && !isRoleFragment(role) && roleCore(role).length > 0;
+export const specific = (role: string | null | undefined) => !!role && !isRoleFragment(role) && roleCore(role).length > 0;
 export const isSpecificRole = specific;
 /** Two role names that can never be the same application whatever they are called: a different recruiting cycle or programme type. Never overruled by a role-equivalence judgment. */
 export const rolesHardConflict = (a: string, b: string): boolean => cyclesConflict(cycleOf(a), cycleOf(b)) || programsConflict(a, b);
@@ -304,7 +304,9 @@ export function groupEventsV2(input: EffectiveEvent[], ctx?: IdentityContext): G
   const original = new Map(input.map((e) => [e.id, e] as const));
   const events = input.map((e0) => {
     // a position the message itself names ("…for the Internship - Digital, North America position") is the role for identity when the stored role is generic
-    const named = ctx?.attribution && !e0.corrected && !e0.confirmed && !specific(e0.role) ? e0.signals.find((x) => x.startsWith("role:named:"))?.slice(11) : undefined;
+    // (it outranks a stored role that is generic, that the reader copied from another message, or that the receipt itself contradicts: a receipt names the opportunity it receipts)
+    const namedSig = ctx?.attribution && !e0.corrected && !e0.confirmed ? e0.signals.find((x) => x.startsWith("role:named:"))?.slice(11) : undefined;
+    const named = namedSig && (!specific(e0.role) || BORROWED_ROLE.some((x) => e0.signals.includes(x)) || (e0.signals.includes("own:receipt") && e0.role && roleRelationV2(e0.role, namedSig) !== "match")) ? namedSig : undefined;
     const e = named && specific(named) ? { ...e0, role: named } : e0;
     if (BORROWED_ROLE.some((x) => e.signals.includes(x)) && !e.corrected && !e.confirmed && !named) { const stripped = { ...e, role: null }; if (e.role) borrowedRole.set(stripped, e.role); return stripped; }
     return e;

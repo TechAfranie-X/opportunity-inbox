@@ -25,13 +25,16 @@ const extra = refresh && process.argv[process.argv.indexOf("--refresh") + 1]?.ma
 const isStale = (x: string) => STALE.includes(x) || x.startsWith("role:named:");
 const STALE = ["ending:own", "withdrawal:ack", "ending:wording", "own:receipt"];
 const modeled = process.argv.includes("--modeled-unclassed"); // targeted: only model-found or near-miss events that carry no message class yet (the mail the class facts exist for)
+const bulk = process.argv.includes("--bulk-senders"); // targeted: uncorrected inbound events of senders that wrote 10+ stored messages and carry no message class yet (hosts, job boards, programme operators: campaign mail hides here)
 const roleLess = process.argv.includes("--role-less"); // targeted: events whose stored role is empty or a bare word, where the message may name its position itself
-const rows = rowsOf(await db.execute(roleLess
+const rows = rowsOf(await db.execute(bulk
+  ? sql`select e.id::text, e.gmail_message_id, e.type, e.signals, e.company from recruiting_events e where e.user_google_sub = ${sub} and e.outbound = false and e.correction is null and e.signals::text not like '%class:%' and e.sender_domain in (select sender_domain from recruiting_events where user_google_sub = ${sub} and outbound = false group by sender_domain having count(*) >= 10)`
+  : roleLess
   ? sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and signals::text not like '%role:named:%' and (role is null or length(role) < 14 or lower(role) in ('internship', 'intern', 'position')) and type not in ('user_reply')`
   : modeled
   ? sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and signals::text not like '%class:%' and (signals::text like '%semantic:event%' or signals::text like '%near-miss%')`
   : refresh
-  ? sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and (signals::text like '%role:named:%' or signals::text like '%ending:own%' or signals::text like '%withdrawal:ack%' or signals::text like '%ending:wording%' or signals::text like '%terminal:proposed%' or type = 'rejection' or left(gmail_message_id, 8) = any(string_to_array(${extra.join(",")}, ',')))`
+  ? sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null and (signals::text like '%role:named:%' or signals::text like '%own:receipt%' or signals::text like '%ending:own%' or signals::text like '%withdrawal:ack%' or signals::text like '%ending:wording%' or signals::text like '%terminal:proposed%' or type = 'rejection' or left(gmail_message_id, 8) = any(string_to_array(${extra.join(",")}, ',')))`
   : sql`select id::text, gmail_message_id, type, signals, company from recruiting_events where user_google_sub = ${sub} and outbound = false and correction is null`));
 const emails = [];
 // a run can outlive one access token (an hour): refresh before every batch of 100 messages, and say how far it is

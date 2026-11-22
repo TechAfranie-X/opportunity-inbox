@@ -1,4 +1,4 @@
-import { marketingFact, ownApplicationStatement, unquoted } from "./evidence.ts";
+import { campaignFact, marketingFact, ownApplicationStatement, unquoted } from "./evidence.ts";
 import { explicitOffer } from "./facts.ts";
 import type { RecruitingEmail } from "../recruiting/types.ts";
 
@@ -19,7 +19,9 @@ const COMMUNITY = /\b(?:officially connected with|joined the .{0,40} community|w
 const ADMIN = /\b(?:security code|verification code|access code|one[- ]time (?:pass)?code|verify your (?:email|e-mail|account|identity)|password (?:reset|change)|sign-?in (?:link|code)|log-?in (?:link|code)|candidate verification|confirm your (?:email|e-mail)(?: address)?|(?:communication|email|e-mail|notification) preferences|manage your preferences)\b/i;
 const LOGISTICS = /\b(?:background (?:check|investigation|verification)|travel (?:itinerary|booking|arrangements?|confirmation)|reimbursement|expense (?:report|form)|immigration|visa (?:sponsorship|support)|headshot|direct deposit|onboarding (?:documents|checklist|tasks?))\b/i;
 const IMMIGRATION_LEAD = /\b(?:immigration|work authori[sz]ation|visa (?:sponsorship|petition|application)|h-?1b|cpt|opt\b|i-?9|petition (?:forms?|documents?))\b/i;
-const ACCEPTED_INTO = /\b(?:congratulations|you(?:'|’)re in\b|you(?:'|’)ve been (?:accepted|selected)|acceptance to|welcome to the)\b/i;
+const INVITED_PROGRAM = /\b(?:invitation to join|invited to join|invite you to join) (?:our|the) [^.]{0,90}\b(?:program(?:me)?|cohort|academy|bootcamp|certificate|fellowship)\b/i;
+const HARD_EMPLOYMENT = /\b(?:offer letter|offer of employment|salary|compensation|start date|full-time position|pleased to offer)\b/i;
+const ACCEPTED_INTO = /\b(?:invitation to join (?:our|the)|(?:thrilled|pleased|excited) to (?:extend an invitation|invite you) to join|congratulations|you(?:'|’)re in\b|you(?:'|’)ve been (?:accepted|selected)|acceptance to|welcome to the)\b/i;
 const PROGRAMME = /\b(?:program(?:me)?|academy|cohort|fellowship|bootcamp|accelerator|career journey|institute)\b/i;
 const EMPLOYMENT = /\b(?:internship|externship|intern\b|job|position|employment|role\b|compensation|stipend|salary|start date|offer letter|offer of|paid)\b/i;
 
@@ -30,8 +32,11 @@ export function messageClass(m: Pick<RecruitingEmail, "subject" | "bodyText">): 
   const lead = unquoted(`${m.subject}\n${m.bodyText.slice(0, 1600)}`);
   if (OWN_STEP.test(lead)) return null;
   if (ACCEPTED_INTO.test(lead) && PROGRAMME.test(lead) && !EMPLOYMENT.test(lead) && explicitOffer(m as RecruitingEmail) === null) return "program-acceptance";
+  // an invitation to JOIN a programme is a programme acceptance even if the programme mentions internships; only hard employment terms make it an offer
+  if (INVITED_PROGRAM.test(lead) && !HARD_EMPLOYMENT.test(lead) && explicitOffer(m as RecruitingEmail) === null) return "program-acceptance";
   if (ADMIN.test(m.subject) || ADMIN.test(m.bodyText.slice(0, 200))) return "admin";
   if ((LOGISTICS.test(m.subject) || IMMIGRATION_LEAD.test(m.bodyText.slice(0, 400))) && explicitOffer(m as RecruitingEmail) === null) return "logistics";
+  if (campaignFact(m)) return "marketing";
   if (SURVEY.test(m.subject) || SURVEY.test(m.bodyText.slice(0, 400))) return "survey";
   if (NOTICE.test(lead)) return "notice";
   if (COMMUNITY.test(lead)) return "community";

@@ -4,7 +4,8 @@ import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-or
 import { getDb } from "@/lib/db";
 import { refineEvents } from "@/lib/lifecycle/refine";
 import { deleteEvidenceLedgers } from "@/lib/ledger/store";
-import { applyEntryPolicy, attachVendorMail, demoteNonReceipts, promoteDecisiveNearMisses, neutralizeClassed, proposeMissedEndings, retypeAssessmentPlatforms, retypeUnverifiedClaims } from "@/lib/recruiting/entry-policy";
+import { applyMoves, plannedMoves } from "@/lib/investigate/reattach";
+import { applyEntryPolicy, applyNamedRoles, attachVendorMail, demoteNonReceipts, promoteDecisiveNearMisses, neutralizeClassed, proposeMissedEndings, retypeAssessmentPlatforms, retypeUnverifiedClaims } from "@/lib/recruiting/entry-policy";
 import { entryPolicyOn, identityContext } from "@/lib/recruiting/product-config";
 import { withConfirmationConflicts, type LatestReading } from "@/lib/recruiting/confirmation-conflicts";
 import {
@@ -109,6 +110,7 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
   // Entry policy (ENTRY_POLICY=off to roll back): a model-only reading cannot create an application; those events wait as "possible" until a person confirms them.
   if (entryPolicyOn()) {
     // uncorroborated model-only "applied" waits as possible BEFORE class neutralisation retypes it (a security code typed applied must not survive as a status update)
+    if (process.env.NAMED_ROLES !== "off") events = applyNamedRoles(events);
     if (process.env.VENDOR_RELATIONS !== "off") events = attachVendorMail(events);
     const nonReceipts = demoteNonReceipts(events);
     events = retypeAssessmentPlatforms(neutralizeClassed(proposeMissedEndings(retypeUnverifiedClaims(nonReceipts.kept))));
@@ -127,6 +129,11 @@ export async function loadWorkspace(userGoogleSub: string, now = new Date()): Pr
   // Thresholds are configuration (OPPORTUNITY_POLICY, JSON), not code: they are chosen from measured risk-coverage, not by hand.
   const policy = parsePolicy(process.env.OPPORTUNITY_POLICY);
   let opportunities = buildOpportunities(events, overrides, policy, ident);
+  // the investigator corrects what the product itself contradicts (INVESTIGATE_REATTACH=off to roll back): one more grouping pass with the moved events linked to the application they belong to
+  if (entryPolicyOn() && ident && process.env.INVESTIGATE_REATTACH !== "off") {
+    const moves = plannedMoves(opportunities);
+    if (moves.length > 0) { events = applyMoves(events, moves); opportunities = buildOpportunities(events, overrides, policy, ident); }
+  }
   // OFF by default (CONFIRMATION_CONFLICTS=on): ask about a plain "Looks right" that the latest reading of the same message disagrees with. Nothing is rewritten.
   if (process.env.CONFIRMATION_CONFLICTS === "on") opportunities = withConfirmationConflicts(opportunities, await latestReadings(userGoogleSub, events.filter((e) => e.confirmed && !e.corrected).map((e) => e.gmailMessageId)));
   const actions = buildActions(opportunities, toFloating(now), new Set(dismissalRows.map((d) => d.actionId)), policy);

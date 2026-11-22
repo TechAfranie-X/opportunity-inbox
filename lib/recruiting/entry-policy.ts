@@ -1,4 +1,6 @@
 import { NEAR_MISS, NEAR_MISS_WEAK } from "../reliability/flags.ts";
+import { roleRelationV2 } from "../lifecycle/cycle.ts";
+import { specific } from "../lifecycle/identity.ts";
 import { companyKey } from "./company.ts";
 import type { EffectiveEvent, Opportunity } from "./types.ts";
 
@@ -125,5 +127,24 @@ export function attachVendorMail(events: EffectiveEvent[]): EffectiveEvent[] {
     const hit = names.filter((n) => n.key !== companyKey(e.company!) && n.words.length > 0 && n.words.every((w) => subj.includes(` ${w} `)) && !domain.includes(n.words[0]) && !own.some((w) => n.words.includes(w)));
     if (hit.length !== 1) return e;
     return { ...e, company: hit[0].name, signals: [...e.signals, `relation:vendor_for:${hit[0].name}`] };
+  });
+}
+
+
+const BORROWED = ["role-inherited", "reply-in-recruiting-thread", "known-contact-continuity", "outbound-in-recruiting-thread"];
+/**
+ * The role a message NAMES in its own words ("Thank you for applying to the ICSC Foundation Bridge Program") is the role of that message when the stored role is generic, was copied from another message,
+ * or is contradicted by the receipt itself. Applied BEFORE grouping so identity, keys and what Today, Pipeline and Review display all agree (one application per named opportunity; a host that
+ * receipts several programmes yields several applications). A person's correction or confirmation is never overridden.
+ */
+export function applyNamedRoles(events: EffectiveEvent[]): EffectiveEvent[] {
+  return events.map((e) => {
+    if (e.outbound || e.corrected || e.confirmed) return e;
+    const named = e.signals.find((x) => x.startsWith("role:named:"))?.slice(11);
+    if (!named || named === e.role) return e;
+    const generic = !specific(e.role);
+    const borrowed = BORROWED.some((x) => e.signals.includes(x));
+    const contradicted = e.signals.includes("own:receipt") && !!e.role && roleRelationV2(e.role, named) !== "match";
+    return generic || borrowed || contradicted ? { ...e, role: named, signals: [...e.signals, "role:from-message"] } : e;
   });
 }

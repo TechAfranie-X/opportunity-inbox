@@ -93,3 +93,25 @@ test("the position a message names in its own words is extracted; generic phrase
   assert.equal(namedRole({ subject: "Update", bodyText: "Thank you for your application for Software Engineer Intern (Summer 2027). We will be in touch." }), "Software Engineer Intern (Summer 2027)");
   assert.equal(namedRole({ subject: "Update", bodyText: "We will move forward to the next round of the process for the team." }), null);
 });
+
+import { campaignFact } from "./evidence.ts";
+test("a mass-mailing campaign built around 'apply' links is marketing; a real receipt from the same host and a program invitation are not", () => {
+  const campaign = { subject: "CBRE Full-Time Opportunity Powered By Acme Programs", bodyText: "View this email in your browser (https://mailchi.mp/x/y) CLICK HERE TO APPLY (https://host.example/apply) Applications are open." };
+  assert.equal(campaignFact(campaign), true);
+  assert.equal(messageClass(campaign), "marketing");
+  const receipt = { subject: "Thanks for Submitting Your Application", bodyText: "Hi A, Thank you for applying to the CBRE Internship Opportunities via Acme Programs. This note confirms your submission." };
+  assert.equal(messageClass(receipt), null);
+  const invite = { subject: "Congratulations you're invited to CRE Fundamentals Level 1!", bodyText: "We are thrilled to extend an invitation to join our Commercial Real Estate Fundamentals Certificate Program delivered via Zoom. Three weekend sessions." };
+  assert.equal(messageClass(invite), "program-acceptance");
+});
+
+test("a receipt names the opportunity it receipts, even when the name contains 'Opportunities'", () => {
+  assert.equal(namedRole({ subject: "Thanks for Submitting Your Application", bodyText: "Thank you for applying to the CBRE Internship Opportunities via Acme Programs. This note confirms your submission." }), "CBRE Internship Opportunities via Acme Programs");
+  assert.equal(namedRole({ subject: "Update", bodyText: "We will send more opportunities soon. Apply to new opportunities in the portal." }), null);
+});
+
+test("markdown emphasis does not hide a named programme; an invitation to join a programme that mentions internships is still a programme acceptance", () => {
+  assert.equal(namedRole({ subject: "Bridge Program: Thank you for Submitting", bodyText: "Thank you for applying to the *ICSC Foundation Retail Real Estate Bridge Program.* This email confirms that we received your application." }), "ICSC Foundation Retail Real Estate Bridge Program");
+  assert.equal(namedRole({ subject: "Thanks", bodyText: "Thank you for applying to the Crescent Communities Investments & Development Internship Opportunities via Acme Programs. This note confirms your submission." }), "Crescent Communities Investments & Development Internship Opportunities via Acme Programs");
+  assert.equal(messageClass({ subject: "Congratulations you're invited to CRE Fundamentals Level 1!", bodyText: "We are thrilled to extend an invitation to join our Commercial Real Estate Fundamentals Certificate Program delivered via Zoom. Graduates are considered for internship pathways." }), "program-acceptance");
+});

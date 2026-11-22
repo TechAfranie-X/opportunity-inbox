@@ -182,3 +182,15 @@ test("a vendor's mail that names one of the student's employers attaches to that
   assert.equal(out[5].company, "Partner Org", "a partner whose company is not suspect is not re-attributed");
   assert.equal(out[6].company, "Alcon", "the sender is the stored company");
 });
+
+import { applyNamedRoles } from "./entry-policy.ts";
+test("a message-named role replaces a copied or contradicted stored role before grouping, so one host's several programmes become several applications", () => {
+  const a = ev("applied", 1, { company: "Host Org", role: "Alpha Internship Program", signals: ["own:receipt", "role:named:Alpha Internship Program"], gmailThreadId: "A" });
+  const b = ev("applied", 5, { company: "Host Org", role: "Alpha Internship Program", signals: ["own:receipt", "role:named:Beta Bridge Program", "known-contact-continuity"], gmailThreadId: "B" });
+  const c = ev("applied", 6, { company: "Host Org", role: "Alpha Internship Program", signals: ["role:named:Gamma Program"], confirmed: true, gmailThreadId: "C" });
+  const out = applyNamedRoles([a, b, c]);
+  assert.equal(out[0].role, "Alpha Internship Program");
+  assert.equal(out[1].role, "Beta Bridge Program");
+  assert.equal(out[2].role, "Alpha Internship Program", "a person's confirmation is never overridden");
+  assert.equal(buildOpportunities([out[0], out[1]]).length, 2, "two named programmes are two applications");
+});

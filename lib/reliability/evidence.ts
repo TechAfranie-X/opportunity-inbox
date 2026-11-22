@@ -215,17 +215,30 @@ export function withdrawalAcknowledged(email: Pick<RecruitingEmail, "subject" | 
  * or null. Identity evidence for a message whose stored role is generic. Wording families, current text only.
  */
 const NAMED_ROLE = [
-  /\b(?:for|to|regarding) (?:the |our )?([A-Z0-9][\w ,&/()'’+.-]{6,80}?) (?:position|role|opportunity)\b/,
-  /\b(?:your )?application (?:for|to) (?:the )?([A-Z0-9][\w ,&/()'’+.-]{6,80}?)(?: position| role|\.|,| at | with |\n|$)/,
-  /\bapply(?:ing)? (?:for|to) (?:the )?([A-Z0-9][\w ,&/()'’+.-]{6,80}?)(?: position| role|\.|,| at |\n|$)/,
+  /\b(?:for|to|regarding) (?:the |our )?([A-Z0-9][\w ,&/()'’+.-]{6,100}?) (?:position|role|opportunity)\b/,
+  /\b(?:your )?application (?:for|to) (?:the )?([A-Z0-9][\w ,&/()'’+.-]{6,100}?)(?: position| role|\.|,| at | with |\n|$)/,
+  /\bapply(?:ing)? (?:for|to) (?:the )?([A-Z0-9][\w ,&/()'’+.-]{6,100}?)(?: position| role|\.|,| at |\n|$)/,
 ];
-const NOT_A_ROLE = /^(?:the |our |this |that |your |a |an |next |another |other |any |each )|\b(?:next step|next round|team|company|process|opportunities|openings)\b/i;
+const NOT_A_ROLE = /^(?:the |our |this |that |your |a |an |next |another |other |any |each |more |new |similar |future |exciting |great |various |these |those )|\b(?:next step|next round|team|company|process|openings|thank you|thanks|dear|hello|hi)\b/i;
 export function namedRole(email: Pick<RecruitingEmail, "subject" | "bodyText">): string | null {
-  const text = unquoted(`${email.subject}\n${email.bodyText}`).replace(/\r/g, "").replace(/\s+/g, " ");
+  const text = unquoted(`${email.subject}\n${email.bodyText}`).replace(/\r/g, "").replace(/[*_]{1,3}/g, "").replace(/\s+/g, " "); // (markdown emphasis around a name is not part of it)
   for (const re of NAMED_ROLE) {
     const m = re.exec(text);
     const role = m?.[1]?.trim().replace(/[ ,.-]+$/, "");
-    if (role && role.length >= 8 && role.length <= 70 && !/[.!?]\s/.test(role) && !NOT_A_ROLE.test(role) && /\b(?:intern(?:ship)?|engineer|developer|analyst|scientist|designer|manager|associate|fellow|apprentice|co-?op|extern(?:ship)?|researcher|program|programme|ux|design|data|software|product)\b/i.test(role)) return role;
+    if (role && role.length >= 8 && role.length <= 90 && !/[.!?]\s/.test(role) && !NOT_A_ROLE.test(role) && /\b(?:intern(?:ship)?|engineer|developer|analyst|scientist|designer|manager|associate|fellow|apprentice|co-?op|extern(?:ship)?|researcher|program|programme|ux|design|data|software|product)\b/i.test(role)) return role;
   }
   return null;
+}
+
+
+/**
+ * A mass-mailing CAMPAIGN: sent through a bulk-mail platform (a "view this email in your browser" header or tracked list-manage / mailchi / constant-contact / hubspot links) AND built around a call to
+ * apply ("CLICK HERE TO APPLY", "Apply Here"), with no statement about the reader's own application. An invitation to apply is not an application; a host that announces partner opportunities weekly
+ * (a programme operator, a job board) is not an employer the reader applied to. Wording and infrastructure families, not any sender's template.
+ */
+const BULK_PLATFORM = /(?:list-manage\.com|mailchi\.mp|campaign-archive\.com|mcusercontent\.com|constantcontact\.com|hubspotlinks\.com|view this email in your browser|view in browser)/i;
+const APPLY_CTA = /\b(?:click here to apply|apply here|apply now|learn more and apply|apply today|sign up (?:now|here)|applications? (?:are )?(?:now )?open)\b/i;
+export function campaignFact(email: Pick<RecruitingEmail, "subject" | "bodyText">): boolean {
+  const text = unquoted(`${email.subject}\n${email.bodyText}`);
+  return BULK_PLATFORM.test(text) && APPLY_CTA.test(text) && !ownApplicationStatement(email);
 }
